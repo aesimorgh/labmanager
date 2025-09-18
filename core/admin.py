@@ -1,34 +1,126 @@
+# core/admin.py
 from django.contrib import admin
-from django_jalali.admin.filters import JDateFieldListFilter  # برای فیلتر تاریخ شمسی
-from .models import Patient, Material, Order, Payment
+from jalali_date.admin import ModelAdminJalaliMixin
+from .models import Patient, Order, Material, Payment
+from .forms import PatientForm, OrderForm, MaterialForm, PaymentForm
 
-# ---------- Patient ----------
+
+# -----------------------------
+# Patient Admin
+# -----------------------------
 @admin.register(Patient)
 class PatientAdmin(admin.ModelAdmin):
-    list_display = ('first_name', 'last_name', 'phone', 'email', 'created_at')
-    search_fields = ('first_name', 'last_name', 'phone', 'email')
-    list_filter = (
-        ('created_at', JDateFieldListFilter),  # نمایش تاریخ شمسی در فیلتر
-    )
+    form = PatientForm
+    list_display = ['name', 'phone', 'email', 'created_at']
+    search_fields = ['name', 'phone', 'email']
 
-# ---------- Material ----------
+
+# -----------------------------
+# Order Admin
+# -----------------------------
+@admin.register(Order)
+class OrderAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
+    form = OrderForm
+
+    # 🆕 متد برای نمایش نام بیمار
+    def patient_name_display(self, obj):
+        return obj.patient.name if obj.patient else getattr(obj, 'patient_name', '-')
+    patient_name_display.short_description = 'نام بیمار'
+
+    # 🆕 متد برای نمایش قیمت کل (جمع واحد × قیمت)
+    def total_price_display(self, obj):
+        try:
+            return obj.unit_count * obj.price
+        except Exception:
+            return None
+    total_price_display.short_description = 'قیمت کل (تومان)'
+
+    list_display = [
+        'id', 'patient_name_display', 'doctor', 'order_type', 'unit_count',
+        'serial_number', 'price', 'total_price_display', 'shade',
+        'status', 'due_date', 'created_at'
+    ]
+
+    list_filter = ['status', 'due_date']
+
+    search_fields = [
+        'doctor', 'order_type', 'shade', 'serial_number'
+    ]
+
+    # فقط نمایش، قابل ویرایش نیست
+    readonly_fields = ['total_price_display']
+
+
+# -----------------------------
+# Material Admin
+# -----------------------------
 @admin.register(Material)
 class MaterialAdmin(admin.ModelAdmin):
-    list_display = ('name', 'quantity', 'unit')
-    search_fields = ('name',)
+    form = MaterialForm
+    list_display = ['name', 'quantity', 'unit']
+    search_fields = ['name']
 
-# ---------- Order ----------
-@admin.register(Order)
-class OrderAdmin(admin.ModelAdmin):
-    list_display = ('patient', 'doctor', 'order_type', 'price', 'status', 'created_at', 'due_date')
-    list_filter  = ('status', 'doctor', ('created_at', JDateFieldListFilter), ('due_date', JDateFieldListFilter))
-    search_fields= ('patient__first_name', 'patient__last_name', 'doctor')
 
-# ---------- Payment ----------
+# -----------------------------
+# Payment Admin
+# -----------------------------
 @admin.register(Payment)
-class PaymentAdmin(admin.ModelAdmin):
-    list_display = ('order', 'amount', 'date', 'method')
-    list_filter  = (('date', JDateFieldListFilter), 'method')
-    search_fields = ('order__patient__first_name', 'order__patient__last_name')
+class PaymentAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
+    form = PaymentForm
+    list_display = ['order', 'amount', 'date', 'method']
+    list_filter = ['date', 'method']
+    search_fields = ['method']
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

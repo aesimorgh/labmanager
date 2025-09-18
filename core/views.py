@@ -1,35 +1,51 @@
 from django.shortcuts import render, redirect
-from .forms import PatientForm, OrderForm
-from .models import Order
+from .forms import OrderForm, MaterialForm, PaymentForm
+from .models import Order, Material, Payment
 
 def home(request):
-    """
-    صفحه اصلی: ثبت بیمار + سفارش جدید و نمایش لیست سفارش‌ها
-    """
-    if request.method == 'POST':
-        patient_form = PatientForm(request.POST)
-        order_form = OrderForm(request.POST)
-        if patient_form.is_valid() and order_form.is_valid():
-            patient = patient_form.save()
-            order = order_form.save(commit=False)
-            order.patient = patient
-            order.save()
+    order_form    = OrderForm(request.POST or None, prefix='order')
+    material_form = MaterialForm(request.POST or None, prefix='material')
+    payment_form  = PaymentForm(request.POST or None, prefix='payment')
+
+    if request.method == "POST":
+        form_saved = False
+        if order_form.is_valid():
+            order_form.save()
+            form_saved = True
+        elif material_form.is_valid():
+            material_form.save()
+            form_saved = True
+        elif payment_form.is_valid():
+            payment_form.save()
+            form_saved = True
+
+        if form_saved:
             return redirect('home')
-    else:
-        patient_form = PatientForm()
-        order_form = OrderForm()
 
-    orders = Order.objects.select_related('patient').all().order_by('-created_at')
+    orders    = Order.objects.select_related('patient').all().order_by('-created_at')
+    materials = Material.objects.all().order_by('name')
+    payments  = Payment.objects.select_related('order', 'order__patient').all().order_by('-payment_date')
 
-    return render(
-        request,
-        'core/home.html',   # مسیر درست قالب
-        {
-            'patient_form': patient_form,
-            'order_form': order_form,
-            'orders': orders
-        }
-    )
+    context = {
+        'order_form': order_form,
+        'material_form': material_form,
+        'payment_form': payment_form,
+        'orders': orders,
+        'materials': materials,
+        'payments': payments,
+    }
+
+    return render(request, 'core/home.html', context)
+
+
+
+
+
+
+
+
+
+
 
 
 

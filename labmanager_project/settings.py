@@ -2,6 +2,7 @@
 Django settings for labmanager_project project.
 """
 
+import os
 from pathlib import Path
 
 # ----------------- مسیر پایه پروژه -----------------
@@ -14,6 +15,10 @@ ALLOWED_HOSTS = []
 
 # ----------------- اپ‌ها -----------------
 INSTALLED_APPS = [
+    # دقت: django_jalali باید قبل از اپ‌های خودمان قرار گیرد (مطابق راهنمای پکیج)
+    'jalali_date',
+    
+
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -24,10 +29,9 @@ INSTALLED_APPS = [
     # اپ‌های شما
     'core',
 
-    # پکیج‌های خارجی
+    # پکیج‌های خارجی (غیر از django_jalali که بالاتر قرار گرفت)
     'crispy_forms',
     'crispy_bootstrap5',
-    'django_jalali',
 ]
 
 # ----------------- Middleware -----------------
@@ -48,7 +52,7 @@ ROOT_URLCONF = 'labmanager_project.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'core' / 'templates'],
+        'DIRS': [os.path.join(BASE_DIR, 'core', 'templates')],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -68,24 +72,16 @@ WSGI_APPLICATION = 'labmanager_project.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
     }
 }
 
 # ----------------- Password validation -----------------
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',},
 ]
 
 # ----------------- Localization -----------------
@@ -96,10 +92,33 @@ USE_TZ = True
 
 # ----------------- Static & Media -----------------
 STATIC_URL = '/static/'
-STATICFILES_DIRS = [BASE_DIR / 'static']
+
+# توجه: STATIC_ROOT باید رشته (str) باشد تا collectstatic بدون خطا کار کند
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# ----------------- تنظیمات مرتبط با django-jalali (اختیاری/ایمن) -----------------
+# (این لیست‌ها همان فایل‌های JS/CSS هستند که پکیج برای Admin به‌کار می‌برد؛
+# اگر بعداً collectstatic درست اجرا شود، این‌ها لود خواهند شد)
+JALALI_SETTINGS = {
+    "ADMIN_JS_STATIC_FILES": [
+        "admin/jquery.ui.datepicker.jalali/scripts/jquery-1.10.2.min.js",
+        "admin/jquery.ui.datepicker.jalali/scripts/jquery.ui.core.js",
+        "admin/jquery.ui.datepicker.jalali/scripts/jquery.ui.datepicker-cc.js",
+        "admin/jquery.ui.datepicker.jalali/scripts/calendar.js",
+        "admin/jquery.ui.datepicker.jalali/scripts/jquery.ui.datepicker-cc-fa.js",
+        "admin/main.js",
+    ],
+    "ADMIN_CSS_STATIC_FILES": {
+        "all": [
+            "admin/jquery.ui.datepicker.jalali/themes/base/jquery-ui.min.css",
+            "admin/css/main.css",
+        ]
+    }
+}
 
 # ----------------- Crispy Forms -----------------
 CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
@@ -107,6 +126,8 @@ CRISPY_TEMPLATE_PACK = "bootstrap5"
 
 # ----------------- Default primary key -----------------
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
 
 
 
