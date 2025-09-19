@@ -1,9 +1,9 @@
 # core/admin.py
 from django.contrib import admin
+from django import forms  # <--- اضافه شد
 from jalali_date.admin import ModelAdminJalaliMixin
 from .models import Patient, Order, Material, Payment
 from .forms import PatientForm, OrderForm, MaterialForm, PaymentForm
-
 
 # -----------------------------
 # Patient Admin
@@ -22,12 +22,18 @@ class PatientAdmin(admin.ModelAdmin):
 class OrderAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
     form = OrderForm
 
-    # 🆕 متد برای نمایش نام بیمار
+    # تغییر ویجت price به TextInput
+    def formfield_for_dbfield(self, db_field, **kwargs):
+        if db_field.name == 'price':
+            kwargs['widget'] = forms.TextInput(attrs={'dir': 'ltr'})
+        return super().formfield_for_dbfield(db_field, **kwargs)
+
+    # نمایش نام بیمار
     def patient_name_display(self, obj):
         return obj.patient.name if obj.patient else getattr(obj, 'patient_name', '-')
     patient_name_display.short_description = 'نام بیمار'
 
-    # 🆕 متد برای نمایش قیمت کل (جمع واحد × قیمت)
+    # نمایش قیمت کل
     def total_price_display(self, obj):
         try:
             return obj.unit_count * obj.price
@@ -42,12 +48,7 @@ class OrderAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
     ]
 
     list_filter = ['status', 'due_date']
-
-    search_fields = [
-        'doctor', 'order_type', 'shade', 'serial_number'
-    ]
-
-    # فقط نمایش، قابل ویرایش نیست
+    search_fields = ['doctor', 'order_type', 'shade', 'serial_number']
     readonly_fields = ['total_price_display']
 
 
@@ -70,6 +71,8 @@ class PaymentAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
     list_display = ['order', 'amount', 'date', 'method']
     list_filter = ['date', 'method']
     search_fields = ['method']
+
+
 
 
 

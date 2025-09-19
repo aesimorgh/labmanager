@@ -1,110 +1,193 @@
+{% load crispy_forms_tags %}
 <!DOCTYPE html>
 <html lang="fa">
 <head>
     <meta charset="UTF-8">
     <title>Lab Manager</title>
+
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Persian Datepicker -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
+
     <style>
-        body { font-family: Tahoma, sans-serif; padding: 20px; }
-        h1, h2 { margin-top: 30px; }
-        table { border-collapse: collapse; width: 100%; margin-top: 10px; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-        th { background-color: #f4f4f4; }
-        form { margin-bottom: 30px; }
-        button { margin-top: 10px; padding: 5px 15px; }
+        body { font-family: Tahoma, sans-serif; background-color: #f8f9fa; }
+        h1 { margin: 30px 0; text-align: center; }
+        .tab-content { margin-top: 1rem; }
+        table thead th { background-color: #0d6efd; color: #fff; }
+        table tbody tr:nth-child(even) { background-color: #f1f3f5; }
+        .badge { font-size: 0.9em; }
+        .card-header { font-weight: bold; }
+        .alert-success { margin-top: 1rem; }
     </style>
 </head>
-<body>
-    <h1>مدیریت سفارش‌ها</h1>
+<body class="container">
 
-    <!-- فرم ثبت سفارش -->
-    <h2>ثبت سفارش</h2>
-    <form method="post">
-        {% csrf_token %}
-        {{ order_form.as_p }}
-        <button type="submit">ثبت سفارش</button>
-    </form>
+<h1>مدیریت سفارش‌ها</h1>
 
-    <!-- فرم ثبت مواد -->
-    <h2>ثبت مواد</h2>
-    <form method="post">
-        {% csrf_token %}
-        {{ material_form.as_p }}
-        <button type="submit">ثبت مواد</button>
-    </form>
+<ul class="nav nav-tabs" id="tabMenu" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="order-tab" data-bs-toggle="tab" data-bs-target="#order-tab-pane" type="button" role="tab" aria-controls="order-tab-pane" aria-selected="true">
+            📝 ثبت سفارش
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="list-tab" data-bs-toggle="tab" data-bs-target="#list-tab-pane" type="button" role="tab" aria-controls="list-tab-pane" aria-selected="false">
+            📋 لیست سفارش‌ها
+        </button>
+    </li>
+</ul>
 
-    <!-- فرم ثبت پرداخت -->
-    <h2>ثبت پرداخت</h2>
-    <form method="post">
-        {% csrf_token %}
-        {{ payment_form.as_p }}
-        <button type="submit">ثبت پرداخت</button>
-    </form>
+<div class="tab-content" id="tabContent">
+    <div class="tab-pane fade show active" id="order-tab-pane" role="tabpanel" aria-labelledby="order-tab">
+        <div class="card shadow-sm mt-3">
+            <div class="card-header bg-primary text-white">ثبت سفارش جدید</div>
+            <div class="card-body">
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="alert alert-success">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+                <form method="post" class="row g-3">
+                    {% csrf_token %}
+                    <div class="col-md-6">
+                        {{ order_form.patient_name|as_crispy_field }}
+                        {{ order_form.doctor|as_crispy_field }}
+                        {{ order_form.order_type|as_crispy_field }}
+                        {{ order_form.unit_count|as_crispy_field }}
+                    </div>
+                    <div class="col-md-6">
+                        {{ order_form.shade|as_crispy_field }}
+                        {{ order_form.price|as_crispy_field }}
+                        {{ order_form.serial_number|as_crispy_field }}
+                        {{ order_form.status|as_crispy_field }}
+                        {{ order_form.order_date|as_crispy_field }}
+                        {{ order_form.due_date|as_crispy_field }}
+                        {{ order_form.notes|as_crispy_field }}
+                    </div>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-success">ثبت سفارش</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 
-    <!-- نمایش لیست سفارش‌ها -->
-    <h2>لیست سفارش‌ها</h2>
-    <table>
-        <tr>
-            <th>ID</th>
-            <th>بیمار</th>
-            <th>پزشک</th>
-            <th>نوع سفارش</th>
-            <th>تعداد واحد</th>
-            <th>شماره سریال</th>
-            <th>قیمت به ازای هر واحد</th>
-            <th>قیمت کل</th>
-            <th>رنگ</th>
-            <th>وضعیت</th>
-            <th>تاریخ تحویل</th>
-            <th>تاریخ ایجاد</th>
-        </tr>
-        {% for order in orders %}
-        <tr>
-            <td>{{ order.id }}</td>
-            <td>{{ order.patient_name }}</td>
-            <td>{{ order.doctor }}</td>
-            <td>{{ order.get_order_type_display }}</td>
-            <td>{{ order.unit_count }}</td>
-            <td>{{ order.serial_number }}</td>
-            <td>{{ order.price }}</td>
-            <td>{{ order.total_price }}</td>
-            <td>{{ order.shade }}</td>
-            <td>{{ order.get_status_display }}</td>
-            <td>{{ order.due_date }}</td>
-            <td>{{ order.created_at|date:"Y/m/d H:i" }}</td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="12">هیچ سفارشی ثبت نشده است.</td></tr>
-        {% endfor %}
-    </table>
+    <div class="tab-pane fade" id="list-tab-pane" role="tabpanel" aria-labelledby="list-tab">
+        <div class="card shadow-sm mt-3">
+            <div class="card-header bg-secondary text-white">لیست سفارش‌ها</div>
+            <div class="card-body table-responsive">
+                <input class="form-control mb-3" id="searchInput" type="text" placeholder="جستجو بر اساس نام بیمار یا پزشک...">
+                <table class="table table-striped table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>بیمار</th>
+                            <th>پزشک</th>
+                            <th>نوع سفارش</th>
+                            <th>تعداد واحد</th>
+                            <th>شماره سریال</th>
+                            <th>قیمت واحد</th>
+                            <th>رنگ</th>
+                            <th>وضعیت</th>
+                            <th>تاریخ تحویل</th>
+                            <th>تاریخ ایجاد</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ordersTable">
+                        {% for order in orders %}
+                        <tr>
+                            <td>{{ order.id }}</td>
+                            <td>{{ order.patient_name }}</td>
+                            <td>{{ order.doctor }}</td>
+                            <td>{{ order.get_order_type_display }}</td>
+                            <td>{{ order.unit_count }}</td>
+                            <td>{{ order.serial_number }}</td>
+                            <td>{{ order.price }}</td>
+                            <td>{{ order.shade }}</td>
+                            <td>
+                                {% if order.status == 'done' %}
+                                    <span class="badge bg-success">{{ order.get_status_display }}</span>
+                                {% elif order.status == 'in_progress' %}
+                                    <span class="badge bg-warning text-dark">{{ order.get_status_display }}</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ order.get_status_display }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ order.due_date }}</td>
+                            <td>{{ order.created_at|date:"Y/m/d H:i" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="11" class="text-center text-muted">هیچ سفارشی ثبت نشده است.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
 
-    <!-- فعال‌سازی تقویم شمسی و محاسبه خودکار قیمت کل -->
-    <script>
-    $(document).ready(function() {
-        // فعال‌سازی تقویم شمسی
-        $("input[type='text'].jalali_date").each(function() {
-            $(this).persianDatepicker({
-                format: 'YYYY/MM/DD',
-                observer: true,
-                autoClose: true
-            });
-        });
-
-        // محاسبه خودکار قیمت کل
-        function updateTotalPrice() {
-            let unitCount = parseInt($("#id_order-unit_count").val()) || 0;
-            let unitPrice = parseFloat($("#id_order-price").val().replace(/,/g, '')) || 0;
-            let total = unitCount * unitPrice;
-            $("#id_order-total_price").val(total.toLocaleString('en-US'));
-        }
-
-        $("#id_order-unit_count, #id_order-price").on('input', updateTotalPrice);
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+$(function() {
+    // فعال‌سازی تقویم شمسی
+    $("input[type='text'].jalali_date").persianDatepicker({
+        format: 'YYYY/MM/DD',
+        observer: true,
+        autoClose: true
     });
-    </script>
+
+    // 🆕 تابع تبدیل اعداد فارسی به انگلیسی
+    function convertToEnglishNumber(str) {
+        const persianNumbers = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
+        const englishNumbers = ['0','1','2','3','4','5','6','7','8','9'];
+        let result = str;
+        for (let i=0; i<persianNumbers.length; i++){
+            result = result.replace(new RegExp(persianNumbers[i], 'g'), englishNumbers[i]);
+        }
+        return result;
+    }
+
+    // محاسبه خودکار قیمت کل با پشتیبانی از اعداد فارسی
+    function updateTotalPrice() {
+        let unitCount = parseInt(convertToEnglishNumber($("#id_order-unit_count").val())) || 0;
+        let unitPrice = parseFloat(convertToEnglishNumber($("#id_order-price").val().replace(/,/g, ''))) || 0;
+        let total = unitCount * unitPrice;
+        $("#id_order-total_price").val(total.toLocaleString('en-US'));
+    }
+    $("#id_order-unit_count, #id_order-price").on('input', updateTotalPrice);
+
+    // جستجو در جدول
+    $("#searchInput").on("keyup", function() {
+        let value = $(this).val().toLowerCase();
+        $("#ordersTable tr").filter(function() {
+            $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1)
+        });
+    });
+});
+</script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

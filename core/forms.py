@@ -17,8 +17,7 @@ class PatientForm(forms.ModelForm):
 
     class Meta:
         model = Patient
-        fields = ['name', 'phone', 'email', 'address', 'birth_date']  # ← تغییر داده شد
-
+        fields = ['name', 'phone', 'email', 'address', 'birth_date']
 
 # -----------------------------
 # Order Form
@@ -35,14 +34,22 @@ class OrderForm(forms.ModelForm):
         widget=AdminJalaliDateWidget(attrs={'class': 'jalali_date'})
     )
 
-    # 🆕 نام بیمار (متنی)
+    # فیلدهای مورد استفاده در home.html
     patient_name = forms.CharField(
         label="نام بیمار",
         required=True,
         widget=forms.TextInput(attrs={'placeholder': 'مثال: علی رضایی'})
     )
-
-    # 🆕 تعداد واحد
+    doctor = forms.CharField(
+        label="پزشک",
+        required=True,
+        widget=forms.TextInput(attrs={'placeholder': 'مثال: دکتر محمدی'})
+    )
+    order_type = forms.ChoiceField(
+        label="نوع سفارش",
+        choices=Order.ORDER_TYPES,
+        required=True
+    )
     unit_count = forms.IntegerField(
         label="تعداد واحد",
         min_value=1,
@@ -50,47 +57,42 @@ class OrderForm(forms.ModelForm):
         required=True,
         widget=forms.NumberInput(attrs={'dir': 'ltr'})
     )
-
-    # 🆕 قیمت به ازای هر واحد
-    price = forms.CharField(
-        label='قیمت به ازای هر واحد (تومان)',
-        required=True,
-        widget=forms.TextInput(attrs={
-            'placeholder': 'مثال: 120000 یا ۱۲۳٬۴۵۶',
-            'inputmode': 'decimal',
-            'dir': 'ltr',
-        })
+    shade = forms.CharField(
+        label="رنگ",
+        required=False,
+        widget=forms.TextInput(attrs={'placeholder': 'مثال: A2'})
     )
-
-    # 🛑 فیلد total_price حذف شد چون دیگر در مدل نیست
+    # اصلاح فیلد price برای حذف Spinbox
+    price = forms.DecimalField(
+        label="قیمت به ازای هر واحد (تومان)",
+        min_value=0,
+        decimal_places=2,
+        max_digits=12,
+        required=True,
+        widget=forms.TextInput(attrs={'dir': 'ltr', 'placeholder': 'مثال: 100000'})
+    )
+    serial_number = forms.CharField(
+        label="شماره سریال",
+        required=False
+    )
+    status = forms.ChoiceField(
+        label="وضعیت",
+        choices=Order.STATUS_CHOICES,
+        required=True
+    )
+    notes = forms.CharField(
+        label="یادداشت",
+        required=False,
+        widget=forms.Textarea(attrs={'rows': 2})
+    )
 
     class Meta:
         model = Order
         fields = [
-            'patient_name', 'doctor',
-            'order_type', 'unit_count', 'shade',
-            'price', 'serial_number',
-            'status', 'order_date', 'due_date', 'notes'
+            'patient_name', 'doctor', 'order_type', 'unit_count',
+            'shade', 'price', 'serial_number', 'status',
+            'order_date', 'due_date', 'notes'
         ]
-
-    def clean_price(self):
-        raw = self.cleaned_data.get('price', '')
-        if raw is None:
-            raise forms.ValidationError('قیمت الزامی است.')
-        # تبدیل ارقام فارسی به انگلیسی و حذف جداکننده‌ها
-        persian = '۰۱۲۳۴۵۶۷۸۹'
-        english = '0123456789'
-        for p, e in zip(persian, english):
-            raw = raw.replace(p, e)
-        raw = raw.replace(',', '').replace('٬', '').strip()
-        try:
-            value = Decimal(raw)
-        except (InvalidOperation, ValueError):
-            raise forms.ValidationError('قیمت باید عددی باشد.')
-        if value < 0:
-            raise forms.ValidationError('قیمت نمی‌تواند منفی باشد.')
-        return value
-
 
 # -----------------------------
 # Material Form
@@ -98,8 +100,7 @@ class OrderForm(forms.ModelForm):
 class MaterialForm(forms.ModelForm):
     class Meta:
         model = Material
-        fields = ['name', 'quantity', 'unit']
-
+        fields = '__all__'
 
 # -----------------------------
 # Payment Form
@@ -118,7 +119,13 @@ class PaymentForm(forms.ModelForm):
 
     class Meta:
         model = Payment
-        fields = ['order', 'amount', 'method', 'payment_date', 'date']
+        fields = '__all__'
+
+
+
+
+
+
 
 
 
