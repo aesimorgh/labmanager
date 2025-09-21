@@ -15,6 +15,7 @@ class Patient(models.Model):
     def __str__(self):
         return self.name
 
+
 class Material(models.Model):
     name          = models.CharField(max_length=100)
     purchase_date = jmodels.jDateField(null=True, blank=True)
@@ -23,6 +24,7 @@ class Material(models.Model):
 
     def __str__(self):
         return self.name
+
 
 class Order(models.Model):
     # Choices داخل کلاس
@@ -61,11 +63,12 @@ class Order(models.Model):
     notes         = models.TextField(blank=True, null=True)
     created_at    = models.DateTimeField(auto_now_add=True)
 
+    # 🆕 فیلد محاسبه‌ای برای قیمت کل سفارش
     @property
     def total_price(self):
         if self.price and self.unit_count:
             return self.price * self.unit_count
-        return None
+        return 0
 
     @property
     def patient_name(self):
@@ -74,15 +77,22 @@ class Order(models.Model):
     def __str__(self):
         return f"Order #{self.id} - {self.patient_name}"
 
-class Payment(models.Model):
+
+class Accounting(models.Model):
     order        = models.ForeignKey(Order, on_delete=models.CASCADE)
-    payment_date = jmodels.jDateField(null=True, blank=True)
-    amount       = models.DecimalField(max_digits=12, decimal_places=2)
-    method       = models.CharField(max_length=50, blank=True, null=True)
-    date         = jmodels.jDateField(null=True, blank=True)
+    payment_date = jmodels.jDateField(null=True, blank=True, verbose_name="تاریخ پرداخت")
+    amount       = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="مبلغ پرداخت")
+    method       = models.CharField(max_length=50, blank=True, null=True, verbose_name="روش پرداخت")
+    date         = jmodels.jDateField(null=True, blank=True, verbose_name="تاریخ ثبت")
 
     def __str__(self):
-        return f"Payment #{self.id} - {self.order.patient_name}"
+        return f"حسابداری #{self.id} - {self.order.patient_name}"
+
+    class Meta:
+        verbose_name = "گزارش مالی"
+        verbose_name_plural = "گزارش مالی"
+
+
 
 
 

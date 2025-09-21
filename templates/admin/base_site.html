@@ -1,0 +1,11 @@
+{% extends "admin/base_site.html" %}
+{% block title %}{{ site_title }} | {{ title }}{% endblock %}
+
+{% block nav-global %}
+    {{ block.super }}
+    <a href="{% url 'core:accounting_report' %}"
+       style="margin-left:15px; font-weight:bold; color:#fff;">
+       📊 گزارش مالی
+    </a>
+{% endblock %}
+

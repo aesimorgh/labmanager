@@ -1,0 +1,152 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'admin/css/tailwind.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto my-6 px-4">
+
+    <!-- عنوان -->
+    <h1 class="text-center text-3xl font-bold mb-6 text-gray-800">گزارش مالی / حسابداری</h1>
+
+    <!-- کارت فیلترها -->
+    <div class="bg-white shadow-lg rounded-lg border-l-4 border-blue-500 mb-6 p-6">
+        <h2 class="text-xl font-semibold text-blue-700 mb-4">فیلتر گزارش</h2>
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div>
+                <label class="block font-medium text-gray-700 mb-1">دکتر:</label>
+                <select name="doctor" class="w-full rounded-md border-gray-300 focus:ring-2 focus:ring-blue-400 focus:border-blue-400">
+                    <option value="">همه دکترها</option>
+                    {% for doc in doctors %}
+                        <option value="{{ doc }}" {% if doc == doctor %}selected{% endif %}>{{ doc }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label class="block font-medium text-gray-700 mb-1">از تاریخ:</label>
+                <input type="text" name="start_date" value="{{ start_date }}" 
+                       class="jalali_date w-full rounded-md border-gray-300 focus:ring-2 focus:ring-blue-400 focus:border-blue-400" 
+                       placeholder="YYYY/MM/DD">
+            </div>
+
+            <div>
+                <label class="block font-medium text-gray-700 mb-1">تا تاریخ:</label>
+                <input type="text" name="end_date" value="{{ end_date }}" 
+                       class="jalali_date w-full rounded-md border-gray-300 focus:ring-2 focus:ring-blue-400 focus:border-blue-400" 
+                       placeholder="YYYY/MM/DD">
+            </div>
+
+            <div>
+                <button type="submit" class="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-md transition">اعمال فیلتر</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- دکمه‌های خروجی -->
+    <div class="flex justify-end mb-4 space-x-2">
+        <a href="?export_excel=1{% if doctor %}&doctor={{ doctor }}{% endif %}{% if start_date %}&start_date={{ start_date }}{% endif %}{% if end_date %}&end_date={{ end_date }}{% endif %}" 
+           class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-md transition" 
+           title="خروجی Excel">💾 Excel</a>
+
+        <a href="?export_pdf=1{% if doctor %}&doctor={{ doctor }}{% endif %}{% if start_date %}&start_date={{ start_date }}{% endif %}{% if end_date %}&end_date={{ end_date }}{% endif %}" 
+           class="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-md transition" 
+           title="خروجی PDF">📄 PDF</a>
+    </div>
+
+    <!-- جدول سفارش‌ها -->
+    <div class="bg-white shadow-lg rounded-lg overflow-hidden">
+        <div class="bg-gray-800 text-white font-bold text-lg p-3">لیست سفارش‌ها</div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-300 text-center">
+                <thead class="bg-blue-100">
+                    <tr>
+                        <th class="px-4 py-2">ID</th>
+                        <th class="px-4 py-2">بیمار</th>
+                        <th class="px-4 py-2">پزشک</th>
+                        <th class="px-4 py-2">نوع سفارش</th>
+                        <th class="px-4 py-2">تعداد واحد</th>
+                        <th class="px-4 py-2">قیمت واحد</th>
+                        <th class="px-4 py-2">قیمت کل</th>
+                        <th class="px-4 py-2">تاریخ تحویل</th>
+                        <th class="px-4 py-2">تاریخ ثبت</th>
+                        <th class="px-4 py-2">وضعیت</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for order in orders %}
+                    <tr class="{% if order.total_price > 1000000 %}bg-red-100{% elif order.total_price > 500000 %}bg-yellow-100{% else %}bg-white{% endif %}">
+                        <td class="px-4 py-2">{{ order.id }}</td>
+                        <td class="px-4 py-2">{{ order.patient_name }}</td>
+                        <td class="px-4 py-2">{{ order.doctor }}</td>
+                        <td class="px-4 py-2">{{ order.get_order_type_display }}</td>
+                        <td class="px-4 py-2">{{ order.unit_count }}</td>
+                        <td class="px-4 py-2">{{ order.price|floatformat:2 }}</td>
+                        <td class="px-4 py-2">{{ order.total_price|floatformat:2 }}</td>
+                        <td class="px-4 py-2">{{ order.due_date }}</td>
+                        <td class="px-4 py-2">{{ order.created_at|date:"Y/m/d H:i" }}</td>
+                        <td class="px-4 py-2">
+                            {% if order.status == 'pending' %}
+                                <span class="px-2 py-1 rounded-md bg-yellow-300 text-yellow-800 font-medium">در انتظار</span>
+                            {% elif order.status == 'completed' %}
+                                <span class="px-2 py-1 rounded-md bg-green-300 text-green-800 font-medium">پرداخت شده</span>
+                            {% elif order.status == 'overdue' %}
+                                <span class="px-2 py-1 rounded-md bg-red-300 text-red-800 font-medium">معوق</span>
+                            {% else %}
+                                <span class="px-2 py-1 rounded-md bg-gray-300 text-gray-800 font-medium">{{ order.status }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="10" class="text-gray-500 italic py-4">هیچ سفارشی یافت نشد.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <h4 class="text-right mt-4 font-semibold text-gray-700">جمع کل فاکتور: {{ total_invoice|floatformat:2 }}</h4>
+
+</div>
+
+<!-- JS های Persian Datepicker -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
+<script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
+
+<script>
+$(function() {
+    $("input.jalali_date").persianDatepicker({
+        format: 'YYYY/MM/DD',
+        observer: true,
+        autoClose: true
+    });
+});
+</script>
+
+{% endblock %}
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

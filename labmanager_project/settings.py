@@ -51,7 +51,9 @@ ROOT_URLCONF = 'labmanager_project.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [os.path.join(BASE_DIR, 'core', 'templates')],
+        # قالب‌های سراسری پروژه
+        'DIRS': [os.path.join(BASE_DIR, 'templates')],
+        # قالب‌های داخل اپ‌ها (core/templates/core/ و ...)
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -121,6 +123,9 @@ CRISPY_TEMPLATE_PACK = "bootstrap5"
 
 # ----------------- Default primary key -----------------
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+
 
 
 

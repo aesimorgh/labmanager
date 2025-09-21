@@ -91,6 +91,7 @@
                             <th>تعداد واحد</th>
                             <th>شماره سریال</th>
                             <th>قیمت واحد</th>
+                            <th>قیمت کل</th>
                             <th>رنگ</th>
                             <th>وضعیت</th>
                             <th>تاریخ تحویل</th>
@@ -107,6 +108,7 @@
                             <td>{{ order.unit_count }}</td>
                             <td>{{ order.serial_number }}</td>
                             <td>{{ order.price }}</td>
+                            <td>{{ order.total_price }}</td>
                             <td>{{ order.shade }}</td>
                             <td>
                                 {% if order.status == 'done' %}
@@ -122,7 +124,7 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="11" class="text-center text-muted">هیچ سفارشی ثبت نشده است.</td>
+                            <td colspan="12" class="text-center text-muted">هیچ سفارشی ثبت نشده است.</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -135,14 +137,12 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 $(function() {
-    // فعال‌سازی تقویم شمسی
     $("input[type='text'].jalali_date").persianDatepicker({
         format: 'YYYY/MM/DD',
         observer: true,
         autoClose: true
     });
 
-    // 🆕 تابع تبدیل اعداد فارسی به انگلیسی
     function convertToEnglishNumber(str) {
         const persianNumbers = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
         const englishNumbers = ['0','1','2','3','4','5','6','7','8','9'];
@@ -153,7 +153,6 @@ $(function() {
         return result;
     }
 
-    // محاسبه خودکار قیمت کل با پشتیبانی از اعداد فارسی
     function updateTotalPrice() {
         let unitCount = parseInt(convertToEnglishNumber($("#id_order-unit_count").val())) || 0;
         let unitPrice = parseFloat(convertToEnglishNumber($("#id_order-price").val().replace(/,/g, ''))) || 0;
@@ -162,7 +161,6 @@ $(function() {
     }
     $("#id_order-unit_count, #id_order-price").on('input', updateTotalPrice);
 
-    // جستجو در جدول
     $("#searchInput").on("keyup", function() {
         let value = $(this).val().toLowerCase();
         $("#ordersTable tr").filter(function() {
@@ -173,6 +171,7 @@ $(function() {
 </script>
 </body>
 </html>
+
 
 
 
