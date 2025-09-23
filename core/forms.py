@@ -200,6 +200,17 @@ class AccountingForm(forms.ModelForm):
         widget=AdminJalaliDateWidget(attrs={'class': 'jalali_date'})
     )
 
+    amount = forms.DecimalField(
+        label="مبلغ پرداخت",
+        max_digits=12, decimal_places=2,
+        widget=forms.NumberInput(attrs={
+            'dir': 'ltr',
+            'inputmode': 'decimal',
+            'step': 'any',
+            'min': '0',
+        })
+    )
+
     class Meta:
         model = Accounting
         fields = '__all__'

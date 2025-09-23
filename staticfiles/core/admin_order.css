@@ -1,0 +1,71 @@
+/* فاصله و وسط‌چین برای جدول لیست سفارش‌ها */
+#changelist .results table th,
+#changelist .results table td {
+  padding: 8px 12px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+/* ستون‌های دکمه‌ها: کمی عریض‌تر تا دکمه‌ها نچسبند */
+#changelist .results table th.column-edit_button,
+#changelist .results table td.field-edit_button { width: 120px; }
+
+#changelist .results table th.column-settle_button,
+#changelist .results table td.field-settle_button { width: 140px; }
+
+#changelist .results table th.column-undo_button,
+#changelist .results table td.field-undo_button { width: 140px; }
+
+/* نشان‌های رنگی وضعیت/مانده */
+.lab-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.6;
+}
+/* ===== Force numeric input to look & behave like a normal input ===== */
+td.field-amount input,
+input.amount-field,
+input[name$="-amount"],
+input[id$="-amount"] {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  display: inline-block !important;
+  background: #fff !important;
+  border: 1px solid #d1d5db !important;
+  box-shadow: none !important;
+  border-radius: 6px !important;
+  padding: 4px 8px !important;
+  width: 140px !important;
+  box-sizing: border-box !important;
+  cursor: text !important;
+  color: inherit !important;
+  pointer-events: auto !important;
+}
+
+/* hide any pseudo-element that might be used to show value like a button */
+td.field-amount::before,
+td.field-amount::after,
+td.field-amount input::before,
+td.field-amount input::after,
+input.amount-field::before,
+input.amount-field::after,
+input[name$="-amount"]::before,
+input[name$="-amount"]::after,
+input[id$="-amount"]::before,
+input[id$="-amount"]::after {
+  content: none !important;
+  display: none !important;
+  pointer-events: none !important;
+}
+
+/* in case some CSS turned the input into a button-like element via appearance */
+td.field-amount input[type="button"],
+td.field-amount input[type="submit"],
+td.field-amount .money-display,
+td.field-amount .amount-button {
+  display: none !important;
+}
+

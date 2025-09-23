@@ -1,4 +1,5 @@
-# core/admin.py (نسخه اصلاح‌شده)
+# core/admin.py (تا قبل از OrderAdmin)
+
 from decimal import Decimal
 from django.contrib import admin
 from django import forms
@@ -6,9 +7,38 @@ from django.http import HttpResponseRedirect
 from django.urls import path, reverse
 from django.utils.html import format_html
 from django.template.response import TemplateResponse
+
 from jalali_date.admin import ModelAdminJalaliMixin
+from jalali_date import date2jalali, datetime2jalali
+
+from django.contrib import messages
+from django.utils import timezone
+from .models import Accounting
+from django.db import models as dj_models
+
+from django.db.models import Sum, F, DecimalField, ExpressionWrapper, Value
+from django.db.models.functions import Coalesce, Cast
+from django.forms.models import BaseInlineFormSet
+from jalali_date.fields import JalaliDateField
+from jalali_date.widgets import AdminJalaliDateWidget
+
+
 from .models import Patient, Order, Material, Accounting
 from .forms import PatientForm, OrderForm, MaterialForm, AccountingForm
+
+# کمکی: تبدیل رقم‌های فارسی/عربی به انگلیسی + فرمت «فارسی با جداکننده»
+FA_DIGITS = str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹")
+
+def money_fa_py(value):
+    """برمی‌گرداند مثل: ۱٬۲۳۴٬۵۶۷ (جداکنندهٔ فارسی + رقم‌های فارسی)"""
+    if value is None or value == "":
+        return ""
+    try:
+        n = int(float(value))
+        s = f"{n:,}"  # جداکننده انگلیسی
+        return s.replace(",", "٬").translate(FA_DIGITS)  # کامای فارسی + ارقام فارسی
+    except Exception:
+        return str(value)
 
 
 # -----------------------------
@@ -22,35 +52,438 @@ class PatientAdmin(admin.ModelAdmin):
 
 
 # -----------------------------
-# Order Admin
+# Filter: وضعیت تسویه (بدهکار/تسویه‌شده)
+# -----------------------------
+class BalanceStatusFilter(admin.SimpleListFilter):
+    title = 'وضعیت تسویه'
+    parameter_name = 'balance_status'
+
+    def lookups(self, request, model_admin):
+        return [
+            ('debt', 'بدهکار (>۰)'),
+            ('settled', 'تسویه‌شده (≤۰)'),
+        ]
+
+    def queryset(self, request, queryset):
+        # Annotate برای محاسبه‌ی مانده (تمیز و سریع)
+        zero_dec  = Value(0, output_field=DecimalField(max_digits=14, decimal_places=2))
+        unit_dec  = Coalesce(Cast(F('unit_count'), DecimalField(max_digits=14, decimal_places=2)), zero_dec)
+        price_dec = Coalesce(Cast(F('price'),      DecimalField(max_digits=14, decimal_places=2)), zero_dec)
+
+        total_expr = ExpressionWrapper(unit_dec * price_dec, output_field=DecimalField(max_digits=14, decimal_places=2))
+        qs = queryset.annotate(
+            total   = total_expr,
+            paid    = Coalesce(Sum('accounting__amount'), zero_dec),
+            balance = ExpressionWrapper(F('total') - F('paid'), output_field=DecimalField(max_digits=14, decimal_places=2)),
+        )
+
+        val = self.value()
+        if val == 'debt':
+            return qs.filter(balance__gt=0)
+        if val == 'settled':
+            return qs.filter(balance__lte=0)
+        return qs
+
+
+# -----------------------------
+# FormSet: جلوگیری از پرداختِ بیش از مانده در اینلاین پرداخت‌ها
+# -----------------------------
+class AccountingInlineFormSet(BaseInlineFormSet):
+    def clean(self):
+        super().clean()
+        order = self.instance  # سفارش والد
+
+        # اگر سفارش هنوز ذخیره نشده، عبور
+        if not getattr(order, 'pk', None):
+            return
+
+        total       = (order.unit_count or 0) * (order.price or 0)
+        paid_in_db  = order.accounting_set.aggregate(s=Sum('amount'))['s'] or 0
+
+        # جمع تغییرات همین نوبت (ایجاد/ویرایش/حذف)
+        delta = 0
+        for form in self.forms:
+            if not hasattr(form, 'cleaned_data'):
+                continue
+
+            if form.cleaned_data.get('DELETE'):
+                # اگر ردیف موجود حذف می‌شود، مبلغ قبلی را کم کن
+                if form.instance.pk:
+                    delta -= (form.instance.amount or 0)
+                continue
+
+            amount = form.cleaned_data.get('amount') or 0
+            if form.instance.pk:
+                # ردیف موجود که مبلغش تغییر کرده
+                original = form.instance.amount or 0
+                delta += (amount - original)
+            else:
+                # ردیف جدید
+                delta += amount
+
+        if paid_in_db + delta > total:
+            raise forms.ValidationError("مجموع پرداخت‌ها از مبلغ سفارش بیشتر است. لطفاً مبالغ را اصلاح کنید.")
+
+class AccountingInlineForm(forms.ModelForm):
+    amount = forms.DecimalField(
+        max_digits=12, decimal_places=2,
+        widget=forms.NumberInput(attrs={
+            'dir': 'ltr',
+            'inputmode': 'decimal',
+            'step': 'any',
+            'min': '0',
+            'style': 'width: 140px;'
+        })
+    )
+
+    date = JalaliDateField(
+        label='تاریخ پرداخت',
+        widget=AdminJalaliDateWidget,
+        required=False
+    )
+
+    class Meta:
+        model = Accounting
+        fields = ['amount', 'date', 'method']
+        widgets = {
+            # دوباره اطمینان می‌دهیم هنگام استفاده از Meta هم override شود
+            'amount': forms.NumberInput(attrs={
+                'type': 'number',
+                'class': 'vDecimalField amount-field no-jalali',
+                'dir': 'ltr',
+                'inputmode': 'decimal',
+                'step': 'any',
+                'min': '0',
+                'style': 'width: 140px;'
+            }),
+            'date': AdminJalaliDateWidget(attrs={'class': 'jalali-date-field'}),
+        }
+
+
+
+# -----------------------------
+# Inline: پرداخت‌های سفارش (Accounting)
+# -----------------------------
+class AccountingInline(admin.TabularInline):
+    model = Accounting
+    form = AccountingInlineForm
+    formset = AccountingInlineFormSet
+    extra = 1
+    fields = ['amount', 'date', 'method']
+
+    formfield_overrides = {
+        dj_models.DecimalField: {
+            'widget': forms.NumberInput(attrs={
+                'dir': 'ltr',
+                'inputmode': 'decimal',
+                'step': 'any',
+                'min': '0',
+                'style': 'width: 140px;'
+            })
+        }
+    }
+
+
+
+
+
+# -----------------------------
+# Order Admin (مرتب، قابل‌سورت، تاریخ‌های فارسی، دکمه‌ها)
 # -----------------------------
 @admin.register(Order)
 class OrderAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
     form = OrderForm
+    inlines = [AccountingInline]
+    actions = ['settle_balance_action']
+
+    # ناوبری و نظم
+    date_hierarchy = 'created_at'
+    list_per_page = 30
+    ordering = ('-created_at',)
+    list_select_related = ('patient',)
+    empty_value_display = '—'
+    search_help_text = 'جستجو بر اساس نام بیمار، پزشک، نوع سفارش، سریال یا ID'
+
+    # ستون‌های لیست
     list_display = [
-        'id', 'patient_name_display', 'doctor', 'order_type', 'unit_count',
-        'serial_number', 'price', 'total_price_display', 'shade',
-        'status', 'due_date', 'created_at'
+        'id',
+        'patient_name_display',
+        'doctor',
+        'order_type',
+        'unit_count',
+        'serial_number',
+        'total_price_fa',   # سورت‌شونده
+        'paid_fa',          # سورت‌شونده
+        'balance_badge',    # سورت‌شونده
+        'status_badge',
+        'due_date_fa',
+        'created_at_fa',
+        'edit_button',
+        'settle_button',
+        'undo_button',
     ]
-    list_filter = ['status', 'due_date']
-    search_fields = ['doctor', 'order_type', 'shade', 'serial_number']
+    list_display_links = ('id', 'patient_name_display')
+    list_filter = ['status', 'due_date', BalanceStatusFilter]
+    search_fields = ['doctor', 'order_type', 'shade', 'serial_number', 'patient__name', 'id']
     readonly_fields = ['total_price_display']
 
-    def formfield_for_dbfield(self, db_field, **kwargs):
-        if db_field.name == 'price':
-            kwargs['widget'] = forms.TextInput(attrs={'dir': 'ltr'})
-        return super().formfield_for_dbfield(db_field, **kwargs)
+    # استایل (بعداً فایل CSS رو اضافه می‌کنی)
+    class Media:
+        css = {'all': ('core/admin_order.css',)}
 
-    def patient_name_display(self, obj):
-        return obj.patient.name if obj.patient else getattr(obj, 'patient_name', '-')
-    patient_name_display.short_description = 'نام بیمار'
+    # ---------- get_queryset واحد و تمیز (لطفاً فقط همین یکی را نگه دار!) ----------
+    def get_queryset(self, request):
+        qs = super().get_queryset(request).select_related('patient')
 
+        zero_dec = Value(0, output_field=DecimalField(max_digits=14, decimal_places=2))
+        unit_dec  = Coalesce(Cast(F('unit_count'), DecimalField(max_digits=14, decimal_places=2)), zero_dec)
+        price_dec = Coalesce(Cast(F('price'),      DecimalField(max_digits=14, decimal_places=2)), zero_dec)
+
+        total_expr = ExpressionWrapper(unit_dec * price_dec, output_field=DecimalField(max_digits=14, decimal_places=2))
+        paid_expr  = Coalesce(Sum('accounting__amount'), zero_dec)
+
+        qs = qs.annotate(
+            total=total_expr,
+            paid=paid_expr,
+            balance=ExpressionWrapper(F('total') - F('paid'), output_field=DecimalField(max_digits=14, decimal_places=2))
+        )
+        return qs
+
+    # ---------- Helperها ----------
+    def _total_raw(self, obj):
+        return getattr(obj, 'total', None) if getattr(obj, 'total', None) is not None else (obj.unit_count or 0) * (obj.price or 0)
+
+    def _paid_raw(self, obj):
+        val = getattr(obj, 'paid', None)
+        if val is None:
+            val = obj.accounting_set.aggregate(s=Sum('amount'))['s'] or 0
+        return val
+
+    # ---------- فرم (readonly) ----------
+    @admin.display(description='قیمت کل (تومان)')
     def total_price_display(self, obj):
+        return self._total_raw(obj)
+
+    # ---------- نمایش لیست ----------
+    @admin.display(description='نام بیمار')
+    def patient_name_display(self, obj):
+        return obj.patient.name if obj.patient else getattr(obj, 'patient_name', '—')
+
+    @admin.display(description='قیمت کل (تومان)', ordering='total')
+    def total_price_fa(self, obj):
+        return money_fa_py(self._total_raw(obj))
+
+    @admin.display(description='پرداخت‌شده (تومان)', ordering='paid')
+    def paid_fa(self, obj):
+        return money_fa_py(self._paid_raw(obj))
+
+    @admin.display(description='مانده', ordering='balance')
+    def balance_badge(self, obj):
+        balance = self._total_raw(obj) - self._paid_raw(obj)
+        bg = '#ef4444' if balance > 0 else '#16a34a'
+        return format_html('<span class="lab-badge" style="background:{}">{}</span>', bg, money_fa_py(balance))
+
+    @admin.display(description='وضعیت', ordering='status')
+    def status_badge(self, obj):
+        val = getattr(obj, 'status', '') or ''
         try:
-            return obj.unit_count * obj.price
+            label = dict(getattr(Order, 'STATUS_CHOICES', [])) .get(val, val) or '—'
         except Exception:
-            return None
-    total_price_display.short_description = 'قیمت کل (تومان)'
+            label = val or '—'
+        color_map = {
+            'NEW': '#0ea5e9',
+            'IN_PROGRESS': '#f59e0b',
+            'READY': '#22c55e',
+            'DELIVERED': '#16a34a',
+            'REMAKE': '#f43f5e',
+            'CANCELLED': '#9ca3af',
+        }
+        bg = color_map.get(val, '#64748b')
+        return format_html('<span class="lab-badge" style="background:{}">{}</span>', bg, label)
+
+    # ---------- تاریخ‌ها: جلالی + ارقام فارسی + / ----------
+    @admin.display(description='تاریخ تحویل', ordering='due_date')
+    def due_date_fa(self, obj):
+        if not getattr(obj, 'due_date', None):
+            return '—'
+        try:
+            s = date2jalali(obj.due_date).strftime('%Y/%m/%d')
+            return s.translate(FA_DIGITS)
+        except Exception:
+            return str(obj.due_date)
+
+    @admin.display(description='تاریخ ثبت', ordering='created_at')
+    def created_at_fa(self, obj):
+        if not getattr(obj, 'created_at', None):
+            return '—'
+        try:
+            s = datetime2jalali(obj.created_at).strftime('%Y/%m/%d')
+            return s.translate(FA_DIGITS)
+        except Exception:
+            return obj.created_at.strftime('%Y/%m/%d')
+        
+    @admin.display(description='ویرایش')
+    def edit_button(self, obj):
+      url = reverse('admin:core_order_change', args=[obj.pk])
+      return format_html(
+        '<a style="display:inline-block;min-width:92px;text-align:center;'
+        'padding:5px 10px;border:1px solid #1d4ed8;border-radius:9999px;'
+        'background:#eef2ff;color:#1d4ed8;text-decoration:none;'
+        'font-size:12px;line-height:1.2" href="{}">ویرایش</a>',
+        url
+    )
+
+    @admin.display(description='تسویهٔ کامل')
+    def settle_button(self, obj):
+      url = reverse('admin:order_settle', args=[obj.pk])
+      return format_html(
+        '<a style="display:inline-block;min-width:92px;text-align:center;'
+        'padding:5px 10px;border:1px solid #047857;border-radius:9999px;'
+        'background:#ecfdf5;color:#047857;text-decoration:none;'
+        'font-size:12px;line-height:1.2" href="{}">تسویهٔ کامل</a>',
+        url
+    )
+
+    @admin.display(description='برگرداندن پرداخت')
+    def undo_button(self, obj):
+      url = reverse('admin:order_undo_last_payment', args=[obj.pk])
+      return format_html(
+        '<a style="display:inline-block;min-width:92px;text-align:center;'
+        'padding:5px 10px;border:1px solid #b91c1c;border-radius:9999px;'
+        'background:#fef2f2;color:#b91c1c;text-decoration:none;'
+        'font-size:12px;line-height:1.2" href="{}">برگردان</a>',
+        url
+    )
+
+
+
+    # ---------- ستون «عملیات» ----------
+    @admin.display(description='عملیات')
+    def actions_column(self, obj):
+        url_edit   = reverse('admin:core_order_change', args=[obj.pk])
+        url_settle = reverse('admin:order_settle', args=[obj.pk])
+        url_undo   = reverse('admin:order_undo_last_payment', args=[obj.pk])
+        return format_html(
+            '<div class="lab-actions">'
+            '<a class="lab-btn lab-btn-blue" href="{}">ویرایش</a>'
+            '<a class="lab-btn lab-btn-green" href="{}">تسویه</a>'
+            '<a class="lab-btn lab-btn-red" href="{}">برگردان</a>'
+            '</div>',
+            url_edit, url_settle, url_undo
+        )
+
+    # ---------- اکشن گروهی: تسویه کامل ----------
+    def settle_balance_action(self, request, queryset):
+        ok = skipped = errs = 0
+        method_value = None
+        method_required = False
+        date_required = False
+        try:
+            mf = Accounting._meta.get_field('method')
+            choices = list(mf.choices or [])
+            if choices:
+                method_value = choices[0][0]
+            method_required = (not getattr(mf, 'null', True)) and (not getattr(mf, 'blank', True))
+        except Exception:
+            pass
+        try:
+            df = Accounting._meta.get_field('date')
+            date_required = (not getattr(df, 'null', True)) and (not getattr(df, 'blank', True))
+        except Exception:
+            pass
+
+        for o in queryset:
+            balance = (o.unit_count or 0) * (o.price or 0) - (o.accounting_set.aggregate(s=Sum('amount'))['s'] or 0)
+            if balance <= 0:
+                skipped += 1
+                continue
+            kwargs = {'order': o, 'amount': balance}
+            if date_required:
+                kwargs['date'] = timezone.now().date()
+            if method_value is not None or method_required:
+                kwargs['method'] = method_value or 'CASH'
+            try:
+                Accounting.objects.create(**kwargs)
+                ok += 1
+            except Exception:
+                errs += 1
+
+        msg = f"تسویهٔ خودکار: موفق {ok}، رد شده {skipped}، خطا {errs}"
+        level = messages.SUCCESS if ok and not errs else (messages.WARNING if not errs else messages.ERROR)
+        self.message_user(request, msg, level=level)
+
+    settle_balance_action.short_description = "تسویهٔ کامل (ایجاد پرداخت به مبلغ مانده)"
+
+    # ---------- URLهای اختصاصی دکمه‌ها ----------
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path('settle/<int:order_id>/', self.admin_site.admin_view(self.settle_order_view), name='order_settle'),
+            path('undo-last-payment/<int:order_id>/', self.admin_site.admin_view(self.undo_last_payment_view), name='order_undo_last_payment'),
+        ]
+        return custom + urls
+
+    def settle_order_view(self, request, order_id):
+        try:
+            o = Order.objects.get(pk=order_id)
+        except Order.DoesNotExist:
+            self.message_user(request, "سفارش پیدا نشد.", level=messages.ERROR)
+            return HttpResponseRedirect(reverse('admin:core_order_changelist'))
+
+        balance = (o.unit_count or 0) * (o.price or 0) - (o.accounting_set.aggregate(s=Sum('amount'))['s'] or 0)
+        if balance <= 0:
+            self.message_user(request, "این سفارش مانده‌ای برای تسویه ندارد.", level=messages.WARNING)
+            return HttpResponseRedirect(reverse('admin:core_order_changelist'))
+
+        method_value = None
+        method_required = False
+        date_required = False
+        try:
+            mf = Accounting._meta.get_field('method')
+            choices = list(mf.choices or [])
+            if choices:
+                method_value = choices[0][0]
+            method_required = (not getattr(mf, 'null', True)) and (not getattr(mf, 'blank', True))
+        except Exception:
+            pass
+        try:
+            df = Accounting._meta.get_field('date')
+            date_required = (not getattr(df, 'null', True)) and (not getattr(df, 'blank', True))
+        except Exception:
+            pass
+
+        kwargs = {'order': o, 'amount': balance}
+        if date_required:
+            kwargs['date'] = timezone.now().date()
+        if method_value is not None or method_required:
+            kwargs['method'] = method_value or 'CASH'
+
+        try:
+            Accounting.objects.create(**kwargs)
+            self.message_user(request, f"تسویه انجام شد: {money_fa_py(balance)} تومان.", level=messages.SUCCESS)
+        except Exception as e:
+            self.message_user(request, f"خطا در ثبت پرداخت: {e}", level=messages.ERROR)
+
+        return HttpResponseRedirect(reverse('admin:core_order_changelist'))
+
+    def undo_last_payment_view(self, request, order_id):
+        try:
+            o = Order.objects.get(pk=order_id)
+        except Order.DoesNotExist:
+            self.message_user(request, "سفارش پیدا نشد.", level=messages.ERROR)
+            return HttpResponseRedirect(reverse('admin:core_order_changelist'))
+
+        last_payment = Accounting.objects.filter(order=o).order_by('-id').first()
+        if not last_payment:
+            self.message_user(request, "پرداختی برای این سفارش ثبت نشده است.", level=messages.WARNING)
+            return HttpResponseRedirect(reverse('admin:core_order_changelist'))
+
+        last_payment.delete()
+        self.message_user(request, "آخرین پرداخت حذف شد.", level=messages.SUCCESS)
+        return HttpResponseRedirect(reverse('admin:core_order_changelist'))
+
+
+
 
 
 # -----------------------------
@@ -124,23 +557,72 @@ class AccountingAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
 
             output = io.BytesIO()
             workbook = xlsxwriter.Workbook(output, {'in_memory': True})
-            worksheet = workbook.add_worksheet("گزارش مالی")
 
-            headers = ['ID', 'بیمار', 'پزشک', 'نوع سفارش', 'تعداد واحد', 'قیمت واحد', 'قیمت کل', 'تاریخ تحویل', 'تاریخ ثبت']
-            for col_num, header in enumerate(headers):
-                worksheet.write(0, col_num, header)
+            # شیت و استایل‌ها
+            ws = workbook.add_worksheet("گزارش مالی")
+            fmt_header = workbook.add_format({
+                'bold': True, 'align': 'center', 'valign': 'vcenter',
+                'bg_color': '#E0F2FE', 'border': 1
+            })
+            fmt_cell = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'border': 1})
+            fmt_cell_rtl = workbook.add_format({'align': 'right', 'valign': 'vcenter', 'border': 1})
 
-            for row_num, order in enumerate(orders, start=1):
-                worksheet.write(row_num, 0, order.id)
-                worksheet.write(row_num, 1, order.patient_name)
-                worksheet.write(row_num, 2, order.doctor)
-                worksheet.write(row_num, 3, order.get_order_type_display())
-                worksheet.write(row_num, 4, order.unit_count)
-                worksheet.write(row_num, 5, float(order.price or 0))
-                # استفاده از property total_price (بدون نوشتن به آن)
-                worksheet.write(row_num, 6, float(order.total_price or 0))
-                worksheet.write(row_num, 7, str(order.due_date))
-                worksheet.write(row_num, 8, order.created_at.strftime("%Y/%m/%d %H:%M"))
+            # سرستون‌ها
+            headers = ['ID', 'بیمار', 'پزشک', 'نوع سفارش', 'تعداد واحد',
+                       'قیمت واحد (تومان)', 'قیمت کل (تومان)', 'تاریخ تحویل', 'تاریخ ثبت']
+            for col, h in enumerate(headers):
+                ws.write(0, col, h, fmt_header)
+
+            # عرض ستون‌ها
+            ws.set_column(0, 0, 8)    # ID
+            ws.set_column(1, 1, 18)   # بیمار
+            ws.set_column(2, 2, 18)   # پزشک
+            ws.set_column(3, 3, 18)   # نوع سفارش
+            ws.set_column(4, 4, 10)   # تعداد
+            ws.set_column(5, 6, 18)   # قیمت‌ها
+            ws.set_column(7, 8, 16)   # تاریخ‌ها
+
+            # ردیف‌ها
+            row = 1
+            for order in orders:
+                ws.write(row, 0, order.id, fmt_cell)
+                ws.write(row, 1, order.patient_name or "", fmt_cell_rtl)
+                ws.write(row, 2, order.doctor or "", fmt_cell_rtl)
+                ws.write(row, 3, order.get_order_type_display(), fmt_cell)
+                ws.write(row, 4, order.unit_count or 0, fmt_cell)
+
+                # پول‌ها: فارسی با جداکننده
+                ws.write(row, 5, money_fa_py(order.price or 0), fmt_cell_rtl)
+                ws.write(row, 6, money_fa_py(getattr(order, 'total_price', 0) or 0), fmt_cell_rtl)
+
+                # تاریخ‌ها: جلالی (رشته)
+                due = ""
+                if getattr(order, 'due_date', None):
+                    # اگر Date است
+                    try:
+                        due = date2jalali(order.due_date).strftime("%Y/%m/%d")
+                    except Exception:
+                        due = str(order.due_date)
+
+                created = ""
+                if getattr(order, 'created_at', None):
+                    try:
+                        created = datetime2jalali(order.created_at).strftime("%Y/%m/%d")
+                    except Exception:
+                        created = order.created_at.strftime("%Y/%m/%d")
+
+                ws.write(row, 7, due, fmt_cell)
+                ws.write(row, 8, created, fmt_cell)
+                row += 1
+
+            # ردیف جمع کل
+            ws.write(row, 0, 'جمع کل', fmt_header)
+            for c in range(1, 5):
+                ws.write(row, c, '', fmt_header)
+            ws.write(row, 5, '', fmt_header)
+            ws.write(row, 6, money_fa_py(total_invoice), fmt_header)
+            ws.write(row, 7, '', fmt_header)
+            ws.write(row, 8, '', fmt_header)
 
             workbook.close()
             output.seek(0)
@@ -151,15 +633,19 @@ class AccountingAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
             response['Content-Disposition'] = 'attachment; filename=accounting_report.xlsx'
             return response
 
+
         # Export PDF
         if 'export_pdf' in request.GET:
             from django.template.loader import render_to_string
             from weasyprint import HTML
             from django.http import HttpResponse
 
-            html_string = render_to_string('core/admin/accounting_report_admin.html', context)
-            html = HTML(string=html_string)
-            pdf = html.write_pdf()
+            # از یک تمپلیت مخصوص خروجی PDF استفاده می‌کنیم
+            html_string = render_to_string('core/admin/accounting_report_export.html', {
+                **context,
+                'export_mode': 'pdf'
+            })
+            pdf = HTML(string=html_string, base_url=request.build_absolute_uri('/')).write_pdf()
             response = HttpResponse(pdf, content_type='application/pdf')
             response['Content-Disposition'] = 'attachment; filename="accounting_report.pdf"'
             return response

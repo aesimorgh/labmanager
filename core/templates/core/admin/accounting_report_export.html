@@ -1,0 +1,94 @@
+{% load jalali_tags %}
+{% load num_extras %}
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <title>گزارش مالی</title>
+  <style>
+    @page { size: A4; margin: 18mm 14mm; }
+    * { box-sizing: border-box; }
+    body { font-family: "Tahoma", "DejaVu Sans", Arial, sans-serif; color: #111; }
+    h1 { font-size: 20px; text-align: center; margin: 0 0 16px; }
+    .meta { font-size: 12px; color:#444; margin-bottom: 12px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #ccc; padding: 6px 8px; font-size: 12px; }
+    th { background: #eaf3ff; text-align: center; }
+    td { text-align: center; }
+    td.td-rtl { text-align: right; }
+    .total { margin-top: 10px; font-weight: 700; text-align: left; }
+    .badge { display:inline-block; padding:2px 6px; border-radius:4px; font-size:11px; }
+    .b-pending { background:#fde68a; color:#92400e; }
+    .b-completed { background:#bbf7d0; color:#14532d; }
+    .b-overdue { background:#fecaca; color:#7f1d1d; }
+    .b-default { background:#e5e7eb; color:#111827; }
+    .muted { color:#555; }
+  </style>
+</head>
+<body>
+  <h1>گزارش مالی / حسابداری</h1>
+
+  <div class="meta">
+    {% if doctor %}<span>دکتر: <strong>{{ doctor }}</strong></span> &nbsp;{% endif %}
+    {% if start_date %}<span>از تاریخ: <strong>{{ start_date|digits_fa }}</strong></span> &nbsp;{% endif %}
+    {% if end_date %}<span>تا تاریخ: <strong>{{ end_date|digits_fa }}</strong></span>{% endif %}
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>بیمار</th>
+        <th>پزشک</th>
+        <th>نوع سفارش</th>
+        <th>تعداد واحد</th>
+        <th>قیمت واحد (تومان)</th>
+        <th>قیمت کل (تومان)</th>
+        <th>تاریخ تحویل</th>
+        <th>تاریخ ثبت</th>
+        <th>وضعیت</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for order in orders %}
+      <tr>
+        <td>{{ order.id|digits_fa }}</td>
+        <td class="td-rtl">{{ order.patient_name }}</td>
+        <td class="td-rtl">{{ order.doctor }}</td>
+        <td>{{ order.get_order_type_display }}</td>
+        <td>{{ order.unit_count|digits_fa }}</td>
+
+        <!-- پول‌ها: جداکننده و رقم‌های فارسی -->
+        <td class="td-rtl">{{ order.price|money_fa }}</td>
+        <td class="td-rtl">{{ order.total_price|money_fa }}</td>
+
+        <!-- تاریخ تحویل: بدون دستکاری جلالی؛ فقط '-' -> '/' و ارقام فارسی -->
+        <td>{{ order.due_date|dash_to_slash|digits_fa }}</td>
+
+        <!-- تاریخ ثبت: جلالی بدون ساعت + ارقام فارسی -->
+        <td>{{ order.created_at|to_jalali:"%Y/%m/%d"|digits_fa }}</td>
+
+        <td>
+          {% if order.status == 'pending' %}
+            <span class="badge b-pending">در انتظار</span>
+          {% elif order.status == 'completed' %}
+            <span class="badge b-completed">پرداخت شده</span>
+          {% elif order.status == 'overdue' %}
+            <span class="badge b-overdue">معوق</span>
+          {% else %}
+            <span class="badge b-default">{{ order.status }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="10" class="muted">هیچ سفارشی یافت نشد.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <p class="total">جمع کل فاکتور: {{ total_invoice|money_fa }} تومان</p>
+</body>
+</html>
+
+
+
