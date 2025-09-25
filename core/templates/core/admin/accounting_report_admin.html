@@ -11,28 +11,36 @@
   <style>
     /* پهنای کنترل Select2 */
     .select2-container { width: 100% !important; }
-    .select2-selection--single { height: 2.5rem !important; display: flex; align-items: center; }
-    .select2-selection__rendered { line-height: 2.5rem !important; }
-    .select2-selection__arrow { height: 2.5rem !important; }
 
-    /* رنگ متن گزینه‌ها */
-    .select2-dropdown { background: #fff !important; }
-    .select2-results__option { color: #111 !important; }
-    .select2-container--default .select2-results__option--highlighted[aria-selected] { background:#3b82f6 !important; color:#fff !important; }
-    .select2-container--default .select2-selection__rendered { color:#111 !important; }
-
-    /* محدود کردن ارتفاع لیست نتایج */
-    .select2-results__options { max-height: 240px !important; overflow-y: auto !important; }
-
-    /* جلوگیری از بیرون‌زدن Dropdown */
-    .doctor-wrapper { position: relative; }
-    .doctor-wrapper .select2-container { max-width: 100% !important; }
-    .doctor-wrapper .select2-dropdown {
-      right: 0 !important;
-      left: auto !important;
-      width: 100% !important;
-      max-width: 100% !important;
+    /* فیکس نمایش متن انتخاب‌شده (دیگه نصفه نباشه) */
+    .select2-container--default .select2-selection--single{
+      height: 40px !important;
+      display: flex !important;
+      align-items: center !important;
+      border-color: #d1d5db !important;
     }
+    .select2-container--default .select2-selection--single .select2-selection__rendered{
+      line-height: 40px !important;
+      padding-right: .75rem !important;
+      padding-left: 2rem !important;
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+      width: 100% !important;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__arrow{
+      height: 40px !important;
+    }
+
+    /* Dropdown ها زیر عنصر قرار نگیرند */
+    .doctor-wrapper { position: relative; }
+    .select2-dropdown { z-index: 20010 !important; background: #fff !important; }
+
+    /* پاپ‌آپ تقویم */
+    .pdp-picker { z-index: 20020 !important; }
+
+    /* ورودی تاریخ‌ها: LTR برای تایپ با اسلش */
+    .jalali_date{ direction: ltr !important; text-align: left !important; font-variant-numeric: tabular-nums; }
   </style>
 {% endblock %}
 
@@ -51,7 +59,7 @@
         <select name="doctor"
                 class="doctor-select w-full rounded-md border-gray-300 focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
                 title="{{ doctor }}" dir="rtl">
-          <option value="">همه دکترها</option>
+          <option value="" {% if not doctor %}selected{% endif %}>همه دکترها</option>
           {% for doc in doctors %}
             <option value="{{ doc|default_if_none:'' }}" {% if doc == doctor %}selected{% endif %} title="{{ doc }}">{{ doc }}</option>
           {% endfor %}
@@ -116,19 +124,10 @@
             <td class="px-4 py-2" title="{{ order.doctor }}">{{ order.doctor }}</td>
             <td class="px-4 py-2">{{ order.get_order_type_display }}</td>
             <td class="px-4 py-2">{{ order.unit_count|digits_fa }}</td>
-
-            <!-- قیمت واحد: جداکننده فارسی + ارقام فارسی -->
             <td class="px-4 py-2">{{ order.price|money_fa }}</td>
-
-            <!-- قیمت کل: جداکننده فارسی + ارقام فارسی -->
             <td class="px-4 py-2">{{ order.total_price|money_fa }}</td>
-
-            <!-- تاریخ تحویل: همین مقداری که نشون می‌دادی + تبدیل - به / + ارقام فارسی -->
             <td class="px-4 py-2">{{ order.due_date|dash_to_slash|digits_fa }}</td>
-
-            <!-- تاریخ ثبت: جلالی + ارقام فارسی -->
             <td class="px-4 py-2">{{ order.created_at|to_jalali:"%Y/%m/%d"|digits_fa }}</td>
-
             <td class="px-4 py-2">
               {% if order.status == 'pending' %}
                 <span class="px-2 py-1 rounded-md bg-yellow-300 text-yellow-800 font-medium">در انتظار</span>
@@ -151,7 +150,6 @@
     </div>
   </div>
 
-  <!-- جمع کل: جداکننده فارسی + ارقام فارسی -->
   <h4 class="text-right mt-4 font-semibold text-gray-700">
     جمع کل فاکتور: {{ total_invoice|money_fa }} تومان
   </h4>
@@ -160,7 +158,7 @@
 <!-- jQuery -->
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
-<!-- تقویم شمسی -->
+<!-- ✅ نسخه‌های سازگار: persian-date 1.1.0 + persian-datepicker 1.2.0 -->
 <script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
 <script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
@@ -170,24 +168,79 @@
 
 <script>
 $(function () {
-  $("input.jalali_date").persianDatepicker({
-    format: 'YYYY/MM/DD',
-    observer: true,
-    autoClose: true
+  // 1) هر مقدار خراب/قدیمیِ داخل اینپوت‌ها رو خالی کن
+  $("input.jalali_date").each(function(){
+    var v = this.value || "";
+    if (v && !/^\d{4}\/\d{2}\/\d{2}$/.test(v)) this.value = "";
   });
 
+  // 2) اطمینان از اینکه persian-date نسخه 1.x لود شده
+  if (!(window.persianDate && typeof window.persianDate === "function")) {
+    console.error("persian-date 1.x not loaded");
+    return;
+  }
+
+  // 3) اینیت «صحیح» برای persian-datepicker 1.2.0
+  if ($.fn.persianDatepicker) {
+    $("input.jalali_date").each(function(){
+      var $inp = $(this);
+
+      // اینیت
+      $inp.persianDatepicker({
+        format: 'YYYY/MM/DD',
+        initialValue: false,            // خودکار چیزی نذاره
+        autoClose: true,
+        observer: true,
+        calendar: { persian: { locale: 'fa', leapYearMode: 'astronomical' } },
+        toolbox: { todayButton: { enabled: true, text: { fa: 'امروز' } } }
+      });
+
+      // 4) «امروز» واقعیِ شمسی رو هم در Input و هم در خود ویجت ست کن
+      // (فقط اگر اینپوت خالی بود؛ مقدار کاربر رو خراب نکنیم)
+      if (!$inp.val()) {
+        var today = new persianDate().startOf('day');
+        // مقدار داخل اینپوت
+        $inp.val(today.format('YYYY/MM/DD'));
+        // انتخاب تاریخ داخل پاپ‌آپ (خود ویجت)
+        try {
+          var api = $inp.data('datepicker'); // API خودِ persian-datepicker 1.2.0
+          if (api && typeof api.setDate === 'function') {
+            api.setDate(today);
+          }
+        } catch (e) {
+          console.warn('setDate failed:', e);
+        }
+      }
+    });
+  } else {
+    console.error('persianDatepicker plugin not found');
+  }
+
+  // 5) Select2 برای دکتر (بدون تغییر ظاهر فعلی)
   var $doctorWrapper = $(".doctor-wrapper");
-  $(".doctor-select").select2({
-    dir: "rtl",
-    width: "100%",
-    dropdownAutoWidth: false,
-    dropdownParent: $doctorWrapper,
-    placeholder: "همه دکترها"
-  });
+  if ($.fn.select2) {
+    $(".doctor-select").select2({
+      dir: "rtl",
+      width: "100%",
+      dropdownAutoWidth: false,
+      dropdownParent: $doctorWrapper,
+      minimumResultsForSearch: 10
+    });
+  }
+
+  // 6) پاپ‌آپ تقویم همیشه بالاتر دیده شود
+  $(".pdp-picker").css("z-index", 20020);
 });
 </script>
 
 {% endblock %}
+
+
+
+
+
+
+
 
 
 

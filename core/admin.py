@@ -7,22 +7,22 @@ from django.http import HttpResponseRedirect
 from django.urls import path, reverse
 from django.utils.html import format_html
 from django.template.response import TemplateResponse
-
 from jalali_date.admin import ModelAdminJalaliMixin
 from jalali_date import date2jalali, datetime2jalali
-
 from django.contrib import messages
 from django.utils import timezone
 from .models import Accounting
 from django.db import models as dj_models
-
+from django.db.models.fields import DateTimeField
 from django.db.models import Sum, F, DecimalField, ExpressionWrapper, Value
 from django.db.models.functions import Coalesce, Cast
 from django.forms.models import BaseInlineFormSet
 from jalali_date.fields import JalaliDateField
 from jalali_date.widgets import AdminJalaliDateWidget
-
-
+from core.utils.normalizers import normalize_jalali_date_str
+from django.utils.dateparse import parse_date
+from django.template.response import TemplateResponse
+from core.utils.normalizers import normalize_jalali_date_str
 from .models import Patient, Order, Material, Accounting
 from .forms import PatientForm, OrderForm, MaterialForm, AccountingForm
 
@@ -125,14 +125,15 @@ class AccountingInlineFormSet(BaseInlineFormSet):
             raise forms.ValidationError("مجموع پرداخت‌ها از مبلغ سفارش بیشتر است. لطفاً مبالغ را اصلاح کنید.")
 
 class AccountingInlineForm(forms.ModelForm):
-    amount = forms.DecimalField(
-        max_digits=12, decimal_places=2,
-        widget=forms.NumberInput(attrs={
+    # ❶ ورودی را متنی کن تا اسپینر حذف شود و بتوان فارسی هم تایپ کرد
+    amount = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={
             'dir': 'ltr',
-            'inputmode': 'decimal',
-            'step': 'any',
-            'min': '0',
-            'style': 'width: 140px;'
+            'inputmode': 'decimal',   # کیبورد عددی موبایل
+            'autocomplete': 'off',
+            'style': 'width: 140px;',
+            'placeholder': 'مثلاً ۱۲۳٬۴۵۶.۷۸'
         })
     )
 
@@ -146,18 +147,30 @@ class AccountingInlineForm(forms.ModelForm):
         model = Accounting
         fields = ['amount', 'date', 'method']
         widgets = {
-            # دوباره اطمینان می‌دهیم هنگام استفاده از Meta هم override شود
-            'amount': forms.NumberInput(attrs={
-                'type': 'number',
-                'class': 'vDecimalField amount-field no-jalali',
-                'dir': 'ltr',
-                'inputmode': 'decimal',
-                'step': 'any',
-                'min': '0',
-                'style': 'width: 140px;'
-            }),
+            # ❷ حتماً «amount» را از NumberInput به TextInput تغییر بده
             'date': AdminJalaliDateWidget(attrs={'class': 'jalali-date-field'}),
         }
+
+    # ❸ تبدیل ارقام فارسی/عربی و حذف جداکننده‌ها برای ذخیره استاندارد
+    def clean_amount(self):
+        raw = (self.cleaned_data.get('amount') or '').strip()
+
+        if raw == '':
+            return None  # یا 0 اگر می‌خوای خالی‌ها صفر ذخیره شوند
+
+        trans = str.maketrans({
+            '۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9',
+            '٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9',
+            '٬':'', ',':'', ' ':''
+        })
+        ascii_num = raw.translate(trans)
+
+        from decimal import Decimal, InvalidOperation
+        try:
+            return Decimal(ascii_num)
+        except (InvalidOperation, ValueError):
+            raise forms.ValidationError('لطفاً مبلغ معتبر وارد کنید.')
+
 
 
 
@@ -170,18 +183,6 @@ class AccountingInline(admin.TabularInline):
     formset = AccountingInlineFormSet
     extra = 1
     fields = ['amount', 'date', 'method']
-
-    formfield_overrides = {
-        dj_models.DecimalField: {
-            'widget': forms.NumberInput(attrs={
-                'dir': 'ltr',
-                'inputmode': 'decimal',
-                'step': 'any',
-                'min': '0',
-                'style': 'width: 140px;'
-            })
-        }
-    }
 
 
 
@@ -504,7 +505,7 @@ class AccountingAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
     form = AccountingForm
     list_display = ['order', 'amount', 'date', 'method', 'export_buttons']
 
-    # مسیر سفارشی برای پنل گزارش مالی
+        # مسیر سفارشی برای پنل گزارش مالی
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
@@ -516,27 +517,63 @@ class AccountingAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
         ]
         return custom_urls + urls
 
-    # صفحه گزارش مالی داخل ادمین
+    # صفحه گزارش مالی داخل ادمین (با خروجی Excel/PDF)
     def accounting_report_view(self, request):
-        doctor = request.GET.get('doctor', '')
-        start_date = request.GET.get('start_date', '')
-        end_date = request.GET.get('end_date', '')
+        # --- normalize GET params for jalali dates ---
+        data = request.GET.copy()  # make it mutable
+        for key in ("start_date", "end_date"):
+            if data.get(key):
+                data[key] = normalize_jalali_date_str(data[key])
+        # --- end normalize block ---
+
+        doctor = data.get('doctor', '').strip()
+        start_date_str = data.get('start_date', '').strip()
+        end_date_str   = data.get('end_date', '').strip()
+
+        # تبدیل قطعی جلالی به میلادی
+        import jdatetime
+        from django.db.models import DateTimeField as _DTF
+
+        def jalali_to_gregorian(jalali_str):
+            if not jalali_str:
+                return None
+            try:
+                y, m, d = [int(p) for p in jalali_str.split('/')]
+                return jdatetime.date(y, m, d).togregorian()  # -> datetime.date
+            except Exception:
+                return None
+
+        start_date = jalali_to_gregorian(start_date_str)
+        end_date   = jalali_to_gregorian(end_date_str)
 
         orders = Order.objects.all()
+
+        # اگر doctor شما ForeignKey است و نام در فیلد name است، این خط را به doctor__name__icontains تغییر بده
         if doctor:
             orders = orders.filter(doctor__icontains=doctor)
-        if start_date:
-            orders = orders.filter(due_date__gte=start_date)
-        if end_date:
-            orders = orders.filter(due_date__lte=end_date)
 
-        # **توجه**: نباید به property ای که فقط getter دارد مقدار اختصاص دهیم.
-        # قبلاً این‌جا می‌گذاشتیم: order.total_price = ...
-        # اکنون از خودِ property استفاده می‌کنیم و جمع کل را با Decimal محاسبه می‌کنیم.
+        # اگر due_date از نوع DateTimeField باشد، روی part تاریخ فیلتر کنیم
+        due_field = Order._meta.get_field("due_date")
+        is_datetime = isinstance(due_field, _DTF)
+
+        if start_date:
+            if is_datetime:
+                orders = orders.filter(due_date__date__gte=start_date)
+            else:
+                orders = orders.filter(due_date__gte=start_date)
+
+        if end_date:
+            if is_datetime:
+                orders = orders.filter(due_date__date__lte=end_date)
+            else:
+                orders = orders.filter(due_date__lte=end_date)
+
+        # جمع کل بر اساس property خواندنی total_price
         total_invoice = sum(
             (order.total_price for order in orders if order.total_price is not None),
             Decimal('0')
         )
+
         doctors = Order.objects.values_list('doctor', flat=True).distinct()
 
         context = dict(
@@ -544,22 +581,24 @@ class AccountingAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
             orders=orders,
             total_invoice=total_invoice,
             doctor=doctor,
-            start_date=start_date,
-            end_date=end_date,
+            start_date=start_date_str,  # همان رشته‌ی ورودی کاربر برای نمایش در فرم
+            end_date=end_date_str,      # همان رشته‌ی ورودی کاربر برای نمایش در فرم
             doctors=doctors,
         )
 
+        # ----------------------------
         # Export Excel
+        # ----------------------------
         if 'export_excel' in request.GET:
             import io
             import xlsxwriter
             from django.http import HttpResponse
+            from jalali_date import date2jalali, datetime2jalali
 
             output = io.BytesIO()
             workbook = xlsxwriter.Workbook(output, {'in_memory': True})
-
-            # شیت و استایل‌ها
             ws = workbook.add_worksheet("گزارش مالی")
+
             fmt_header = workbook.add_format({
                 'bold': True, 'align': 'center', 'valign': 'vcenter',
                 'bg_color': '#E0F2FE', 'border': 1
@@ -567,38 +606,32 @@ class AccountingAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
             fmt_cell = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'border': 1})
             fmt_cell_rtl = workbook.add_format({'align': 'right', 'valign': 'vcenter', 'border': 1})
 
-            # سرستون‌ها
             headers = ['ID', 'بیمار', 'پزشک', 'نوع سفارش', 'تعداد واحد',
                        'قیمت واحد (تومان)', 'قیمت کل (تومان)', 'تاریخ تحویل', 'تاریخ ثبت']
             for col, h in enumerate(headers):
                 ws.write(0, col, h, fmt_header)
 
-            # عرض ستون‌ها
-            ws.set_column(0, 0, 8)    # ID
-            ws.set_column(1, 1, 18)   # بیمار
-            ws.set_column(2, 2, 18)   # پزشک
-            ws.set_column(3, 3, 18)   # نوع سفارش
-            ws.set_column(4, 4, 10)   # تعداد
-            ws.set_column(5, 6, 18)   # قیمت‌ها
-            ws.set_column(7, 8, 16)   # تاریخ‌ها
+            ws.set_column(0, 0, 8)
+            ws.set_column(1, 1, 18)
+            ws.set_column(2, 2, 18)
+            ws.set_column(3, 3, 18)
+            ws.set_column(4, 4, 10)
+            ws.set_column(5, 6, 18)
+            ws.set_column(7, 8, 16)
 
-            # ردیف‌ها
             row = 1
             for order in orders:
                 ws.write(row, 0, order.id, fmt_cell)
-                ws.write(row, 1, order.patient_name or "", fmt_cell_rtl)
+                ws.write(row, 1, getattr(order, 'patient_name', '') or "", fmt_cell_rtl)
                 ws.write(row, 2, order.doctor or "", fmt_cell_rtl)
                 ws.write(row, 3, order.get_order_type_display(), fmt_cell)
                 ws.write(row, 4, order.unit_count or 0, fmt_cell)
 
-                # پول‌ها: فارسی با جداکننده
                 ws.write(row, 5, money_fa_py(order.price or 0), fmt_cell_rtl)
                 ws.write(row, 6, money_fa_py(getattr(order, 'total_price', 0) or 0), fmt_cell_rtl)
 
-                # تاریخ‌ها: جلالی (رشته)
                 due = ""
                 if getattr(order, 'due_date', None):
-                    # اگر Date است
                     try:
                         due = date2jalali(order.due_date).strftime("%Y/%m/%d")
                     except Exception:
@@ -615,7 +648,6 @@ class AccountingAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
                 ws.write(row, 8, created, fmt_cell)
                 row += 1
 
-            # ردیف جمع کل
             ws.write(row, 0, 'جمع کل', fmt_header)
             for c in range(1, 5):
                 ws.write(row, c, '', fmt_header)
@@ -633,14 +665,14 @@ class AccountingAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
             response['Content-Disposition'] = 'attachment; filename=accounting_report.xlsx'
             return response
 
-
+        # ----------------------------
         # Export PDF
+        # ----------------------------
         if 'export_pdf' in request.GET:
             from django.template.loader import render_to_string
             from weasyprint import HTML
             from django.http import HttpResponse
 
-            # از یک تمپلیت مخصوص خروجی PDF استفاده می‌کنیم
             html_string = render_to_string('core/admin/accounting_report_export.html', {
                 **context,
                 'export_mode': 'pdf'
@@ -650,7 +682,9 @@ class AccountingAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
             response['Content-Disposition'] = 'attachment; filename="accounting_report.pdf"'
             return response
 
+        # نمایش صفحه
         return TemplateResponse(request, "core/admin/accounting_report_admin.html", context)
+
 
     # ریدایرکت به صفحه گزارش مالی وقتی روی Add یا لیست کلیک شد
     def changelist_view(self, request, extra_context=None):
@@ -670,6 +704,7 @@ class AccountingAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
         )
     export_buttons.short_description = 'خروجی‌ها'
     export_buttons.allow_tags = True
+
 
 
 # -----------------------------
