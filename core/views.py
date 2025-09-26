@@ -1,30 +1,80 @@
 from django.shortcuts import render, redirect
-from django.db.models import Sum, F
+from django.db.models import Sum, F, Q
 from django.http import HttpResponse
 from django.template.loader import render_to_string
 import io
 import xlsxwriter
 from weasyprint import HTML
+from datetime import date
+
+try:
+    import jdatetime
+except ImportError:
+    jdatetime = None
 
 from .forms import OrderForm
 from .models import Order
+
+# === JALALI NORMALIZE HELPERS ===
+def _normalize_digits(s: str) -> str:
+    if not s:
+        return ""
+    # فارسی و عربی → انگلیسی
+    trans = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+    return s.translate(trans).strip()
+
+def _normalize_for_jalali_field(s: str) -> str:
+    # "۱۴۰۴/۰۶/۲۵" → "1404-06-25" (فرمت مورد انتظار django_jalali)
+    s = _normalize_digits(s)
+    return s.replace("/", "-")
+# === /JALALI NORMALIZE HELPERS ===
+
+def _jalali_to_gregorian_date(s: str):
+    """
+    '۱۴۰۴/۰۶/۱۹' یا '1404/06/19' → datetime.date (میلادی)
+    اگر خالی/نامعتبر بود: None
+    """
+    if not s:
+        return None
+    # ارقام فارسی/عربی → انگلیسی و یکدست‌سازی جداکننده
+    trans = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+    s = s.translate(trans).strip().replace("-", "/")
+    if not jdatetime:
+        return None
+    try:
+        jy, jm, jd = [int(x) for x in s.split("/")]
+        g = jdatetime.date(jy, jm, jd).togregorian()
+        return date(g.year, g.month, g.day)
+    except Exception:
+        return None
+
 
 # -----------------------------
 # صفحه اصلی / ثبت سفارش
 # -----------------------------
 def home(request):
-    order_form = OrderForm(request.POST or None, prefix='order')
-
     if request.method == "POST":
+        # یک کپی از POST بگیر تا قابل‌ویرایش باشد
+        data = request.POST.copy()
+
+        # چون فرم prefix='order' دارد، کلیدهای فیلدها این‌اند:
+        # order-order_date  و  order-due_date
+        for key in ("order-order_date", "order-due_date"):
+            if key in data:
+                # "۱۴۰۴/۰۷/۰۵" → "1404-07-05" (ارقام انگلیسی + / به -)
+                data[key] = _normalize_for_jalali_field(data.get(key, ""))
+
+        # فرم را با داده‌ی نرمال‌شده بساز
+        order_form = OrderForm(data, prefix='order')
+
         if order_form.is_valid():
             order_form.save()
             return redirect('core:home')
+    else:
+        # GET
+        order_form = OrderForm(prefix='order')
 
     orders = Order.objects.all().order_by('-created_at')
-
-    # ❌ حذف محاسبه مستقیم روی property
-    # for order in orders:
-    #     order.total_price = (order.unit_count or 0) * (order.price or 0)
 
     context = {
         'order_form': order_form,
@@ -33,39 +83,62 @@ def home(request):
     return render(request, 'core/home.html', context)
 
 
+
 # -----------------------------
 # گزارش مالی / حسابداری
 # -----------------------------
 def accounting_report(request):
-    doctor = request.GET.get('doctor', '')
-    start_date = request.GET.get('start_date', '')
-    end_date = request.GET.get('end_date', '')
+    doctor    = request.GET.get('doctor', '').strip()
+    start_raw = request.GET.get('start_date', '').strip()  # مثل "۱۴۰۴/۰۶/۱۹"
+    end_raw   = request.GET.get('end_date', '').strip()    # مثل "۱۴۰۴/۰۷/۰۵"
 
-    orders = Order.objects.all()
+    # برای due_date (jDateField): جلالی نرمال با خط‌تیره (رشته)
+    start_j = _normalize_for_jalali_field(start_raw)  # "1404-06-19" یا ""
+    end_j   = _normalize_for_jalali_field(end_raw)    # "1404-07-05" یا ""
 
+    # برای created_at__date (میلادی): تبدیل جلالی → میلادی
+    start_g = _jalali_to_gregorian_date(start_raw)    # datetime.date یا None
+    end_g   = _jalali_to_gregorian_date(end_raw)      # datetime.date یا None
+
+    # از base_manager تا چیزی پنهان نشود
+    orders = Order._base_manager.all().order_by('-id')
+
+    # فیلتر پزشک
     if doctor:
         orders = orders.filter(doctor__icontains=doctor)
-    if start_date:
-        orders = orders.filter(due_date__gte=start_date)
-    if end_date:
-        orders = orders.filter(due_date__lte=end_date)
 
-    # ❌ حذف محاسبه مستقیم روی property
-    # for order in orders:
-    #     order.total_price = (order.unit_count or 0) * (order.price or 0)
+    # فیلتر تاریخ (OR بین due_date و created_at__date)
+    if start_j and end_j and start_g and end_g:
+        orders = orders.filter(
+            Q(due_date__range=[start_j, end_j]) |
+            Q(created_at__date__range=[start_g, end_g])
+        )
+    elif start_j and start_g:
+        orders = orders.filter(
+            Q(due_date__gte=start_j) |
+            Q(created_at__date__gte=start_g)
+        )
+    elif end_j and end_g:
+        orders = orders.filter(
+            Q(due_date__lte=end_j) |
+            Q(created_at__date__lte=end_g)
+        )
+    # اگر هیچ تاریخ نداشتیم: فیلتر تاریخ نزن (همه می‌آیند)
 
-    # جمع مبلغ کل فاکتور با استفاده از property
-    total_invoice = sum(order.total_price for order in orders if order.total_price is not None)
+    # جمع مبلغ کل (از property مدل)
+    total_invoice = sum((o.total_price or 0) for o in orders)
 
-    # لیست دکترها برای dropdown
-    doctors = Order.objects.values_list('doctor', flat=True).distinct()
+    # لیست پزشک‌ها برای دراپ‌داون
+    doctors = (Order._base_manager
+               .exclude(doctor__isnull=True).exclude(doctor='')
+               .values_list('doctor', flat=True).distinct().order_by('doctor'))
 
     context = {
         'orders': orders,
         'total_invoice': total_invoice,
         'doctor': doctor,
-        'start_date': start_date,
-        'end_date': end_date,
+        'start_date': start_raw,  # همان که کاربر دیده/وارد کرده
+        'end_date': end_raw,
         'doctors': doctors,
     }
 
@@ -74,45 +147,45 @@ def accounting_report(request):
     # -----------------------------
     if 'export_excel' in request.GET:
         output = io.BytesIO()
-        workbook = xlsxwriter.Workbook(output, {'in_memory': True})
-        worksheet = workbook.add_worksheet("گزارش مالی")
+        wb = xlsxwriter.Workbook(output, {'in_memory': True})
+        ws = wb.add_worksheet("گزارش مالی")
 
-        headers = ['ID', 'بیمار', 'پزشک', 'نوع سفارش', 'تعداد واحد', 'قیمت واحد', 'قیمت کل', 'تاریخ تحویل', 'تاریخ ثبت']
-        for col_num, header in enumerate(headers):
-            worksheet.write(0, col_num, header)
+        headers = ['ID','بیمار','پزشک','نوع سفارش','تعداد واحد','قیمت واحد','قیمت کل','تاریخ تحویل','تاریخ ثبت']
+        for c, h in enumerate(headers):
+            ws.write(0, c, h)
 
-        for row_num, order in enumerate(orders, start=1):
-            worksheet.write(row_num, 0, order.id)
-            worksheet.write(row_num, 1, order.patient_name)
-            worksheet.write(row_num, 2, order.doctor)
-            worksheet.write(row_num, 3, order.get_order_type_display())
-            worksheet.write(row_num, 4, order.unit_count)
-            worksheet.write(row_num, 5, float(order.price or 0))
-            worksheet.write(row_num, 6, float(order.total_price or 0))  # ✅ استفاده از property
-            worksheet.write(row_num, 7, str(order.due_date))
-            worksheet.write(row_num, 8, order.created_at.strftime("%Y/%m/%d %H:%M"))
+        for r, o in enumerate(orders, start=1):
+            ws.write(r, 0, o.id)
+            ws.write(r, 1, o.patient_name)
+            ws.write(r, 2, o.doctor)
+            ws.write(r, 3, o.get_order_type_display())
+            ws.write(r, 4, o.unit_count)
+            ws.write(r, 5, float(o.price or 0))
+            ws.write(r, 6, float(o.total_price or 0))
+            ws.write(r, 7, str(o.due_date))
+            ws.write(r, 8, o.created_at.strftime("%Y/%m/%d"))
 
-        workbook.close()
+        wb.close()
         output.seek(0)
-        response = HttpResponse(
-            output.read(),
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-        response['Content-Disposition'] = 'attachment; filename=accounting_report.xlsx'
-        return response
+        resp = HttpResponse(output.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        resp['Content-Disposition'] = 'attachment; filename=accounting_report.xlsx'
+        return resp
 
     # -----------------------------
     # Export PDF
     # -----------------------------
     if 'export_pdf' in request.GET:
-        html_string = render_to_string('core/accounting_report_pdf.html', context)
-        html = HTML(string=html_string)
-        pdf = html.write_pdf()
-        response = HttpResponse(pdf, content_type='application/pdf')
-        response['Content-Disposition'] = 'attachment; filename="accounting_report.pdf"'
-        return response
+        html = render_to_string('core/accounting_report_pdf.html', context)
+        pdf = HTML(string=html).write_pdf()
+        resp = HttpResponse(pdf, content_type='application/pdf')
+        resp['Content-Disposition'] = 'attachment; filename=accounting_report.pdf'
+        return resp
 
     return render(request, 'core/accounting_report.html', context)
+
+
+
+
 
 
 

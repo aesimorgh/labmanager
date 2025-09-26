@@ -1,85 +1,67 @@
+{% load num_extras %}
 <!DOCTYPE html>
-<html lang="fa">
+<html lang="fa" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <title>گزارش مالی PDF</title>
-    <style>
-        body { 
-            font-family: Tahoma, sans-serif; 
-            direction: rtl; 
-            margin: 20px;
-        }
-        h1 { 
-            text-align: center; 
-            margin-bottom: 30px; 
-        }
-        table { 
-            border-collapse: collapse; 
-            width: 100%; 
-            margin-top: 20px; 
-            font-size: 12px;
-        }
-        th, td { 
-            border: 1px solid #000; 
-            padding: 5px; 
-            text-align: center; 
-        }
-        th { 
-            background-color: #0d6efd; 
-            color: #fff; 
-        }
-        tbody tr:nth-child(even) { 
-            background-color: #f1f1f1; 
-        }
-        .total { 
-            text-align: right; 
-            margin-top: 20px; 
-            font-size: 14px; 
-            font-weight: bold;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>گزارش مالی</title>
+  <style>
+    @font-face {
+      font-family: 'Vazirmatn';
+      src: url('https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn/Vazirmatn[wght].ttf');
+    }
+    body { font-family: 'Vazirmatn', Tahoma, sans-serif; direction: rtl; font-size: 12px; }
+    h2 { margin: 0 0 12px 0; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #ccc; padding: 6px; text-align: right; }
+    th { background: #eee; }
+    .meta { margin: 8px 0 12px 0; }
+    .tot { margin-top: 12px; font-weight: bold; text-align: left; }
+  </style>
 </head>
 <body>
-    <h1>گزارش مالی / حسابداری</h1>
+  <h2>گزارش مالی</h2>
 
-    <table>
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>بیمار</th>
-                <th>پزشک</th>
-                <th>نوع سفارش</th>
-                <th>تعداد واحد</th>
-                <th>قیمت واحد</th>
-                <th>قیمت کل</th>
-                <th>تاریخ تحویل</th>
-                <th>تاریخ ثبت</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for order in orders %}
-            <tr>
-                <td>{{ order.id }}</td>
-                <td>{{ order.patient_name }}</td>
-                <td>{{ order.doctor }}</td>
-                <td>{{ order.get_order_type_display }}</td>
-                <td>{{ order.unit_count }}</td>
-                <td>{{ order.price|floatformat:2 }}</td>
-                <td>{{ order.total_price|floatformat:2 }}</td>
-                <td>{{ order.due_date }}</td>
-                <td>{{ order.created_at|date:"Y/m/d H:i" }}</td>
-            </tr>
-            {% empty %}
-            <tr>
-                <td colspan="9" style="text-align:center; color: #999;">هیچ سفارشی یافت نشد.</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+  <div class="meta">
+    پزشک: {{ doctor|default:"همه"|digits_fa }} |
+    از: {{ start_date|default:"-"|dash_to_slash|digits_fa }} |
+    تا: {{ end_date|default:"-"|dash_to_slash|digits_fa }}
+  </div>
 
-    <div class="total">
-        جمع کل فاکتور: {{ total_invoice|floatformat:2 }}
-    </div>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>بیمار</th>
+        <th>پزشک</th>
+        <th>نوع</th>
+        <th>تعداد</th>
+        <th>قیمت واحد</th>
+        <th>قیمت کل</th>
+        <th>تاریخ تحویل</th>
+        <th>تاریخ ثبت</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for o in orders %}
+      <tr>
+        <td>{{ o.id|int_fa }}</td>
+        <td>{{ o.patient_name }}</td>
+        <td>{{ o.doctor }}</td>
+        <td>{{ o.get_order_type_display }}</td>
+        <td>{{ o.unit_count|int_fa }}</td>
+        <td>{{ o.price|money_fa }}</td>
+        <td>{{ o.total_price|money_fa }}</td>
+        <td>{{ o.due_date|jalali_date }}</td>     {# شمسی/اسلش/فارسی #}
+        <td>{{ o.created_at|jalali_date }}</td>   {# شمسی بدون ساعت #}
+      </tr>
+      {% empty %}
+      <tr><td colspan="9" style="text-align:center; color:#777">موردی یافت نشد.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="tot">جمع کل فاکتور: {{ total_invoice|money_fa }}</div>
 </body>
 </html>
+
 
