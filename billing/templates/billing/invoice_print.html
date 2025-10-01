@@ -1,0 +1,225 @@
+{% load static %}
+{% load jalali_tags %}
+{% load num_extras %}
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>چاپ فاکتور {{ invoice.code|default:invoice.id }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    body { background: #fff; }
+    /* ظرف کاغذ جمع‌وجور و وسط‌چین */
+    .paper { max-width: 900px; margin: 0 auto; }
+    /* ====== هدر برند لابراتوار ====== */
+    .brand-wrap{ text-align:center; margin-bottom:1rem; }
+    .brand-logo{
+      height:72px; max-width:240px; object-fit:contain; display:block; margin:0 auto .35rem;
+      filter: contrast(1.05) saturate(1.05);
+    }
+    .brand-title{ font-weight:800; font-size:1.15rem; letter-spacing:.3px; }
+    .brand-manager{ font-size:.9rem; color:#495057; margin-top:.15rem; }
+    .brand-sub{ font-size:.9rem; color:#6c757d; margin-top:.1rem; }
+
+    .invoice-header { border-bottom: 2px solid #000; margin-bottom: 1rem; padding-bottom: .5rem; }
+    .totals td { font-weight: 600; }
+    /* اعداد وسط‌چین و با فونت tabular برای ردیف مرتب */
+    .num { text-align:center; font-variant-numeric: tabular-nums; }
+    /* جدول جمع‌وجورتر */
+    .table.table-sm th, .table.table-sm td { padding:.35rem .5rem; }
+    .table { font-size: .95rem; }
+
+    /* باکس اطلاعات بانکی */
+    .bank-box{
+      border:1px dashed #adb5bd; border-radius:.5rem; padding:.75rem 1rem; margin-top:1rem;
+      background:#fcfcfd;
+    }
+    .bank-box h6{ margin:0 0 .5rem; font-weight:700; font-size:.95rem; color:#212529; }
+    .bank-box .line{ margin:.15rem 0; }
+
+    @media print {
+      .no-print { display: none !important; }
+      .card, .table { box-shadow: none !important; }
+      body { background: #fff !important; }
+      .invoice-header { border-color:#000; }
+      .bank-box{ border-color:#999; background:#fff; }
+    }
+  </style>
+</head>
+<body class="p-4">
+
+{% comment %}
+  تنظیمات هدر:
+  - اگر LAB_PROFILE در کانتکست باشد، لوگو/نام/شعار از آن خوانده می‌شود.
+  - در غیر این صورت از LAB_NAME/LAB_LOGO/LAB_SLOGAN (یا پیش‌فرض‌ها) استفاده می‌شود.
+{% endcomment %}
+
+{% with LAB_NAME|default:"Academy Dental Lab" as lab_name %}
+{% with LAB_LOGO|default:"img/lab-logo.png" as lab_logo_path %}
+{% with LAB_SLOGAN|default:"Art & Technology" as lab_slogan %}
+
+  <div class="paper">
+
+    <!-- ===== هدر برند ===== -->
+    <div class="brand-wrap">
+      {% if LAB_PROFILE and LAB_PROFILE.get_logo_url %}
+        <img class="brand-logo" src="{{ LAB_PROFILE.get_logo_url }}" alt="{{ LAB_PROFILE.name|default:lab_name }}">
+      {% elif LAB_PROFILE and LAB_PROFILE.logo_static_path %}
+        <img class="brand-logo" src="{% static LAB_PROFILE.logo_static_path %}" alt="{{ LAB_PROFILE.name|default:lab_name }}">
+      {% else %}
+        <img class="brand-logo" src="{% static lab_logo_path %}" alt="{{ lab_name }}">
+      {% endif %}
+
+      <div class="brand-title">
+        {% if LAB_PROFILE and LAB_PROFILE.name %}{{ LAB_PROFILE.name }}{% else %}{{ lab_name }}{% endif %}
+      </div>
+      <div class="brand-manager">(به مدیریت علیرضا اسفندیاری)</div>
+      <div class="brand-sub">
+        {% if LAB_PROFILE and LAB_PROFILE.slogan %}{{ LAB_PROFILE.slogan }}{% else %}{{ lab_slogan }}{% endif %}
+      </div>
+    </div>
+
+    <!-- ===== تیتر فاکتور و پرینت ===== -->
+    <div class="d-flex justify-content-between align-items-center invoice-header">
+      <h1 class="h5 mb-0">فاکتور {{ invoice.code|default:invoice.id }}</h1>
+      <button class="btn btn-secondary no-print" onclick="window.print()">پرینت</button>
+    </div>
+
+    <!-- ===== اطلاعات کلی ===== -->
+    <div class="row mb-3">
+      <div class="col-6">
+        <div><strong>دکتر:</strong> {% if invoice.doctor %}{{ invoice.doctor.name }}{% else %}—{% endif %}</div>
+        <div><strong>وضعیت:</strong>
+          {% if invoice.status == 'draft' %}پیش‌نویس{% elif invoice.status == 'issued' %}صادر شده{% else %}{{ invoice.get_status_display }}{% endif %}
+        </div>
+      </div>
+      <div class="col-6">
+        <div><strong>بازه:</strong>
+          {% if invoice.period_from and invoice.period_to %}
+            {{ invoice.period_from|to_jalali:"%Y/%m/%d" }} تا {{ invoice.period_to|to_jalali:"%Y/%m/%d" }}
+          {% else %}—{% endif %}
+        </div>
+        <div><strong>کد فاکتور:</strong> {{ invoice.code|default:"—" }}</div>
+      </div>
+    </div>
+
+    <!-- ===== جدول اقلام ===== -->
+    <table class="table table-bordered table-sm align-middle">
+      <colgroup>
+        <col style="width:56px">
+        <col>
+        <col>
+        <col style="width:95px">
+        <col style="width:130px">
+        <col style="width:140px">
+      </colgroup>
+      <thead class="table-light">
+        <tr>
+          <th>#</th>
+          <th>نام بیمار</th>
+          <th>نوع کار</th>
+          <th class="num">تعداد</th>
+          <th class="num">قیمت واحد (تومان)</th>
+          <th class="num">جمع خط (تومان)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for line in invoice.lines.all %}
+          <tr>
+            <td class="num">{{ forloop.counter|int_fa }}</td>
+            <td>{% if line.order and line.order.patient_name %}{{ line.order.patient_name }}{% else %}—{% endif %}</td>
+            <td>{% if line.order %}{{ line.order.get_order_type_display }}{% else %}—{% endif %}</td>
+            <td class="num">{{ line.unit_count|default:0|int_fa }}</td>
+            <td class="num">{{ line.unit_price|default:0|money_fa }}</td>
+            <td class="num">{{ line.line_total|default:0|money_fa }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="text-center text-muted">هیچ آیتمی ندارد.</td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr class="totals">
+          <td colspan="4"></td>
+          <td>جمع اقلام (تومان)</td>
+          <td class="num">{{ invoice.subtotal|money_fa }}</td>
+        </tr>
+        <tr class="totals">
+          <td colspan="4"></td>
+          <td>مجموع تخفیف (تومان)</td>
+          <td class="num">{{ discount_total_ctx|money_fa }}</td>
+        </tr>
+        <tr class="totals">
+          <td colspan="4"></td>
+          <td>تخفیف فاکتور (تومان)</td>
+          <td class="num">{{ invoice.discount_amount|default_if_none:0|money_fa }}</td>
+        </tr>
+        <tr class="totals">
+          <td colspan="4"></td>
+          <td>ماندهٔ قبلی (تومان)</td>
+          <td class="num">{{ invoice.previous_balance|default_if_none:0|money_fa }}</td>
+        </tr>
+        <tr class="totals">
+          <td colspan="4"></td>
+          <td>مبلغ کل (تومان)</td>
+          <td class="num fw-bold">{{ invoice.grand_total|money_fa }}</td>
+        </tr>
+        <tr class="totals">
+          <td colspan="4"></td>
+          <td>مانده بدهی (تومان)</td>
+          <td class="num text-danger fw-bold">{{ invoice.amount_due|money_fa }}</td>
+        </tr>
+        {% if paid_total_ctx %}
+        <tr class="totals">
+          <td colspan="4"></td>
+          <td>پرداخت‌های قبلی (تومان)</td>
+          <td class="num text-success">− {{ paid_total_ctx|money_fa }}</td>
+        </tr>
+        {% endif %}
+        <tr class="totals">
+          <td colspan="4"></td>
+          <td>ماندهٔ نهایی قابل پرداخت (تومان)</td>
+          <td class="num fw-bold">{{ invoice.amount_due|money_fa }}</td>
+        </tr>
+      </tfoot>
+    </table>
+
+    {% if invoice.notes %}
+      <div class="mt-3"><strong>توضیحات:</strong> {{ invoice.notes }}</div>
+    {% endif %}
+
+    <!-- ===== اطلاعات بانکی ===== -->
+    <div class="bank-box">
+      <h6>اطلاعات واریز</h6>
+      <div class="line">
+        شماره کارت:
+        {% if LAB_PROFILE and LAB_PROFILE.card_no %}{{ LAB_PROFILE.card_no }}{% else %}2828 3597 3310 6104{% endif %}
+      </div>
+      <div class="line">
+        شماره شبا:
+        {% if LAB_PROFILE and LAB_PROFILE.iban %}{{ LAB_PROFILE.iban }}{% else %}IR80 0120 0100 0000 1226 4712 50{% endif %}
+      </div>
+      <div class="line">
+        بنام
+        {% if LAB_PROFILE and LAB_PROFILE.account_name %}{{ LAB_PROFILE.account_name }}{% else %}زهرا پیشکاری{% endif %}
+      </div>
+    </div>
+
+  </div>
+
+{% endwith %}
+{% endwith %}
+{% endwith %}
+
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+

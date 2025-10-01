@@ -3,194 +3,325 @@
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <title>Lab Manager</title>
+  <meta charset="UTF-8">
+  <title>Lab Manager</title>
 
-    <!-- Bootstrap 5 -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
-    <!-- Persian Datepicker -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
+  <!-- Persian Datepicker -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
 
-    <style>
-        body { font-family: Tahoma, sans-serif; background-color: #f8f9fa; direction: rtl; }
-        h1 { margin: 30px 0; text-align: center; }
-        .tab-content { margin-top: 1rem; }
-        table thead th { background-color: #0d6efd; color: #fff; }
-        table tbody tr:nth-child(even) { background-color: #f1f3f5; }
-        .badge { font-size: 0.9em; }
-        .card-header { font-weight: bold; }
-        .alert-success { margin-top: 1rem; }
-        #order-row { flex-direction: row !important; }
-        .pwt-datepicker-container { z-index: 2050 !important; }
-        input[type="number"] { direction: ltr; text-align: left; }
-        .en-num { direction: ltr; text-align: left; }
-    </style>
+  <style>
+    body { font-family: Tahoma, sans-serif; background-color: #f8f9fa; direction: rtl; }
+    h1 { margin: 30px 0; text-align: center; }
+    .tab-content { margin-top: 1rem; }
+
+    /* هدر جدول واضح و هم‌تراز */
+    .table thead th{
+      background-color:#0d6efd !important;
+      color:#fff !important;
+      vertical-align: middle; white-space: nowrap;
+      padding-top:.6rem; padding-bottom:.6rem;
+    }
+    /* لینکِ سورت: همیشه خوانا و قابل کلیک */
+    .table thead th .sort-link{
+      display:inline-block; color:inherit !important; text-decoration:none;
+    }
+    .table thead th .sort-link:hover{ opacity:.9; text-decoration:none; }
+    .sort-arrow{ font-size:.9em; line-height:1; }
+
+    .table tbody tr:nth-child(even) { background-color: #f1f3f5; }
+    .table td, .table th { vertical-align: middle; }
+
+    .badge { font-size: 0.9em; }
+    .card-header { font-weight: bold; }
+    .alert-success { margin-top: 1rem; }
+    #order-row { flex-direction: row !important; }
+    .pwt-datepicker-container { z-index: 2050 !important; }
+    input[type="number"] { direction: ltr; text-align: left; }
+    .en-num { direction: ltr; text-align: left; }
+
+    /* فیلتر */
+    .btn-chip { border-radius: 9999px; padding-inline: 0.9rem; }
+    .input-group-sm .form-control { min-width: 95px; }
+    .filter-row .form-select, .filter-row .form-control { height: 36px; padding-top: 2px; padding-bottom: 2px; }
+  </style>
 </head>
 <body class="container">
 
 <h1>مدیریت سفارش‌ها</h1>
 
 <ul class="nav nav-tabs" id="tabMenu" role="tablist">
-    <li class="nav-item" role="presentation">
-        <button class="nav-link active" id="order-tab" data-bs-toggle="tab" data-bs-target="#order-tab-pane" type="button" role="tab" aria-controls="order-tab-pane" aria-selected="true">
-            📝 ثبت سفارش
-        </button>
-    </li>
-    <li class="nav-item" role="presentation">
-        <button class="nav-link" id="list-tab" data-bs-toggle="tab" data-bs-target="#list-tab-pane" type="button" role="tab" aria-controls="list-tab-pane" aria-selected="false">
-            📋 لیست سفارش‌ها
-        </button>
-    </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="order-tab" data-bs-toggle="tab" data-bs-target="#order-tab-pane" type="button" role="tab" aria-controls="order-tab-pane" aria-selected="true">
+      📝 ثبت سفارش
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="list-tab" data-bs-toggle="tab" data-bs-target="#list-tab-pane" type="button" role="tab" aria-controls="list-tab-pane" aria-selected="false">
+      📋 لیست سفارش‌ها
+    </button>
+  </li>
 </ul>
 
 <div class="tab-content" id="tabContent">
-    <div class="tab-pane fade show active" id="order-tab-pane" role="tabpanel" aria-labelledby="order-tab">
-        <div class="card shadow-sm mt-3">
-            <div class="card-header bg-primary text-white">ثبت سفارش جدید</div>
-            <div class="card-body">
-                {% if messages %}
-                    {% for message in messages %}
-                        <div class="alert alert-success">{{ message }}</div>
-                    {% endfor %}
-                {% endif %}
+  <div class="tab-pane fade show active" id="order-tab-pane" role="tabpanel" aria-labelledby="order-tab">
+    <div class="card shadow-sm mt-3">
+      <div class="card-header bg-primary text-white">ثبت سفارش جدید</div>
+      <div class="card-body">
+        {% if messages %}
+          {% for message in messages %}
+            <div class="alert alert-success">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
 
-                <form method="post">
-                    {% csrf_token %}
-                    <div id="order-row" class="row g-3">
-                        <!-- ستون راست -->
-                        <div class="col-12 col-md-6 order-md-1">
-                            {{ order_form.patient_name|as_crispy_field }}
-                            {{ order_form.doctor|as_crispy_field }}
-                            {{ order_form.order_type|as_crispy_field }}
-                            {{ order_form.unit_count|as_crispy_field }}
-                        </div>
-                        <!-- ستون چپ -->
-                        <div class="col-12 col-md-6 order-md-2">
-                            {{ order_form.shade|as_crispy_field }}
-                            {{ order_form.price|as_crispy_field }}
-                            {{ order_form.serial_number|as_crispy_field }}
-                            {{ order_form.status|as_crispy_field }}
-                            {{ order_form.order_date|as_crispy_field }}
-                            {{ order_form.due_date|as_crispy_field }}
-                            {{ order_form.notes|as_crispy_field }}
-                        </div>
-                    </div>
-                    <div class="mt-3">
-                        <button type="submit" class="btn btn-success">ثبت سفارش</button>
-                    </div>
-                </form>
-
+        <form method="post">
+          {% csrf_token %}
+          <div id="order-row" class="row g-3">
+            <!-- ستون راست -->
+            <div class="col-12 col-md-6 order-md-1">
+              {{ order_form.patient_name|as_crispy_field }}
+              {{ order_form.doctor|as_crispy_field }}
+              {{ order_form.order_type|as_crispy_field }}
+              {{ order_form.unit_count|as_crispy_field }}
             </div>
-        </div>
-    </div>
-
-    <div class="tab-pane fade" id="list-tab-pane" role="tabpanel" aria-labelledby="list-tab">
-        <div class="card shadow-sm mt-3">
-            <div class="card-header bg-secondary text-white">لیست سفارش‌ها</div>
-            <div class="card-body table-responsive">
-                <input class="form-control mb-3" id="searchInput" type="text" placeholder="جستجو بر اساس نام بیمار یا پزشک...">
-                <table class="table table-striped table-hover align-middle">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>بیمار</th>
-                            <th>پزشک</th>
-                            <th>نوع سفارش</th>
-                            <th>تعداد واحد</th>
-                            <th>شماره سریال</th>
-                            <th>قیمت واحد</th>
-                            <th>قیمت کل</th>
-                            <th>رنگ</th>
-                            <th>وضعیت</th>
-                            <th>تاریخ تحویل</th>
-                            <th>تاریخ ثبت</th>
-                        </tr>
-                    </thead>
-                    <tbody id="ordersTable">
-                        {% for order in orders %}
-                        <tr>
-                            <td>{{ order.id|int_fa }}</td>
-                            <td>{{ order.patient_name }}</td>
-                            <td>{{ order.doctor }}</td>
-                            <td>{{ order.get_order_type_display }}</td>
-                            <td>{{ order.unit_count|int_fa }}</td>
-                            <td>{{ order.serial_number }}</td>
-                            <td>{{ order.price|money_fa }}</td>
-                            <td>{{ order.total_price|money_fa }}</td>
-                            <td>{{ order.shade }}</td>
-                            <td>
-                                {% if order.status == 'done' %}
-                                    <span class="badge bg-success">{{ order.get_status_display }}</span>
-                                {% elif order.status == 'in_progress' %}
-                                    <span class="badge bg-warning text-dark">{{ order.get_status_display }}</span>
-                                {% else %}
-                                    <span class="badge bg-secondary">{{ order.get_status_display }}</span>
-                                {% endif %}
-                            </td>
-                            <td>{{ order.due_date|jalali_date }}</td>
-                            <td>{{ order.created_at|jalali_date }}</td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="12" class="text-center text-muted">هیچ سفارشی ثبت نشده است.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+            <!-- ستون چپ -->
+            <div class="col-12 col-md-6 order-md-2">
+              {{ order_form.shade|as_crispy_field }}
+              {{ order_form.price|as_crispy_field }}
+              {{ order_form.serial_number|as_crispy_field }}
+              {{ order_form.status|as_crispy_field }}
+              {{ order_form.order_date|as_crispy_field }}
+              {{ order_form.due_date|as_crispy_field }}
+              {{ order_form.notes|as_crispy_field }}
             </div>
-        </div>
+          </div>
+          <div class="mt-3">
+            <button type="submit" class="btn btn-success">ثبت سفارش</button>
+          </div>
+        </form>
+
+      </div>
     </div>
+  </div>
+
+  <div class="tab-pane fade" id="list-tab-pane" role="tabpanel" aria-labelledby="list-tab">
+    <div class="card shadow-sm mt-3">
+      <div class="card-header bg-secondary text-white">لیست سفارش‌ها</div>
+      <div class="card-body table-responsive">
+        <!-- فیلتر سروری + جستجو -->
+        <form method="get" class="row g-2 mb-3 filter-row" action="#list-tab-pane">
+          <input type="hidden" name="sort" value="{{ sort }}">
+          <input type="hidden" name="dir" value="{{ dir }}">
+          <div class="col-md-4">
+            <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="جستجو: بیمار / پزشک / سریال / رنگ">
+          </div>
+          <div class="col-md-3">
+            <select name="doctor" class="form-select">
+              <option value="">همه پزشک‌ها</option>
+              {% for d in doctors %}
+                <option value="{{ d }}" {% if d == doctor %}selected{% endif %}>{{ d }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <select name="status" class="form-select">
+              <option value="">همه وضعیت‌ها</option>
+              {% for val,label in status_choices %}
+                <option value="{{ val }}" {% if val == status %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2 d-flex gap-2">
+            <button class="btn btn-primary flex-grow-1">اعمال</button>
+            <a class="btn btn-outline-secondary" href="?#list-tab-pane">حذف فیلتر</a>
+          </div>
+        </form>
+
+        <!-- جستجوی جلوی‌صفحه (مثل قبل) -->
+        <input class="form-control mb-3" id="searchInput" type="text" placeholder="جستجوی سریع داخل صفحه...">
+
+        <table class="table table-striped table-hover align-middle">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>بیمار</th>
+              <th>پزشک</th>
+              <th>نوع سفارش</th>
+              <th>تعداد واحد</th>
+              <th>شماره سریال</th>
+              <th>قیمت واحد</th>
+
+              <!-- قیمت کل (قابل سورت) -->
+              <th>
+                <a class="sort-link"
+                   href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort=total_price&dir={% if sort == 'total_price' and dir == 'asc' %}desc{% else %}asc{% endif %}#list-tab-pane">
+                  قیمت کل
+                  <span class="sort-arrow">
+                    {% if sort == 'total_price' %}
+                      {% if dir == 'asc' %}▲{% else %}▼{% endif %}
+                    {% else %}↕{% endif %}
+                  </span>
+                </a>
+              </th>
+
+              <th>رنگ</th>
+              <th>وضعیت</th>
+
+              <!-- تاریخ تحویل (قابل سورت) -->
+              <th>
+                <a class="sort-link"
+                   href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort=due_date&dir={% if sort == 'due_date' and dir == 'asc' %}desc{% else %}asc{% endif %}#list-tab-pane">
+                  تاریخ تحویل
+                  <span class="sort-arrow">
+                    {% if sort == 'due_date' %}
+                      {% if dir == 'asc' %}▲{% else %}▼{% endif %}
+                    {% else %}↕{% endif %}
+                  </span>
+                </a>
+              </th>
+
+              <!-- تاریخ ثبت (قابل سورت) -->
+              <th>
+                <a class="sort-link"
+                   href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort=created_at&dir={% if sort == 'created_at' and dir == 'asc' %}desc{% else %}asc{% endif %}#list-tab-pane">
+                  تاریخ ثبت
+                  <span class="sort-arrow">
+                    {% if sort == 'created_at' %}
+                      {% if dir == 'asc' %}▲{% else %}▼{% endif %}
+                    {% else %}↕{% endif %}
+                  </span>
+                </a>
+              </th>
+
+              <th>جزئیات</th>
+              <th>ارسال</th>
+            </tr>
+          </thead>
+
+          <tbody id="ordersTable">
+            {% for order in orders %}
+              <tr>
+                <td>{{ order.id|int_fa }}</td>
+                <td>{{ order.patient_name }}</td>
+                <td>{{ order.doctor }}</td>
+                <td>{{ order.get_order_type_display }}</td>
+                <td>{{ order.unit_count|int_fa }}</td>
+                <td>{{ order.serial_number }}</td>
+                <td>{{ order.price|money_fa }}</td>
+                <td>{{ order.total_price|money_fa }}</td>
+                <td>{{ order.shade }}</td>
+                <td>
+                  {% if order.status == 'done' %}
+                    <span class="badge bg-success">{{ order.get_status_display }}</span>
+                  {% elif order.status == 'in_progress' %}
+                    <span class="badge bg-warning text-dark">{{ order.get_status_display }}</span>
+                  {% else %}
+                    <span class="badge bg-secondary">{{ order.get_status_display }}</span>
+                  {% endif %}
+                </td>
+                <td>{{ order.due_date|jalali_date }}</td>
+                <td>{{ order.created_at|jalali_date }}</td>
+                <td>
+                  <a href="{% url 'core:order_detail' order.id %}" class="btn btn-sm btn-outline-primary btn-chip">جزئیات</a>
+                </td>
+                <td>
+                  {% if not order.shipped_date %}
+                    <form method="post" action="{% url 'core:deliver_order' order.id %}?next={{ request.get_full_path|urlencode }}#list-tab-pane" class="d-inline-block">
+                      {% csrf_token %}
+                      <div class="input-group input-group-sm" style="width: 180px;">
+                        <input type="text" name="shipped_date" class="form-control jalali_date" placeholder="تاریخ ارسال">
+                        <button type="submit" class="btn btn-success">ارسال شد</button>
+                      </div>
+                    </form>
+                  {% else %}
+                    <span class="text-muted">{{ order.shipped_date|dash_to_slash|digits_fa }}</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="14" class="text-center text-muted">هیچ سفارشی ثبت نشده است.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        {% if page_obj.paginator.num_pages > 1 %}
+        <nav aria-label="pagination" class="mt-3">
+          <ul class="pagination pagination-sm justify-content-center">
+            {% if page_obj.has_previous %}
+              <li class="page-item">
+                <a class="page-link" href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort={{ sort|urlencode }}&dir={{ dir|urlencode }}&page={{ page_obj.previous_page_number }}#list-tab-pane">قبلی</a>
+              </li>
+            {% else %}
+              <li class="page-item disabled"><span class="page-link">قبلی</span></li>
+            {% endif %}
+
+            <li class="page-item disabled">
+              <span class="page-link">{{ page_obj.number|int_fa }} / {{ page_obj.paginator.num_pages|int_fa }}</span>
+            </li>
+
+            {% if page_obj.has_next %}
+              <li class="page-item">
+                <a class="page-link" href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort={{ sort|urlencode }}&dir={{ dir|urlencode }}&page={{ page_obj.next_page_number }}#list-tab-pane">بعدی</a>
+              </li>
+            {% else %}
+              <li class="page-item disabled"><span class="page-link">بعدی</span></li>
+            {% endif %}
+          </ul>
+        </nav>
+        {% endif %}
+
+      </div>
+    </div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 $(function() {
-    // فعال‌سازی تاریخ شمسی در فیلدهای متنی (اگر وجود داشته باشند)
-    const $dateInputs = $("#order-tab-pane input.jalali_date, #order-tab-pane input[name='order_date'], #order-tab-pane input[name='due_date']");
-    $dateInputs.each(function(){
-        try { if (this.type !== 'text') this.type = 'text'; } catch(e){}
-        $(this).attr('autocomplete', 'off');
-    });
-    $dateInputs.filter(function(){ return !$(this).data('pDatepicker'); })
-        .persianDatepicker({
-            format: 'YYYY/MM/DD',
-            autoClose: true,
-            calendar: { persian: { locale: 'fa' } }
-        });
-
-    // محاسبه‌ی قیمت کل (نمایش در فرم)
-    function convertToEnglishNumber(str) {
-        const persianNumbers = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
-        const englishNumbers = ['0','1','2','3','4','5','6','7','8','9'];
-        let result = str || '';
-        for (let i=0; i<persianNumbers.length; i++){
-            result = result.replace(new RegExp(persianNumbers[i], 'g'), englishNumbers[i]);
-        }
-        return result;
+  // اگر کوئری‌استرینگ داشتیم یا هَش لیست بود، تب «لیست» را فعال کن
+  try {
+    if (window.location.search || window.location.hash === '#list-tab-pane') {
+      var triggerEl = document.querySelector('#list-tab');
+      if (triggerEl) new bootstrap.Tab(triggerEl).show();
     }
-    function updateTotalPrice() {
-        let unitCount = parseInt(convertToEnglishNumber($("#id_order-unit_count").val())) || 0;
-        let unitPrice = parseFloat(convertToEnglishNumber($("#id_order-price").val() || '').replace(/,/g, '')) || 0;
-        let total = unitCount * unitPrice;
-        $("#id_order-total_price").val(total.toLocaleString('en-US'));
-    }
-    $("#id_order-unit_count, #id_order-price").on('input', updateTotalPrice);
+  } catch (e) {}
 
-    // جستجوی ساده در جدول
-    $("#searchInput").on("keyup", function() {
-        let value = $(this).val().toLowerCase();
-        $("#ordersTable tr").filter(function() {
-            $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1)
-        });
+  // فعال‌سازی تاریخ شمسی در فرم ثبت و فرم‌های «ارسال شد»
+  const $dateInputs = $("#order-tab-pane input.jalali_date, #order-tab-pane input[name='order_date'], #order-tab-pane input[name='due_date'], #list-tab-pane input.jalali_date");
+  $dateInputs.each(function(){
+    try { if (this.type !== 'text') this.type = 'text'; } catch(e){}
+    $(this).attr('autocomplete', 'off');
+  });
+  $dateInputs.filter(function(){ return !$(this).data('pDatepicker'); })
+      .persianDatepicker({ format: 'YYYY/MM/DD', autoClose: true, calendar: { persian: { locale: 'fa' } } });
+
+  // جستجوی سریع داخل صفحه
+  $("#searchInput").on("keyup", function() {
+    let value = $(this).val().toLowerCase();
+    $("#ordersTable tr").filter(function() {
+      $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1)
     });
+  });
 });
 </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
 
 
 

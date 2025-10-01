@@ -1,0 +1,241 @@
+{% extends "base_user_panel.html" %}
+{% load static %}
+{% load jalali_tags %}
+{% load num_extras %}
+
+{% block title %}حساب دکتر{% if doctor %} — {{ doctor.name }}{% endif %}{% endblock %}
+
+{% block head_extra %}
+  <!-- فقط برای این صفحه: Bootstrap و Persian Datepicker -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
+  <style>
+    body { background:#f8f9fa; }
+    .container-narrow { max-width: 1100px; margin-inline:auto; }
+    .page-head { display:flex; align-items:center; justify-content:space-between; gap:1rem; }
+    .badge-status { font-size:.8rem; }
+    .card { border-radius: .8rem; }
+    .metric { text-align:center; padding:.8rem .6rem; border-radius:.7rem; background:#fff; border:1px solid #e9ecef; }
+    .metric .k { font-weight:800; font-size:1.1rem; margin-top:.25rem; }
+    .metric .v { font-variant-numeric: tabular-nums; }
+    .table-sm th, .table-sm td { padding:.4rem .5rem; }
+    .num { text-align:center; font-variant-numeric: tabular-nums; }
+    .muted { color:#6c757d; }
+    .status-chip{
+      display:inline-flex; align-items:center; gap:.35rem;
+      padding:.18rem .55rem; border-radius:9999px; font-size:.78rem;
+      border:1px solid transparent; white-space:nowrap;
+    }
+    .status-draft{ background:#fff7e6; color:#915f00; border-color:#ffe0a3; }
+    .status-issued{ background:#eef9f1; color:#0f7a2e; border-color:#cbead6; }
+    .actions a { text-decoration:none; }
+    .pwt-datepicker-container { z-index: 2050 !important; } /* تقویم در مودال/روی صفحه دیده شود */
+  </style>
+{% endblock %}
+
+{% block subtabs %}
+  <ul class="nav nav-pills mb-3">
+    <li class="nav-item">
+      <span class="nav-link active">حساب دکتر{% if doctor %} — {{ doctor.name }}{% endif %}</span>
+    </li>
+    <!-- در آینده می‌توان ساب‌تب‌های مالی دیگر را افزود -->
+  </ul>
+{% endblock %}
+
+{% block content %}
+<div class="container-narrow">
+
+  <!-- سربرگ صفحه -->
+  <div class="page-head mb-3">
+    <div>
+      <h1 class="h5 mb-1">حساب دکتر{% if doctor %} — {{ doctor.name }}{% endif %}</h1>
+      <div class="small text-muted">مرور فاکتورها، پرداخت‌ها و ماندهٔ جاری</div>
+    </div>
+    <div>
+      <a class="btn btn-outline-secondary btn-sm" href="javascript:history.back()">بازگشت</a>
+    </div>
+  </div>
+
+  <!-- خلاصهٔ آماری -->
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+      <div class="metric">
+        <div class="k muted">تعداد فاکتورها</div>
+        <div class="v k">{{ invoice_count|default:0|int_fa }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="metric">
+        <div class="k muted">جمع مبلغ (همه)</div>
+        <div class="v k">{{ total_amount_all|default:0|money_fa }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="metric">
+        <div class="k muted">پرداخت‌ها</div>
+        <div class="v k">{{ total_paid|default:0|money_fa }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="metric">
+        <div class="k muted">ماندهٔ جاری</div>
+        <div class="v k text-danger">{{ running_balance|default:0|money_fa }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- فاکتورها -->
+  <div class="card shadow-sm mb-3">
+    <div class="card-header bg-primary text-white py-2">فاکتورها</div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-striped align-middle mb-0">
+          <thead>
+            <tr>
+              <th style="width:70px">#</th>
+              <th style="width:140px">کد/شناسه</th>
+              <th style="width:150px">وضعیت</th>
+              <th>بازه</th>
+              <th class="num" style="width:150px">جمع فاکتور</th>
+              <th class="num" style="width:150px">مانده</th>
+              <th style="width:180px">اقدامات</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if invoices %}
+              {% for inv in invoices %}
+                <tr>
+                  <td class="num">{{ forloop.counter|int_fa }}</td>
+                  <td>
+                    {% if inv.code %}<strong>{{ inv.code }}</strong>{% else %}—{% endif %}
+                    <div class="small text-muted">ID: {{ inv.id|int_fa }}</div>
+                  </td>
+                  <td>
+                    {% if inv.status == 'draft' %}
+                      <span class="status-chip status-draft">پیش‌نویس</span>
+                    {% elif inv.status == 'issued' %}
+                      <span class="status-chip status-issued">صادر شده</span>
+                    {% else %}
+                      <span class="badge bg-secondary-subtle text-secondary-emphasis">{{ inv.status }}</span>
+                    {% endif %}
+                  </td>
+                  <td class="small">
+                    {% if inv.period_from %}{{ inv.period_from|to_jalali:"%Y/%m/%d" }}{% else %}—{% endif %}
+                    <span class="mx-1">تا</span>
+                    {% if inv.period_to %}{{ inv.period_to|to_jalali:"%Y/%m/%d" }}{% else %}—{% endif %}
+                  </td>
+                  <td class="num">{{ inv.total_amount|default:0|money_fa }}</td>
+                  <td class="num">{{ inv.amount_due|default:0|money_fa }}</td>
+                  <td class="actions">
+                    <a class="btn btn-outline-primary btn-sm" href="/billing/invoices/{{ inv.id }}/">جزئیات</a>
+                    <a class="btn btn-outline-secondary btn-sm" href="/billing/invoices/{{ inv.id }}/print/" target="_blank">چاپ</a>
+                  </td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr><td colspan="7" class="text-center text-muted py-4">فاکتوری ثبت نشده است.</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- فرم ثبت پرداخت جدید -->
+  <div class="card shadow-sm mb-3">
+    <div class="card-header bg-success text-white py-2">ثبت پرداخت جدید</div>
+    <div class="card-body">
+      <form method="post" action="/billing/doctor/{{ doctor.id }}/payments/create/" class="row g-3" id="paymentForm">
+        {% csrf_token %}
+        <div class="col-md-3">
+          <label class="form-label">مبلغ</label>
+          <input type="text" name="amount" class="form-control" placeholder="مثلاً ۲,۵۰۰,۰۰۰" required>
+          <div class="form-text">ارقام فارسی/لاتین و ویرگول مجاز است.</div>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">تاریخ پرداخت</label>
+          <input type="text" name="date" id="pay_date" class="form-control" placeholder="YYYY/MM/DD">
+          <div class="form-text">در صورت خالی بودن، تاریخ امروز ثبت می‌شود.</div>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">روش پرداخت</label>
+          <input type="text" name="method" class="form-control" placeholder="کارت/واریز/نقد...">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">توضیحات</label>
+          <input type="text" name="note" class="form-control" placeholder="اختیاری">
+        </div>
+        <div class="col-12 text-end">
+          <button type="submit" class="btn btn-success">ثبت پرداخت</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- پرداخت‌ها -->
+  <div class="card shadow-sm">
+    <div class="card-header bg-secondary text-white py-2 d-flex justify-content-between align-items-center">
+      <span>پرداخت‌ها</span>
+      <small class="text-white-50">جمع پرداخت‌ها: {{ total_paid|default:0|money_fa }}</small>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-striped align-middle mb-0">
+          <thead>
+            <tr>
+              <th style="width:70px">#</th>
+              <th style="width:140px">تاریخ</th>
+              <th class="num" style="width:140px">مبلغ</th>
+              <th style="width:140px">روش</th>
+              <th>توضیحات</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if payments %}
+              {% for p in payments %}
+                <tr>
+                  <td class="num">{{ forloop.counter|int_fa }}</td>
+                  <td>{% if p.date %}{{ p.date|to_jalali:"%Y/%m/%d" }}{% else %}—{% endif %}</td>
+                  <td class="num">{{ p.amount|default:0|money_fa }}</td>
+                  <td>{% if p.method %}{{ p.method }}{% else %}—{% endif %}</td>
+                  <td class="small">{{ p.note|default:"—" }}</td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr><td colspan="5" class="text-center text-muted py-4">پرداختی ثبت نشده است.</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="text-center text-muted small mt-3">Doctor Account • v1.2</div>
+
+</div>
+{% endblock %}
+
+{% block body_extra %}
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
+  <script>
+    // تقویم شمسی برای تاریخ پرداخت
+    (function(){
+      try {
+        var $el = $("#pay_date");
+        if ($el.length && !$el.data('pDatepicker')) {
+          $el.persianDatepicker({
+            format:'YYYY/MM/DD',
+            autoClose:true,
+            calendar:{ persian:{ locale:'fa' } }
+          });
+        }
+      } catch(e){}
+    })();
+  </script>
+{% endblock %}
+
+
+
+

@@ -6,7 +6,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 from jalali_date.fields import JalaliDateField
 from jalali_date.widgets import AdminJalaliDateWidget
-
+from .models import OrderEvent
 from .models import Patient, Order, Material, Accounting
 
 
@@ -215,6 +215,18 @@ class AccountingForm(forms.ModelForm):
         model = Accounting
         fields = '__all__'
 
+
+class OrderEventForm(forms.ModelForm):
+    class Meta:
+        model = OrderEvent
+        fields = ['event_type', 'happened_at', 'direction', 'stage', 'notes', 'attachment']
+        widgets = {
+            'happened_at': forms.TextInput(attrs={
+                'class': 'form-control jalali_date',
+                'placeholder': 'تاریخ وقوع'
+            }),
+            'notes': forms.Textarea(attrs={'rows': 2, 'class': 'form-control'}),
+        }
 
 
 

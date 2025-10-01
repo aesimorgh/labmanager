@@ -1,0 +1,304 @@
+{% load static %}
+{% load num_extras %}
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>ساخت پیش‌نویس فاکتور</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Bootstrap Icons برای آیکن‌های کوچک -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+
+  <!-- jQuery باید قبل از منابع ویجت‌های فرم (جلالی) باشد -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  {{ form.media }}
+
+  <style>
+    body { font-family: Tahoma, sans-serif; background:#fff; }
+    .container-narrow { max-width: 1100px; }
+    .card { margin-top: 1rem; }
+    .table thead th { background:#0d6efd; color:#fff; }
+    .row-muted { background:#f3f4f6 !important; color:#6c757d; }
+    .row-muted td { text-decoration: line-through; }
+    .sticky-footer { position: sticky; bottom: 0; background:#fff; padding:.75rem; border-top:1px solid #e9ecef; }
+    .pwt-datepicker-container { z-index: 2050 !important; } /* جلالی داخل مودال دیده شود */
+    .text-num { text-align:end; font-variant-numeric: tabular-nums; }
+
+    /* چیپ‌های وضعیت خوشگل‌تر */
+    .status-chip{
+      display:inline-flex; align-items:center; gap:.35rem;
+      padding:.25rem .6rem; border-radius:9999px; font-size:.78rem;
+      border:1px solid transparent; white-space:nowrap;
+    }
+    .status-draft{ background:#fff7e6; color:#915f00; border-color:#ffe0a3; }
+    .status-issued{ background:#eef9f1; color:#0f7a2e; border-color:#cbead6; }
+    .status-ready{ background:#eef2ff; color:#243b8a; border-color:#cfd7ff; }
+    .btn-chip{
+      --bs-btn-padding-y: .2rem; --bs-btn-padding-x: .6rem; --bs-btn-font-size: .78rem;
+      border-radius:9999px;
+    }
+    .status-stack{ display:flex; flex-wrap:wrap; align-items:center; gap:.4rem .5rem; }
+    .id-micro{ font-size:.72rem; opacity:.7; }
+  </style>
+</head>
+<body>
+<div class="container container-narrow py-3">
+
+  <!-- فیلتر -->
+  <div class="card shadow-sm">
+    <div class="card-header bg-primary text-white py-2">فیلتر انتخاب سفارش‌ها</div>
+    <div class="card-body">
+      <form method="get" class="row g-3 align-items-end">
+        <div class="col-md-4">
+          <label class="form-label" for="{{ form.doctor.id_for_label }}">پزشک</label>
+          {{ form.doctor }}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="{{ form.period_from.id_for_label }}">از تاریخ</label>
+          {{ form.period_from }}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="{{ form.period_to.id_for_label }}">تا تاریخ</label>
+          {{ form.period_to }}
+        </div>
+        <div class="col-md-6 d-flex align-items-center">
+          <div class="form-check">
+            {{ form.include_already_invoiced }}
+            <label class="form-check-label" for="{{ form.include_already_invoiced.id_for_label }}">
+              نمایش سفارش‌های قبلاً فاکتور شده
+            </label>
+          </div>
+        </div>
+        <div class="col-md-6 text-end">
+          <button type="submit" class="btn btn-success">اعمال فیلتر</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- لیست سفارش‌ها + ساخت پیش‌نویس -->
+  <form method="post" action="" id="draftForm">
+    {% csrf_token %}
+
+    <!-- حفظ پارامترهای فیلتر برای POST -->
+    <input type="hidden" name="doctor" value="{{ form.doctor.value|default_if_none:'' }}">
+    <input type="hidden" name="period_from" value="{{ form.period_from.value|default_if_none:'' }}">
+    <input type="hidden" name="period_to" value="{{ form.period_to.value|default_if_none:'' }}">
+
+    <!-- اگر داخل iframe باز شده‌ایم، embed=1 را همراهمان بفرستیم -->
+    {% if request and request.GET.embed == '1' %}
+      <input type="hidden" name="embed" value="1">
+    {% endif %}
+
+    <div class="card shadow-sm">
+      <div class="card-header bg-secondary text-white py-2 d-flex justify-content-between align-items-center">
+        <span>انتخاب سفارش‌ها</span>
+        <div class="d-flex gap-2 align-items-center">
+          <div class="form-check m-0">
+            <input class="form-check-input" type="checkbox" id="checkAll">
+            <label class="form-check-label" for="checkAll">انتخاب همه (فقط سطرهای فعال)</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-striped table-hover align-middle mb-0">
+            <thead>
+              <tr>
+                <th style="width:44px;"></th>
+                <th style="width:90px;">ID</th>
+                <th>بیمار</th>
+                <th>پزشک</th>
+                <th>نوع</th>
+                <th class="text-end" style="width:110px;">تعداد</th>
+                <th class="text-end" style="width:140px;">قیمت واحد</th>
+                <th class="text-end" style="width:150px;">قیمت کل</th>
+                <th style="width:220px;">وضعیت فاکتور</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if orders %}
+                {% for o in orders %}
+                  {% with invline=o.invoice_line %}
+                  <tr class="{% if invline %}row-muted{% endif %}">
+                    <td class="text-center">
+                      <input
+                        class="form-check-input order-check"
+                        type="checkbox"
+                        name="order_ids"
+                        value="{{ o.id }}"
+                        data-total="{{ o.line_total_calc|default_if_none:o.total_price|default_if_none:0 }}"
+                        {% if invline %}disabled{% endif %}
+                      >
+                    </td>
+                    <td>{{ o.id|int_fa }}</td>
+                    <td>{{ o.patient_name }}</td>
+                    <td>{{ o.doctor }}</td>
+                    <td>{{ o.get_order_type_display }}</td>
+                    <td class="text-end text-num">{{ o.unit_count|int_fa }}</td>
+                    <td class="text-end text-num">{{ o.price|money_fa }}</td>
+                    <td class="text-end text-num">
+                      {% if o.line_total_calc %}{{ o.line_total_calc|money_fa }}
+                      {% else %}{{ o.total_price|money_fa }}{% endif %}
+                    </td>
+                    <td>
+                      {% if invline %}
+                        {% with inv=invline.invoice %}
+                          {% if inv.status == 'draft' %}
+                            <div class="status-stack">
+                              <span class="status-chip status-draft">
+                                <i class="bi bi-file-earmark-text"></i>
+                                در پیش‌نویس
+                                <span class="id-micro">#{{ inv.id }}</span>
+                              </span>
+                              <a class="btn btn-sm btn-outline-primary btn-chip"
+                                 href="/billing/invoices/{{ inv.id }}/{% if request.GET.embed == '1' %}?embed=1{% endif %}">
+                                <i class="bi bi-box-arrow-up-right"></i>
+                                باز کردن
+                              </a>
+                            </div>
+                          {% else %}
+                            <div class="status-stack">
+                              <span class="status-chip status-issued">
+                                <i class="bi bi-check2-circle"></i>
+                                فاکتور شده
+                                <span class="id-micro">#{{ inv.id }}</span>
+                              </span>
+                              <a class="btn btn-sm btn-outline-secondary btn-chip"
+                                 href="/billing/invoices/{{ inv.id }}/{% if request.GET.embed == '1' %}?embed=1{% endif %}">
+                                <i class="bi bi-eye"></i>
+                                مشاهده
+                              </a>
+                            </div>
+                          {% endif %}
+                        {% endwith %}
+                      {% else %}
+                        <span class="status-chip status-ready">
+                          <i class="bi bi-hourglass-split"></i>
+                          آمادهٔ فاکتور
+                        </span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                  {% endwith %}
+                {% endfor %}
+              {% else %}
+                <tr><td colspan="9" class="text-center text-muted py-4">سفارشی برای این بازه یافت نشد.</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="sticky-footer d-flex justify-content-between align-items-center">
+        <div class="small text-muted">
+          انتخاب‌شده: <span id="selCount">0</span> مورد
+          <span class="mx-2">|</span>
+          جمع انتخابی: <strong id="selSum">۰</strong>
+        </div>
+        <button type="submit" class="btn btn-primary" id="submitBtn" disabled>ساخت پیش‌نویس</button>
+      </div>
+    </div>
+  </form>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  // اگر داخل iframe هستیم، به‌صورت کلاینتی embed=1 را اضافه کن
+  (function ensureEmbed(){
+    try {
+      if (window.self !== window.top) {
+        var f = document.getElementById('draftForm');
+        if (f && !f.querySelector('input[name="embed"]')) {
+          var i = document.createElement('input');
+          i.type = 'hidden'; i.name = 'embed'; i.value = '1';
+          f.appendChild(i);
+        }
+      }
+    } catch(e) {}
+  })();
+
+  // کلاس‌های Bootstrap روی ویجت‌های فرم
+  (function styleDjangoWidgets(){
+    try {
+      var doc = document.getElementById('{{ form.doctor.auto_id }}') || document.getElementById('id_doctor');
+      if (doc) doc.classList.add('form-select');
+      var pf = document.getElementById('{{ form.period_from.auto_id }}') || document.getElementById('id_period_from');
+      if (pf) pf.classList.add('form-control');
+      var pt = document.getElementById('{{ form.period_to.auto_id }}') || document.getElementById('id_period_to');
+      if (pt) pt.classList.add('form-control');
+    } catch(e) {}
+  })();
+
+  // انتخاب همه‌ی سطرهای فعال + شمارنده + جمع انتخابی
+  (function bindCheckAll(){
+    var checkAll = document.getElementById('checkAll');
+    var boxes = document.querySelectorAll('.order-check');
+    var btn = document.getElementById('submitBtn');
+    var selCount = document.getElementById('selCount');
+    var selSum = document.getElementById('selSum');
+
+    function enabledBoxes(){
+      return Array.prototype.filter.call(boxes, function(b){ return !b.disabled; });
+    }
+    function selectedEnabled(){
+      return enabledBoxes().filter(function(b){ return b.checked; });
+    }
+    function formatFa(num){
+      try { return Number(num || 0).toLocaleString('fa-IR'); } catch(e){ return String(num || 0); }
+    }
+
+    function refreshState(){
+      var selected = selectedEnabled();
+      selCount.textContent = selected.length.toString();
+
+      // جمع مبالغ انتخابی از data-total
+      var sum = 0;
+      selected.forEach(function(b){
+        var v = parseFloat(b.dataset.total || '0');
+        if (!isNaN(v)) sum += v;
+      });
+      selSum.textContent = formatFa(sum);
+
+      btn.disabled = selected.length === 0;
+      if (checkAll) {
+        var en = enabledBoxes();
+        if (en.length > 0) {
+          checkAll.checked = (selected.length === en.length);
+          checkAll.indeterminate = (selected.length > 0 && selected.length < en.length);
+        } else {
+          checkAll.checked = false; checkAll.indeterminate = false;
+        }
+      }
+    }
+
+    if (checkAll) {
+      checkAll.addEventListener('change', function(){
+        enabledBoxes().forEach(function(b){ b.checked = checkAll.checked; });
+        refreshState();
+      });
+    }
+    boxes.forEach(function(b){ b.addEventListener('change', refreshState); });
+    refreshState();
+  })();
+</script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+

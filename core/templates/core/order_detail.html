@@ -1,0 +1,122 @@
+{% load num_extras %}
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>جزئیات سفارش {{ order.id|digits_fa }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
+  <style>
+    body{font-family:Tahoma,sans-serif;background:#f8f9fa}
+    .card{margin-top:1rem}
+    .timeline { list-style:none; padding:0; }
+    .timeline li { background:#fff; border-radius:.5rem; padding:10px 12px; margin-bottom:8px; border:1px solid #e9ecef; }
+    .timeline .meta { color:#6c757d; font-size:.9rem; }
+    .badge-status{font-size:.85rem}
+    .pwt-datepicker-container{z-index:2050!important}
+  </style>
+</head>
+<body class="container">
+
+  <h4 class="mt-3">
+    جزئیات سفارش #{{ order.id|digits_fa }} — {{ order.patient_name }} ({{ order.doctor }})
+    <span class="badge bg-secondary badge-status">{{ order.get_status_display }}</span>
+  </h4>
+
+  <div class="row g-3">
+    <!-- تایم‌لاین رویدادها -->
+    <div class="col-md-7">
+      <div class="card shadow-sm">
+        <div class="card-header bg-secondary text-white">تایم‌لاین رویدادها</div>
+        <div class="card-body">
+          {% if events %}
+            <ul class="timeline">
+              {% for ev in events %}
+                <li>
+                  <div><strong>{{ ev.get_event_type_display }}</strong></div>
+                  <div class="meta">
+                    تاریخ: {{ ev.happened_at|dash_to_slash|digits_fa }}
+                    {% if ev.direction %} | جهت: {{ ev.get_direction_display }}{% endif %}
+                    {% if ev.stage %} | مرحله: {{ ev.stage }}{% endif %}
+                  </div>
+                  {% if ev.notes %}
+                    <div class="mt-1">{{ ev.notes }}</div>
+                  {% endif %}
+                  {% if ev.attachment %}
+                    <div class="mt-1"><a href="{{ ev.attachment.url }}" target="_blank">پیوست</a></div>
+                  {% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <div class="text-muted">رویدادی ثبت نشده.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- فرم افزودن رویداد -->
+    <div class="col-md-5">
+      <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">افزودن رویداد</div>
+        <div class="card-body">
+          <form method="post" action="{% url 'core:add_order_event' order.id %}?next={{ request.get_full_path|urlencode }}" enctype="multipart/form-data" class="row g-3">
+            {% csrf_token %}
+
+            <div class="col-12">
+              <label class="form-label">نوع رویداد</label>
+              {{ event_form.event_type }}
+            </div>
+
+            <div class="col-12">
+              <label class="form-label">تاریخ وقوع</label>
+              {{ event_form.happened_at }}
+            </div>
+
+            <div class="col-12">
+              <label class="form-label">جهت</label>
+              {{ event_form.direction }}
+            </div>
+
+            <div class="col-12">
+              <label class="form-label">مرحله (اختیاری)</label>
+              {{ event_form.stage }}
+            </div>
+
+            <div class="col-12">
+              <label class="form-label">توضیحات</label>
+              {{ event_form.notes }}
+            </div>
+
+            <div class="col-12">
+              <label class="form-label">پیوست (اختیاری)</label>
+              {{ event_form.attachment }}
+            </div>
+
+            <div class="col-12">
+              <button class="btn btn-success w-100">ثبت رویداد</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
+  <script>
+    (function(){
+      const $inputs = $("input.jalali_date");
+      $inputs.each(function(){
+        try{ if(this.type!=='text') this.type='text'; }catch(e){}
+        $(this).attr('autocomplete','off');
+      });
+      $inputs.filter(function(){ return !$(this).data('pDatepicker'); })
+        .persianDatepicker({ format:'YYYY/MM/DD', autoClose:true, calendar:{ persian:{ locale:'fa' } } });
+    })();
+  </script>
+</body>
+</html>

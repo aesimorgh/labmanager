@@ -25,6 +25,7 @@ from django.template.response import TemplateResponse
 from core.utils.normalizers import normalize_jalali_date_str
 from .models import Patient, Order, Material, Accounting
 from .forms import PatientForm, OrderForm, MaterialForm, AccountingForm
+from .models import OrderEvent
 
 # کمکی: تبدیل رقم‌های فارسی/عربی به انگلیسی + فرمت «فارسی با جداکننده»
 FA_DIGITS = str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹")
@@ -705,6 +706,22 @@ class AccountingAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
     export_buttons.short_description = 'خروجی‌ها'
     export_buttons.allow_tags = True
 
+
+@admin.register(OrderEvent)
+class OrderEventAdmin(admin.ModelAdmin):
+    list_display = ('order', 'event_type', 'happened_at', 'direction', 'created_at')
+    list_filter = ('event_type', 'direction', 'happened_at')
+    search_fields = ('order__patient__name', 'order__doctor', 'notes')
+
+
+from django.contrib import admin
+from .models import Doctor
+
+@admin.register(Doctor)
+class DoctorAdmin(admin.ModelAdmin):
+    list_display = ("name", "clinic", "phone", "code", "created_at")
+    search_fields = ("name", "clinic", "phone", "code")
+    list_per_page = 25
 
 
 # -----------------------------

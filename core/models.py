@@ -1,6 +1,7 @@
 from django.db import models
 from django_jalali.db import models as jmodels
 
+
 # -----------------------------
 # Models
 # -----------------------------
@@ -62,6 +63,9 @@ class Order(models.Model):
     due_date      = jmodels.jDateField(null=True, blank=True)
     notes         = models.TextField(blank=True, null=True)
     created_at    = models.DateTimeField(auto_now_add=True)
+    # داخل مدل Order:
+    shipped_date = jmodels.jDateField(null=True, blank=True, verbose_name="تاریخ ارسال (واقعی)")
+
 
     # 🆕 فیلد محاسبه‌ای برای قیمت کل سفارش
     @property
@@ -93,8 +97,69 @@ class Accounting(models.Model):
         verbose_name_plural = "گزارش مالی"
 
 
+class OrderEvent(models.Model):
+    class EventType(models.TextChoices):
+        # عمومی
+        CREATED = 'created', 'ثبت سفارش'
+        RECEIVED_IN_LAB = 'received_in_lab', 'دریافت در لابراتوار'
+        IN_PROGRESS = 'in_progress', 'در حال انجام'
+        SENT_TO_CLINIC = 'sent_to_clinic', 'ارسال به مطب'
+        RETURNED_FROM_CLINIC = 'returned_from_clinic', 'بازگشت از مطب'
+        SENT_TO_DIGITAL = 'sent_to_digital_lab', 'ارسال به لابراتوار دیجیتال'
+        RECEIVED_FROM_DIGITAL = 'received_from_digital_lab', 'دریافت از لابراتوار دیجیتال'
+        ADJUSTMENT = 'adjustment', 'اصلاح/ری‌ورک'
+        GLAZE = 'glaze', 'گلیز نهایی'
+        FINAL_SHIPMENT = 'final_shipment', 'ارسال نهایی'
+        DELIVERED = 'delivered', 'تحویل قطعی'
+        NOTE = 'note', 'یادداشت'
+        # Crown / PFM
+        FRAME_TRY_IN = 'frame_try_in', 'امتحان فریم'
+        PORCELAIN_TRY_IN = 'porcelain_try_in', 'امتحان پرسلن'
+        # Implant
+        COMPONENTS_RECEIVED = 'components_received', 'دریافت قطعات از مطب'
+        DURAL_TRY_IN = 'dural_try_in', 'امتحان دورالی'
+        WAX_RIM_RECORD_BITE = 'wax_rim_record_bite', 'Wax rim & Record bite'
 
+    class Direction(models.TextChoices):
+        LAB_TO_CLINIC = 'lab→clinic', 'لابراتوار → مطب'
+        CLINIC_TO_LAB = 'clinic→lab', 'مطب → لابراتوار'
+        LAB_TO_DIGITAL = 'lab→digital', 'لابراتوار → دیجیتال'
+        DIGITAL_TO_LAB = 'digital→lab', 'دیجیتال → لابراتوار'
+        INTERNAL = 'internal', 'داخلی'
 
+    order = models.ForeignKey('Order', on_delete=models.CASCADE, related_name='events')
+    event_type = models.CharField(max_length=50, choices=EventType.choices)
+    happened_at = jmodels.jDateField(verbose_name='تاریخ وقوع')
+    direction = models.CharField(max_length=20, choices=Direction.choices, blank=True)
+    stage = models.CharField(max_length=100, blank=True)  # مثل crown/implant و زیرمرحله (اختیاری)
+    notes = models.TextField(blank=True)
+    attachment = models.FileField(upload_to='order_events/', blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['happened_at', 'id']
+
+    def __str__(self):
+        return f"{self.order_id} - {self.event_type} - {self.happened_at}"
+    
+
+# --- Doctor master data ---
+class Doctor(models.Model):
+    name   = models.CharField(max_length=120, unique=True, verbose_name="نام دکتر/مطب")
+    clinic = models.CharField(max_length=150, blank=True, verbose_name="کلینیک/آدرس کوتاه")
+    phone  = models.CharField(max_length=50, blank=True, verbose_name="تلفن")
+    code   = models.CharField(max_length=30, blank=True, verbose_name="کد داخلی/ارجاع")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "دکتر"
+        verbose_name_plural = "دکترها"
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
 
 
 

@@ -17,12 +17,17 @@
     .export-buttons { text-align: left; margin: 12px 0; }
     .export-buttons a { margin-left: 6px; }
     .pwt-datepicker-container { z-index: 2050 !important; }
+
+    /* مودال بزرگ برای صدور فاکتور */
+    .modal-xl { --bs-modal-width: 95vw; }
+    .invoice-iframe { width:100%; height:75vh; border:0; display:block; }
   </style>
 </head>
 <body class="container">
 
 <h1>گزارش مالی / حسابداری</h1>
 
+<!-- ===== فیلتر گزارش ===== -->
 <div class="card shadow-sm">
   <div class="card-header bg-primary text-white">فیلتر گزارش</div>
   <div class="card-body">
@@ -49,14 +54,29 @@
         <a class="btn btn-outline-secondary" href="?">حذف فیلتر</a>
       </div>
     </form>
+
+    <!-- دکمه ادغام صدور فاکتور -->
+    <div class="mt-2 d-flex gap-2">
+      <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#invoiceModal">
+        صدور فاکتور از این بازه
+      </button>
+      <!-- لینک پشتیبان (در صورت مشکل مودال) -->
+      <a class="btn btn-outline-secondary"
+         href="{{ invoice_url }}{% if '?' in invoice_url %}&{% else %}?{% endif %}embed=1"
+         target="_blank" rel="noopener">
+        باز کردن در تب جدید
+      </a>
+    </div>
   </div>
 </div>
 
+<!-- ===== دکمه‌های خروجی ===== -->
 <div class="export-buttons">
   <a class="btn btn-outline-success" href="?doctor={{ doctor }}&start_date={{ start_date }}&end_date={{ end_date }}&export_excel=1">💾 خروجی Excel</a>
   <a class="btn btn-outline-danger" href="?doctor={{ doctor }}&start_date={{ start_date }}&end_date={{ end_date }}&export_pdf=1" target="_blank">📄 خروجی PDF</a>
 </div>
 
+<!-- ===== جدول سفارش‌ها ===== -->
 <div class="card shadow-sm">
   <div class="card-header bg-secondary text-white">لیست سفارش‌ها</div>
   <div class="card-body table-responsive">
@@ -97,15 +117,14 @@
   </div>
 </div>
 
+<!-- ===== اسکریپت‌ها ===== -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-
-<!-- jQuery → persian-date → persian-datepicker -->
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
 
 <script>
-  // فعال‌سازی شمسی
+  // فعال‌سازی تقویم شمسی (مثل قبل)
   (function(){
     const $inputs = $("#id_start_date, #id_end_date, input.jalali_date");
     $inputs.each(function(){
@@ -120,8 +139,66 @@
       });
   })();
 </script>
+
+<!-- ===== مودال: iframe با src شامل embed=1 ===== -->
+<div class="modal fade" id="invoiceModal" tabindex="-1" aria-labelledby="invoiceModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="invoiceModalLabel">صدور فاکتور از این بازه</h5>
+        <button type="button" class="btn-close ms-0" data-bs-dismiss="modal" aria-label="بستن"></button>
+      </div>
+      <div class="modal-body p-0">
+        <!-- src اکنون با embed=1 ست می‌شود تا ویو create در حالت iframe-friendly باز شود -->
+        <iframe class="invoice-iframe"
+                src="{{ invoice_url }}{% if '?' in invoice_url %}&{% else %}?{% endif %}embed=1"></iframe>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== عنوان داینامیک مودال (دکتر + بازه) و رفرش پس از بستن مودال ===== -->
+<script>
+  (function(){
+    function safe(v){ return (v && String(v).trim()) ? String(v).trim() : '—'; }
+    function getDoctorText(){
+      var $sel = $('#id_doctor');
+      if (!$sel.length) return 'همه پزشک‌ها';
+      var txt = $sel.find('option:selected').text() || '';
+      return txt.trim() || 'همه پزشک‌ها';
+    }
+    function updateInvoiceModalTitle(){
+      var doc = getDoctorText();
+      var s = $('#id_start_date').val() || '';
+      var e = $('#id_end_date').val() || '';
+      s = safe(s); e = safe(e);
+      var title = 'صدور فاکتور — دکتر: ' + doc + ' — بازه: ' + s + ' تا ' + e;
+      $('#invoiceModalLabel').text(title);
+    }
+
+    var m = document.getElementById('invoiceModal');
+    if (m){
+      // تیتر داینامیک هنگام بازشدن مودال
+      m.addEventListener('show.bs.modal', updateInvoiceModalTitle);
+      // رفرش خودکار صفحه پس از بسته‌شدن مودال
+      m.addEventListener('hidden.bs.modal', function(){ try { location.reload(); } catch(e){} });
+    }
+  })();
+</script>
+
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
 
 
 

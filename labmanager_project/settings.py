@@ -28,6 +28,7 @@ INSTALLED_APPS = [
 
     # اپ‌های شما
     'core',
+    'billing.apps.BillingConfig',
 
     # پکیج‌های خارجی
     'crispy_forms',
@@ -62,6 +63,9 @@ TEMPLATES = [
                 'django.template.context_processors.request',  # مهم برای crispy
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                # --- افزوده‌شده‌ها برای نمایش لوگو و دسترسی به static/media در قالب ---
+                'django.template.context_processors.static',
+                'django.template.context_processors.media',
             ],
         },
     },
@@ -124,6 +128,11 @@ CRISPY_TEMPLATE_PACK = "bootstrap5"
 
 # ----------------- Default primary key -----------------
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# اجازهٔ نمایش صفحات داخل iframe وقتی از همان دامنه هستند
+X_FRAME_OPTIONS = 'SAMEORIGIN'
+
+
 
 
 
