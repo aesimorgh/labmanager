@@ -1,0 +1,182 @@
+{% extends "base_user_panel.html" %}
+{% load num_extras %}
+{% block title %}گزارش فروش ماهانه{% endblock %}
+
+{% block head_extra %}
+  <style>
+    :root{
+      --c-bg:#f8fafc; --c-card:#fff; --c-border:#e5e7eb;
+      --c-muted:#6b7280; --c-accent:#4f46e5; --c-accent-2:#0ea5e9;
+    }
+    .heading{font-weight:800;font-size:1.25rem;margin:.25rem 0 1rem}
+    .muted{color:var(--c-muted)}
+    .searchbar{display:flex;gap:.5rem;flex-wrap:wrap;margin:.25rem 0 1rem}
+    .searchbar input{flex:1 1 260px;border:1px solid var(--c-border);border-radius:.6rem;padding:.5rem .7rem;background:#fff}
+    .btn{border:1px solid var(--c-border);border-radius:.6rem;padding:.5rem .8rem;background:#fff;text-decoration:none;color:#111827}
+    .btn.primary{border-color:#c7d2fe;background:#eef2ff}
+    .tag{display:inline-block;border:1px dashed #d1d5db;border-radius:9999px;padding:.15rem .6rem;font-size:.8rem;color:var(--c-muted)}
+
+    .summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.9rem;margin-bottom:1rem}
+    .tile{border:1px solid var(--c-border);border-radius:1rem;background:linear-gradient(180deg,#fff, #fbfdff);padding:.9rem;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+    .tile .k{font-size:.85rem;color:var(--c-muted)}
+    .tile .v{font-weight:800;margin-top:.2rem}
+    .num{text-align:end;font-variant-numeric:tabular-nums}
+
+    .card{border:1px solid var(--c-border);border-radius:1rem;background:var(--c-card);margin:.9rem 0;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+    .card .card-body{padding:1rem}
+    .table thead th{background:#f3f4ff}
+    .hint{font-size:.84rem;color:var(--c-muted)}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
+
+{% block subtabs %}
+  <ul class="nav nav-pills mb-3">
+    <li class="nav-item"><a class="nav-link" href="{% url 'billing:financial_home' %}">مالی</a></li>
+    <li class="nav-item"><a class="nav-link" href="{% url 'billing:reports_home' %}">گزارش‌ها</a></li>
+    <li class="nav-item"><span class="nav-link active">فروش ماهانه</span></li>
+  </ul>
+{% endblock %}
+
+{% block content %}
+  <div class="heading">گزارش فروش ماهانه</div>
+
+  <form method="get" class="searchbar">
+    <input type="text" name="q" value="{{ q }}" placeholder="جستجو: کد فاکتور یا نام پزشک">
+    <button class="btn primary">جستجو</button>
+    {% if q %}
+      <a class="btn" href="{% url 'billing:report_monthly_sales' %}">حذف فیلتر</a>
+      <span class="tag">فیلتر: {{ q }}</span>
+    {% endif %}
+  </form>
+
+  <div class="summary">
+    <div class="tile">
+      <div class="k">تعداد ماه‌های دارای فروش</div>
+      <div class="v">{{ rows|length|int_fa }}</div>
+    </div>
+    <div class="tile">
+      <div class="k">تعداد فاکتورهای صادرشده</div>
+      <div class="v">{{ grand_count|default:0|int_fa }}</div>
+    </div>
+    <div class="tile">
+      <div class="k">جمع فروش (پس از تخفیف‌ها)</div>
+      <div class="v num">{{ grand_sum|default:0|money_fa }}</div>
+    </div>
+  </div>
+
+  {% if rows %}
+    <div class="hint">نمودار: محور افقی نام ماه‌ها؛ سال در راهنمای ابزار نمایش داده می‌شود.</div>
+
+    <div class="card">
+      <div class="card-body">
+        <canvas id="salesChart" height="88"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body" style="padding:0">
+        <div class="table-responsive">
+          <table class="table table-striped table-hover align-middle mb-0">
+            <thead>
+              <tr>
+                <th style="width:220px">ماه</th>
+                <th style="width:180px" class="num">تعداد فاکتور</th>
+                <th style="width:220px" class="num">جمع فروش (پس از تخفیف‌ها)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in rows %}
+                <tr>
+                  <td>
+                    {# نام ماه شمسی + سال با ارقام فارسی #}
+                    {% if r.month == 1 %}فروردین‌ماه
+                    {% elif r.month == 2 %}اردیبهشت‌ماه
+                    {% elif r.month == 3 %}خرداد‌ماه
+                    {% elif r.month == 4 %}تیر‌ماه
+                    {% elif r.month == 5 %}مرداد‌ماه
+                    {% elif r.month == 6 %}شهریور‌ماه
+                    {% elif r.month == 7 %}مهر‌ماه
+                    {% elif r.month == 8 %}آبان‌ماه
+                    {% elif r.month == 9 %}آذر‌ماه
+                    {% elif r.month == 10 %}دی‌ماه
+                    {% elif r.month == 11 %}بهمن‌ماه
+                    {% elif r.month == 12 %}اسفند‌ماه
+                    {% else %}-{% endif %}
+                    {{ r.year|int_fa }}
+                  </td>
+                  <td class="num">{{ r.count|int_fa }}</td>
+                  <td class="num"><strong>{{ r.sum|money_fa }}</strong></td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (function(){
+        try{
+          // برچسب محور: فقط نام ماه (بدون سال)
+          var labels = [
+            {% for r in rows reversed %}
+              "{% if r.month == 1 %}فروردین‌ماه{% elif r.month == 2 %}اردیبهشت‌ماه{% elif r.month == 3 %}خرداد‌ماه{% elif r.month == 4 %}تیر‌ماه{% elif r.month == 5 %}مرداد‌ماه{% elif r.month == 6 %}شهریور‌ماه{% elif r.month == 7 %}مهر‌ماه{% elif r.month == 8 %}آبان‌ماه{% elif r.month == 9 %}آذر‌ماه{% elif r.month == 10 %}دی‌ماه{% elif r.month == 11 %}بهمن‌ماه{% elif r.month == 12 %}اسفند‌ماه{% else %}-{% endif %}"
+              {% if not forloop.last %},{% endif %}
+            {% endfor %}
+          ];
+          // سال‌ها برای Tooltip موازی با labels
+          var years = [{% for r in rows reversed %}"{{ r.year|int_fa }}"{% if not forloop.last %},{% endif %}{% endfor %}];
+          var data  = [{% for r in rows reversed %}{{ r.sum|default:0 }}{% if not forloop.last %},{% endif %}{% endfor %}];
+
+          var ctx = document.getElementById('salesChart');
+          if (!ctx) return;
+
+          new Chart(ctx, {
+            type: 'bar',
+            data: {
+              labels: labels,
+              datasets: [{
+                label: 'جمع فروش ماهانه',
+                data: data,
+                borderWidth: 1
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: { y: { beginAtZero: true } },
+              plugins: {
+                legend: { display: false },
+                tooltip: {
+                  callbacks: {
+                    // عنوان Tooltip: نام ماه + سال شمسی
+                    title: function(items){
+                      var i = items && items.length ? items[0].dataIndex : 0;
+                      return labels[i] + ' ' + (years[i] || '');
+                    },
+                    // مقدار: با جداکنندهٔ هزار و "ریال"
+                    label: function(item){
+                      try {
+                        var v = item.parsed.y || 0;
+                        return v.toLocaleString('fa-IR') + ' ریال';
+                      } catch(e){ return item.parsed.y; }
+                    }
+                  }
+                }
+              }
+            }
+          });
+        }catch(e){}
+      })();
+    </script>
+  {% else %}
+    <p class="muted">هیچ رکوردی برای نمایش وجود ندارد.</p>
+  {% endif %}
+
+  <p class="muted small" style="margin-top:.75rem">
+    توضیح: مبلغ مبنا <strong>جمع پس از تخفیف‌های خطوط و تخفیف فاکتور</strong> است و
+    «ماندهٔ قبلی» در این گزارش لحاظ نمی‌شود.
+  </p>
+{% endblock %}
+

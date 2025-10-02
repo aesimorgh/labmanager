@@ -54,7 +54,10 @@ TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         # قالب‌های سراسری پروژه
-        'DIRS': [os.path.join(BASE_DIR, 'templates')],
+        'DIRS': [
+    os.path.join(BASE_DIR, 'templates'),
+    os.path.join(BASE_DIR, 'core', 'templates'),  # ← اضافه شد تا قالب‌های core قطعاً دیده شوند
+],
         # قالب‌های داخل اپ‌ها (core/templates/core/ و ...)
         'APP_DIRS': True,
         'OPTIONS': {
@@ -131,6 +134,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # اجازهٔ نمایش صفحات داخل iframe وقتی از همان دامنه هستند
 X_FRAME_OPTIONS = 'SAMEORIGIN'
+LOGIN_URL = '/admin/login/'
 
 
 

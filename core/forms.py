@@ -99,8 +99,36 @@ class OrderForm(forms.ModelForm):
             'order_date', 'due_date', 'notes'
         ]
 
+    @staticmethod
+    def _normalize_jalali_input(val: str) -> str:
+        """
+        ورودی تاریخ از Datepicker شمسی را برای JalaliDateField نرمال می‌کند:
+        - تبدیل ارقام فارسی/عربی به لاتین
+        - تبدیل '/' به '-'
+        """
+        if val is None:
+            return ''
+        s = str(val).strip()
+        if not s:
+            return ''
+        trans = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+        s = s.translate(trans).replace('/', '-')
+        return s
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        # ✅ نرمال‌سازی مقادیر خام تاریخ‌ها قبل از ولیدیشن فیلدها (بدون تغییر در UI تقویم)
+        if self.is_bound:
+            data = self.data.copy()
+            od_key = self.add_prefix('order_date')
+            dd_key = self.add_prefix('due_date')
+            if od_key in data:
+                data[od_key] = self._normalize_jalali_input(data.get(od_key, ''))
+            if dd_key in data:
+                data[dd_key] = self._normalize_jalali_input(data.get(dd_key, ''))
+            self.data = data  # مهم: قبل از clean فیلدها اعمال شود
+
         # اگر در حالت ویرایش هستیم، مقدار اولیه patient_name را از instance.patient قرار بده
         if getattr(self, 'instance', None) and getattr(self.instance, 'patient', None):
             self.fields['patient_name'].initial = self.instance.patient.name
@@ -216,6 +244,9 @@ class AccountingForm(forms.ModelForm):
         fields = '__all__'
 
 
+# -----------------------------
+# Order Event Form
+# -----------------------------
 class OrderEventForm(forms.ModelForm):
     class Meta:
         model = OrderEvent

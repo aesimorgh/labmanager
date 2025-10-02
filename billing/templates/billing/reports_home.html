@@ -1,0 +1,77 @@
+{% extends "base_user_panel.html" %}
+{% block title %}گزارش‌های مالی{% endblock %}
+
+{% block head_extra %}
+  <style>
+    .heading { font-weight:800; font-size:1.25rem; margin: .25rem 0 1rem; }
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem}
+    .cardx{border:1px solid #e5e7eb;border-radius:.75rem;background:#fff;padding:1rem}
+    .cardx h3{margin:.25rem 0 .5rem;font-size:1.05rem}
+    .muted{color:#6b7280;font-size:.9rem}
+    .actions{margin-top:.75rem;display:flex;gap:.5rem;flex-wrap:wrap}
+    .btn{display:inline-block;padding:.5rem .75rem;border:1px solid #e5e7eb;border-radius:.5rem;text-decoration:none;color:#111827}
+    .btn:hover{background:#f8fafc}
+  </style>
+{% endblock %}
+
+{% block subtabs %}
+  <ul class="nav nav-pills mb-3">
+    <li class="nav-item"><a class="nav-link" href="{% url 'billing:financial_home' %}">مالی</a></li>
+    <li class="nav-item"><span class="nav-link active">گزارش‌ها</span></li>
+  </ul>
+{% endblock %}
+
+{% block content %}
+  <div class="heading">گزارش‌های مالی</div>
+
+  <div class="grid">
+
+    <div class="cardx">
+      <h3>فروش ماهانه</h3>
+      <p class="muted">تجمیع مبلغ فاکتورها به تفکیک ماه/سال.</p>
+      <div class="actions">
+        <!-- ✅ این یکی وصل شد -->
+        <a class="btn" href="{% url 'billing:report_monthly_sales' %}">نمایش نمودار</a>
+        <!-- ✅ فقط این خط تغییر کرد: -->
+        <a class="btn" href="{% url 'billing:report_monthly_sales' %}?format=csv">خروجی CSV</a>
+      </div>
+    </div>
+
+    <div class="cardx">
+      <h3>مجموع تخفیف‌ها</h3>
+      <p class="muted">جمع تخفیف خطوط و تخفیف فاکتور در بازهٔ زمانی.</p>
+      <div class="actions">
+        <!-- ✅ تنها تغییر این ادیت: اتصال به مسیر واقعی گزارش تخفیف‌ها -->
+        <a class="btn" href="{% url 'billing:report_discounts' %}">نمایش گزارش</a>
+        <a class="btn" href="{% url 'billing:report_discounts' %}?format=csv">خروجی CSV</a>
+      </div>
+    </div>
+
+    <div class="cardx">
+      <h3>مطالبات باز</h3>
+      <p class="muted">فهرست فاکتورهای صادرشدهٔ تسویه‌نشده.</p>
+      <div class="actions">
+        <a class="btn" href="{% url 'billing:report_open_invoices' %}">نمایش لیست</a>
+        <a class="btn" href="#">خروجی CSV</a>
+      </div>
+    </div>
+
+    <div class="cardx">
+      <h3>Aging بدهی‌ها</h3>
+      <p class="muted">تفکیک بدهی‌ها بر اساس ۳۰/۶۰/۹۰+ روز.</p>
+      <div class="actions">
+        <!-- ✅ فقط همین یک خط تغییر داده شد -->
+        <a class="btn" href="{% url 'billing:report_aging' %}">نمایش گزارش</a>
+        <a class="btn" href="{% url 'billing:report_aging' %}?format=csv">خروجی CSV</a>
+      </div>
+    </div>
+
+  </div>
+{% endblock %}
+
+
+
+
+
+
+

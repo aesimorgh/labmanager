@@ -313,6 +313,87 @@ def deliver_order(request, order_id):
     next_url = request.GET.get("next") or request.META.get("HTTP_REFERER") or reverse("core:home")
     return redirect(next_url)
 
+# --- Dashboard (program) ---
+# --- Dashboard (program) ---
+from django.utils import timezone
+from django.shortcuts import render
+from django.db.models import Q
+from django.apps import apps
+
+def dashboard(request):
+    """
+    داشبورد برنامه: KPIهای سفارش‌ها + آخرین سفارش‌ها.
+    (موقتا بدون login_required تا صفحه بالا بیاد)
+    """
+    try:
+        Order = apps.get_model('core', 'Order')
+    except Exception:
+        Order = None
+
+    today_g = timezone.localdate()
+
+    kpis = {
+        'orders_today': 0,
+        'orders_month': 0,
+        'in_progress': 0,
+        'done': 0,
+        'overdue': 0,
+        'open_invoices': None,
+    }
+    latest_orders = []
+
+    if Order is not None:
+        orders = Order.objects.all()
+        field_names = {f.name for f in Order._meta.get_fields()}
+
+        date_field = 'order_date' if 'order_date' in field_names else ('created_at' if 'created_at' in field_names else None)
+        status_field = 'status' if 'status' in field_names else None
+
+        def _date_filters(start_date_g, end_date_g):
+            if not date_field:
+                return {}
+            df_type = Order._meta.get_field(date_field).get_internal_type()
+            if df_type == 'DateTimeField':
+                return {f'{date_field}__date__gte': start_date_g, f'{date_field}__date__lte': end_date_g}
+            else:
+                return {f'{date_field}__gte': start_date_g, f'{date_field}__lte': end_date_g}
+
+        if date_field:
+            kpis['orders_today'] = orders.filter(**_date_filters(today_g, today_g)).count()
+            month_start = today_g.replace(day=1)
+            kpis['orders_month'] = orders.filter(**_date_filters(month_start, today_g)).count()
+        else:
+            kpis['orders_today'] = kpis['orders_month'] = orders.count()
+
+        if status_field:
+            kpis['in_progress'] = orders.filter(**{f'{status_field}__iexact': 'in_progress'}).count()
+            kpis['done']        = orders.filter(**{f'{status_field}__iexact': 'delivered'}).count()
+
+        if 'due_date' in field_names:
+            q = Q(due_date__lt=str(today_g))
+            if status_field:
+                q &= ~Q(**{f'{status_field}__iexact': 'delivered'})
+            kpis['overdue'] = orders.filter(q).count()
+
+        order_by = f'-{date_field}' if date_field else '-id'
+        latest_orders = list(orders.order_by(order_by)[:8])
+
+    try:
+        Invoice = apps.get_model('billing', 'Invoice')
+        issued_val = getattr(Invoice.Status, 'ISSUED', 'issued')
+        kpis['open_invoices'] = Invoice.objects.filter(status=issued_val).count()
+    except Exception:
+        pass
+
+    return render(request, 'core/dashboard.html', {
+        'kpis': kpis,
+        'latest_orders': latest_orders,
+    })
+
+
+
+
+
 
 
 

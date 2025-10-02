@@ -1,0 +1,116 @@
+{% extends "base_user_panel.html" %}
+{% load jalali_tags %}
+{% load num_extras %}
+
+{% block title %}فاکتورها{% endblock %}
+
+{% block head_extra %}
+  <!-- Bootstrap فقط برای این صفحه -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .table thead th{ background:#0d6efd; color:#fff; vertical-align:middle; white-space:nowrap; }
+    .num{ text-align:end; font-variant-numeric: tabular-nums; }
+    .status-chip{
+      display:inline-flex; align-items:center; gap:.35rem;
+      padding:.18rem .55rem; border-radius:9999px; font-size:.78rem;
+      border:1px solid transparent; white-space:nowrap;
+    }
+    .status-draft{ background:#fff7e6; color:#915f00; border-color:#ffe0a3; }
+    .status-issued{ background:#eef9f1; color:#0f7a2e; border-color:#cbead6; }
+    .filter .form-control,.filter .form-select{ height:36px; padding-top:2px; padding-bottom:2px; }
+    .btn-chip{ border-radius:9999px; }
+  </style>
+{% endblock %}
+
+{% block subtabs %}
+  <ul class="nav nav-pills mb-3">
+    <li class="nav-item"><a class="nav-link" href="{% url 'billing:financial_home' %}">مالی</a></li>
+    <li class="nav-item"><span class="nav-link active">فاکتورها</span></li>
+  </ul>
+{% endblock %}
+
+{% block content %}
+  <div class="card shadow-sm">
+    <div class="card-header bg-primary text-white">لیست فاکتورها</div>
+    <div class="card-body">
+
+      <!-- فیلتر -->
+      <form method="get" class="row g-2 align-items-end filter mb-3">
+        <div class="col-md-5">
+          <label class="form-label small">جستجو</label>
+          <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="کد فاکتور یا نام پزشک">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small">وضعیت</label>
+          <select name="status" class="form-select">
+            <option value="">همه وضعیت‌ها</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4 d-flex gap-2">
+          <button class="btn btn-primary flex-grow-1">اعمال فیلتر</button>
+          <a class="btn btn-outline-secondary" href="{% url 'billing:invoice_list' %}">حذف فیلتر</a>
+          <a class="btn btn-success ms-auto" href="{% url 'billing:invoice_create_draft' %}">صدور فاکتور جدید</a>
+        </div>
+      </form>
+
+      <!-- جدول -->
+      <div class="table-responsive">
+        <table class="table table-striped table-hover align-middle">
+          <thead>
+            <tr>
+              <th style="width:90px;">#</th>
+              <th style="width:160px;">کد</th>
+              <th>پزشک</th>
+              <th style="width:150px;">وضعیت</th>
+              <th class="num" style="width:160px;">جمع پس از تخفیف</th>
+              <th class="num" style="width:160px;">ماندهٔ قابل پرداخت</th>
+              <th style="width:160px;">تاریخ صدور</th>
+              <th style="width:200px;">اقدامات</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if invoices %}
+              {% for inv in invoices %}
+                <tr>
+                  <td class="num">{{ inv.id|int_fa }}</td>
+                  <td>
+                    {% if inv.code %}<strong>{{ inv.code }}</strong>{% else %}<span class="text-muted">—</span>{% endif %}
+                  </td>
+                  <td>
+                    {% if inv.doctor %}{{ inv.doctor.name|default:inv.doctor }}{% else %}<span class="text-muted">—</span>{% endif %}
+                  </td>
+                  <td>
+                    {% if inv.status == 'draft' %}
+                      <span class="status-chip status-draft">پیش‌نویس</span>
+                    {% elif inv.status == 'issued' %}
+                      <span class="status-chip status-issued">صادر شده</span>
+                    {% else %}
+                      <span class="badge bg-secondary-subtle text-secondary-emphasis">{{ inv.status }}</span>
+                    {% endif %}
+                  </td>
+                  <td class="num">{{ inv.total_amount|default:0|money_fa }}</td>
+                  <td class="num">{{ inv.amount_due|default:0|money_fa }}</td>
+                  <td>
+                    {% if inv.issued_at %}{{ inv.issued_at|to_jalali:"%Y/%m/%d" }}{% else %}<span class="text-muted">—</span>{% endif %}
+                  </td>
+                  <td>
+                    <a class="btn btn-sm btn-outline-primary btn-chip" href="{% url 'billing:invoice_detail' inv.id %}">جزئیات</a>
+                    <a class="btn btn-sm btn-outline-secondary btn-chip" href="{% url 'billing:invoice_print' inv.id %}" target="_blank">چاپ</a>
+                  </td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="8" class="text-center text-muted py-4">هیچ فاکتوری پیدا نشد.</td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+{% endblock %}

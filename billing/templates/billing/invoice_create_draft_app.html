@@ -1,15 +1,12 @@
+{% extends "base_user_panel.html" %}
 {% load static %}
 {% load num_extras %}
-<!DOCTYPE html>
-<html lang="fa" dir="rtl">
-<head>
-  <meta charset="UTF-8">
-  <title>ساخت پیش‌نویس فاکتور</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <!-- Bootstrap CSS -->
+{% block title %}ساخت پیش‌نویس فاکتور{% endblock %}
+
+{% block head_extra %}
+  <!-- Bootstrap CSS + Icons (همان منابع قبلی صفحه) -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <!-- Bootstrap Icons برای آیکن‌های کوچک -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
 
   <!-- jQuery باید قبل از منابع ویجت‌های فرم (جلالی) باشد -->
@@ -17,7 +14,6 @@
   {{ form.media }}
 
   <style>
-    body { font-family: Tahoma, sans-serif; background:#fff; }
     .container-narrow { max-width: 1100px; }
     .card { margin-top: 1rem; }
     .table thead th { background:#0d6efd; color:#fff; }
@@ -27,7 +23,7 @@
     .pwt-datepicker-container { z-index: 2050 !important; } /* جلالی داخل مودال دیده شود */
     .text-num { text-align:end; font-variant-numeric: tabular-nums; }
 
-    /* چیپ‌های وضعیت خوشگل‌تر */
+    /* چیپ‌های وضعیت */
     .status-chip{
       display:inline-flex; align-items:center; gap:.35rem;
       padding:.25rem .6rem; border-radius:9999px; font-size:.78rem;
@@ -43,8 +39,17 @@
     .status-stack{ display:flex; flex-wrap:wrap; align-items:center; gap:.4rem .5rem; }
     .id-micro{ font-size:.72rem; opacity:.7; }
   </style>
-</head>
-<body>
+{% endblock %}
+
+{% block subtabs %}
+  <ul class="nav nav-pills mb-3">
+    <li class="nav-item"><a class="nav-link" href="{% url 'billing:financial_home' %}">مالی</a></li>
+    <li class="nav-item"><a class="nav-link" href="{% url 'billing:invoice_list' %}">فاکتورها</a></li>
+    <li class="nav-item"><span class="nav-link active">صدور فاکتور جدید</span></li>
+  </ul>
+{% endblock %}
+
+{% block content %}
 <div class="container container-narrow py-3">
 
   <!-- فیلتر -->
@@ -206,89 +211,92 @@
   </form>
 
 </div>
+{% endblock %}
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<script>
-  // اگر داخل iframe هستیم، به‌صورت کلاینتی embed=1 را اضافه کن
-  (function ensureEmbed(){
-    try {
-      if (window.self !== window.top) {
-        var f = document.getElementById('draftForm');
-        if (f && !f.querySelector('input[name="embed"]')) {
-          var i = document.createElement('input');
-          i.type = 'hidden'; i.name = 'embed'; i.value = '1';
-          f.appendChild(i);
+{% block body_extra %}
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    // اگر داخل iframe هستیم، به‌صورت کلاینتی embed=1 را اضافه کن
+    (function ensureEmbed(){
+      try {
+        if (window.self !== window.top) {
+          var f = document.getElementById('draftForm');
+          if (f && !f.querySelector('input[name="embed"]')) {
+            var i = document.createElement('input');
+            i.type = 'hidden'; i.name = 'embed'; i.value = '1';
+            f.appendChild(i);
+          }
+        }
+      } catch(e) {}
+    })();
+
+    // کلاس‌های Bootstrap روی ویجت‌های فرم
+    (function styleDjangoWidgets(){
+      try {
+        var doc = document.getElementById('{{ form.doctor.auto_id }}') || document.getElementById('id_doctor');
+        if (doc) doc.classList.add('form-select');
+        var pf = document.getElementById('{{ form.period_from.auto_id }}') || document.getElementById('id_period_from');
+        if (pf) pf.classList.add('form-control');
+        var pt = document.getElementById('{{ form.period_to.auto_id }}') || document.getElementById('id_period_to');
+        if (pt) pt.classList.add('form-control');
+      } catch(e) {}
+    })();
+
+    // انتخاب همه‌ی سطرهای فعال + شمارنده + جمع انتخابی
+    (function bindCheckAll(){
+      var checkAll = document.getElementById('checkAll');
+      var boxes = document.querySelectorAll('.order-check');
+      var btn = document.getElementById('submitBtn');
+      var selCount = document.getElementById('selCount');
+      var selSum = document.getElementById('selSum');
+
+      function enabledBoxes(){
+        return Array.prototype.filter.call(boxes, function(b){ return !b.disabled; });
+      }
+      function selectedEnabled(){
+        return enabledBoxes().filter(function(b){ return b.checked; });
+      }
+      function formatFa(num){
+        try { return Number(num || 0).toLocaleString('fa-IR'); } catch(e){ return String(num || 0); }
+      }
+
+      function refreshState(){
+        var selected = selectedEnabled();
+        selCount.textContent = selected.length.toString();
+
+        // جمع مبالغ انتخابی از data-total
+        var sum = 0;
+        selected.forEach(function(b){
+          var v = parseFloat(b.dataset.total || '0');
+          if (!isNaN(v)) sum += v;
+        });
+        selSum.textContent = formatFa(sum);
+
+        btn.disabled = selected.length === 0;
+        if (checkAll) {
+          var en = enabledBoxes();
+          if (en.length > 0) {
+            checkAll.checked = (selected.length === en.length);
+            checkAll.indeterminate = (selected.length > 0 && selected.length < en.length);
+          } else {
+            checkAll.checked = false; checkAll.indeterminate = false;
+          }
         }
       }
-    } catch(e) {}
-  })();
 
-  // کلاس‌های Bootstrap روی ویجت‌های فرم
-  (function styleDjangoWidgets(){
-    try {
-      var doc = document.getElementById('{{ form.doctor.auto_id }}') || document.getElementById('id_doctor');
-      if (doc) doc.classList.add('form-select');
-      var pf = document.getElementById('{{ form.period_from.auto_id }}') || document.getElementById('id_period_from');
-      if (pf) pf.classList.add('form-control');
-      var pt = document.getElementById('{{ form.period_to.auto_id }}') || document.getElementById('id_period_to');
-      if (pt) pt.classList.add('form-control');
-    } catch(e) {}
-  })();
-
-  // انتخاب همه‌ی سطرهای فعال + شمارنده + جمع انتخابی
-  (function bindCheckAll(){
-    var checkAll = document.getElementById('checkAll');
-    var boxes = document.querySelectorAll('.order-check');
-    var btn = document.getElementById('submitBtn');
-    var selCount = document.getElementById('selCount');
-    var selSum = document.getElementById('selSum');
-
-    function enabledBoxes(){
-      return Array.prototype.filter.call(boxes, function(b){ return !b.disabled; });
-    }
-    function selectedEnabled(){
-      return enabledBoxes().filter(function(b){ return b.checked; });
-    }
-    function formatFa(num){
-      try { return Number(num || 0).toLocaleString('fa-IR'); } catch(e){ return String(num || 0); }
-    }
-
-    function refreshState(){
-      var selected = selectedEnabled();
-      selCount.textContent = selected.length.toString();
-
-      // جمع مبالغ انتخابی از data-total
-      var sum = 0;
-      selected.forEach(function(b){
-        var v = parseFloat(b.dataset.total || '0');
-        if (!isNaN(v)) sum += v;
-      });
-      selSum.textContent = formatFa(sum);
-
-      btn.disabled = selected.length === 0;
       if (checkAll) {
-        var en = enabledBoxes();
-        if (en.length > 0) {
-          checkAll.checked = (selected.length === en.length);
-          checkAll.indeterminate = (selected.length > 0 && selected.length < en.length);
-        } else {
-          checkAll.checked = false; checkAll.indeterminate = false;
-        }
+        checkAll.addEventListener('change', function(){
+          enabledBoxes().forEach(function(b){ b.checked = checkAll.checked; });
+          refreshState();
+        });
       }
-    }
+      boxes.forEach(function(b){ b.addEventListener('change', refreshState); });
+      refreshState();
+    })();
+  </script>
+{% endblock %}
 
-    if (checkAll) {
-      checkAll.addEventListener('change', function(){
-        enabledBoxes().forEach(function(b){ b.checked = checkAll.checked; });
-        refreshState();
-      });
-    }
-    boxes.forEach(function(b){ b.addEventListener('change', refreshState); });
-    refreshState();
-  })();
-</script>
-</body>
-</html>
 
 
 

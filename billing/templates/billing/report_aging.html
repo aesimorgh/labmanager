@@ -1,0 +1,584 @@
+{% extends "base_user_panel.html" %}
+{% load num_extras %}
+
+{% block title %}Aging بدهی‌ها{% endblock %}
+
+{% block head_extra %}
+  <style>
+    .heading{font-weight:800;font-size:1.25rem;margin:.25rem 0 1rem}
+    .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.75rem;margin-bottom:1rem}
+    .kpi{border:1px solid #e5e7eb;background:#fff;border-radius:.75rem;padding:.9rem}
+    .kpi .t{font-size:.9rem;color:#6b7280;margin-bottom:.25rem}
+    .kpi .v{font-weight:800;font-variant-numeric:tabular-nums}
+    .card{border:1px solid #e5e7eb;background:#fff;border-radius:.75rem}
+    .card-h{padding:.6rem .9rem;border-bottom:1px solid #e5e7eb;font-weight:700}
+    .card-b{padding:.9rem}
+    .table{width:100%;border-collapse:collapse}
+    .table th,.table td{padding:.5rem .6rem;border-top:1px solid #eef2f7;text-align:start}
+    .table thead th{background:#f8fafc;white-space:nowrap}
+    .num{text-align:end;font-variant-numeric:tabular-nums}
+    .muted{color:#6b7280}
+    .actions{display:flex;gap:.5rem;flex-wrap:wrap}
+    .btn{display:inline-block;padding:.45rem .7rem;border:1px solid #e5e7eb;border-radius:.5rem;text-decoration:none;color:#111827}
+    .btn:hover{background:#f8fafc}
+    .legend{display:flex;gap:.5rem;flex-wrap:wrap;margin:.5rem 0}
+    .pill{display:inline-block;font-size:.8rem;border:1px solid #e5e7eb;border-radius:9999px;padding:.2rem .6rem}
+    .pill-30{background:#eff6ff}
+    .pill-60{background:#fef9c3}
+    .pill-90{background:#ffe4e6}
+    .pill-90p{background:#fee2e2}
+
+    /* دکمه‌های سورت «جمع پزشک» */
+    .sort-wrap{display:flex;align-items:center;gap:.35rem;justify-content:space-between}
+    .btn-sort{padding:.2rem .45rem;font-size:.8rem;border-color:#d1d5db}
+    .btn-sort:hover{background:#f3f4f6}
+
+    /* ردیف جزئیات */
+    .details-row td{background:#fcfcfc}
+    .details-box{border:1px dashed #e5e7eb;border-radius:.5rem;padding:.6rem .8rem}
+    .details-table th,.details-table td{border-top:1px solid #eef2f7;padding:.45rem .5rem}
+
+    /* چاپ تمیز */
+    @media print{
+      .nav, .actions, .btn, .btn-sort, .sort-wrap, .legend, .filter-row { display:none !important; }
+      .card, .card-h, .card-b { border:0 !important; }
+      body{ background:#fff !important; }
+      .heading{ margin-top:0; }
+      .details-row{ display:table-row !important; }
+      .table th, .table td { padding:.4rem .5rem; font-size:12px; }
+    }
+
+    /* تاریخ شکیل‌تر و جدا از KPIها */
+    .asof-area{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem 1rem;margin:.2rem 0 1rem}
+    .asof{display:inline-flex;align-items:center;gap:.5rem;background:#f8fafc;border:1px solid #e5e7eb;border-radius:.75rem;padding:.35rem .6rem;font-weight:700}
+    .asof .ic{font-size:1.05rem;line-height:1}
+    .asof .date{font-size:1.05rem}
+    .date-range{margin:0;color:#6b7280}
+
+    /* 🔎 فیلتر بازه تاریخی + جستجو */
+    .filter-row{display:flex;flex-wrap:wrap;gap:.5rem 1rem;margin:.5rem 0 1rem;align-items:center}
+    .filter-row input[type="text"],
+    .filter-row input[type="date"]{border:1px solid #e5e7eb;border-radius:.5rem;padding:.45rem .6rem}
+    .filter-row input[type="text"]{min-width:260px}
+    .chip{display:inline-block;padding:.25rem .55rem;border:1px solid #e5e7eb;border-radius:9999px;background:#f9fafb;cursor:pointer}
+    .chip:hover{background:#f3f4f6}
+  </style>
+{% endblock %}
+
+{% block subtabs %}
+  <ul class="nav nav-pills mb-3">
+    <li class="nav-item"><a class="nav-link" href="{% url 'billing:financial_home' %}">مالی</a></li>
+    <li class="nav-item"><a class="nav-link" href="{% url 'billing:reports_home' %}">گزارش‌ها</a></li>
+    <li class="nav-item"><span class="nav-link active">Aging بدهی‌ها</span></li>
+  </ul>
+{% endblock %}
+
+{% block content %}
+  <div class="heading">Aging بدهی‌ها</div>
+
+  {% now "Y-m-d" as today_str %}
+  <!-- تاریخ بالا -->
+  <div class="asof-area">
+    <div class="asof" id="asOf">تا تاریخ {{ today_str|digits_fa }}</div>
+    <div class="date-range" id="rangeLine"></div>
+  </div>
+
+  <!-- ✅ فیلتر بازه زمانی + جستجو -->
+  <form method="get" class="filter-row" id="filterForm">
+    <input type="text" name="q" value="{{ q }}" placeholder="جستجو: نام پزشک یا کد فاکتور">
+
+    <!-- از–تا (میلادی)؛ UI ساده، نمایش نهایی با شمسی -->
+    <label>از</label>
+    <input type="date" name="from" value="{{ request.GET.from }}">
+    <label>تا</label>
+    <input type="date" name="to" value="{{ request.GET.to }}">
+
+    <button class="btn" type="submit">اعمال</button>
+    {% if q or request.GET.from or request.GET.to %}
+      <a class="btn" href="?">حذف فیلتر</a>
+    {% endif %}
+
+    <!-- شورت‌کات بازه‌های رایج (سمت کلاینت مقدار می‌گذارد و فرم را ارسال می‌کند) -->
+    <span class="chip" data-quick="30">۳۰ روز اخیر</span>
+    <span class="chip" data-quick="60">۶۰ روز اخیر</span>
+    <span class="chip" data-quick="90">۹۰ روز اخیر</span>
+  </form>
+
+  <!-- KPI های کلی (IDها برای آپدیت کلاینت‌ساید) -->
+  <div class="kpis">
+    <div class="kpi">
+      <div class="t">جمع مطالبات باز</div>
+      <div class="v" id="k_total">{{ totals.total|default:0|money_fa }}</div>
+    </div>
+    <div class="kpi">
+      <div class="t">۰–۳۰ روز</div>
+      <div class="v" id="k_b0_30">{{ totals.b0_30|default:0|money_fa }}</div>
+    </div>
+    <div class="kpi">
+      <div class="t">۳۱–۶۰ روز</div>
+      <div class="v" id="k_b31_60">{{ totals.b31_60|default:0|money_fa }}</div>
+    </div>
+    <div class="kpi">
+      <div class="t">۶۱–۹۰ روز</div>
+      <div class="v" id="k_b61_90">{{ totals.b61_90|default:0|money_fa }}</div>
+    </div>
+    <div class="kpi">
+      <div class="t">۹۰+ روز</div>
+      <div class="v" id="k_b90p">{{ totals.b90p|default:0|money_fa }}</div>
+    </div>
+  </div>
+
+  <!-- نمودار -->
+  <div class="card" style="margin-bottom:1rem">
+    <div class="card-h">توزیع کلی بدهی‌ها بر اساس سن بدهی</div>
+    <div class="card-b">
+      {% if rows %}
+        <div class="legend">
+          <span class="pill pill-30">۰–۳۰</span>
+          <span class="pill pill-60">۳۱–۶۰</span>
+          <span class="pill pill-90">۶۱–۹۰</span>
+          <span class="pill pill-90p">۹۰+</span>
+        </div>
+        <canvas id="agingChart" height="110"></canvas>
+        <div class="muted" style="margin-top:.5rem">
+          مبنا: فاکتورهای «صادر شده» که هنوز کامل تسویه نشده‌اند؛ سن بدهی از تاریخ صدور محاسبه شده است.
+        </div>
+      {% else %}
+        <div class="muted">داده‌ای برای نمایش نیست.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- جدول دکترها -->
+  <div class="card">
+    <div class="card-h">تفکیک بدهیِ باز بر اساس پزشک</div>
+    <div class="card-b" style="padding-top:.3rem">
+      {% if rows %}
+        <div class="table-wrap" style="overflow:auto">
+          <table class="table">
+            <thead>
+              <tr>
+                <th style="width:70px">#</th>
+                <th>پزشک</th>
+                <th class="num" style="width:140px">۰–۳۰</th>
+                <th class="num" style="width:140px">۳۱–۶۰</th>
+                <th class="num" style="width:140px">۶۱–۹۰</th>
+                <th class="num" style="width:140px">۹۰+</th>
+                <th class="num" style="width:200px">
+                  <div class="sort-wrap">
+                    <span>جمع پزشک</span>
+                    <span>
+                      <button type="button" class="btn btn-sort" data-sort="desc" title="مرتب‌سازی نزولی">↓</button>
+                      <button type="button" class="btn btn-sort" data-sort="asc"  title="مرتب‌سازی صعودی">↑</button>
+                    </span>
+                  </div>
+                </th>
+                <th style="width:140px">اقدام</th>
+              </tr>
+            </thead>
+
+            <tbody id="agingTbody">
+              {% for r in rows %}
+                <tr
+                  data-b0_30="{{ r.b0_30|default:0 }}"
+                  data-b31_60="{{ r.b31_60|default:0 }}"
+                  data-b61_90="{{ r.b61_90|default:0 }}"
+                  data-b90p="{{ r.b90p|default:0 }}"
+                  data-total="{{ r.total|default:0 }}"
+                >
+                  <td>{{ forloop.counter|int_fa }}</td>
+                  <td>
+                    <button type="button" class="btn btn-sm" data-toggle="row" data-target="det{{ forloop.counter }}" aria-expanded="false">جزئیات</button>
+                    {{ r.doctor_name }}
+                  </td>
+                  <td class="num">{{ r.b0_30|default:0|money_fa }}</td>
+                  <td class="num">{{ r.b31_60|default:0|money_fa }}</td>
+                  <td class="num">{{ r.b61_90|default:0|money_fa }}</td>
+                  <td class="num">{{ r.b90p|default:0|money_fa }}</td>
+                  <td class="num"><strong>{{ r.total|default:0|money_fa }}</strong></td>
+                  <td>
+                    {% if r.doctor_id %}
+                      <a class="btn" href="{% url 'billing:doctor_account' r.doctor_id %}">حساب دکتر</a>
+                    {% else %}
+                      <span class="muted">—</span>
+                    {% endif %}
+                  </td>
+                </tr>
+
+                {# ردیف جزئیات (مخفی) #}
+                <tr id="det{{ forloop.counter }}" class="details-row" style="display:none">
+                  <td></td>
+                  <td colspan="7" class="details-box">
+                    {% if r.invoices %}
+                      <table class="table details-table" style="width:100%;border-collapse:collapse;margin-top:.25rem">
+                        <thead>
+                          <tr>
+                            <th>فاکتور</th>
+                            <th>تاریخ صدور</th>
+                            <th>سن (روز)</th>
+                            <th>باکت</th>
+                            <th class="num">بدهی باز</th>
+                            <th>مشاهده</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {% for inv in r.invoices %}
+                            <tr data-issued="{{ inv.issued_at|date:'Y-m-d' }}"
+                                data-bucket="{{ inv.bucket }}"
+                                data-amount="{{ inv.amount }}">
+                              <td>{{ inv.code }}</td>
+                              <td>{{ inv.issued_at|date:"Y-m-d"|digits_fa }}</td>
+                              <td class="num">{{ inv.days|int_fa }}</td>
+                              <td>
+                                {% if inv.bucket == 'b0_30' %}<span class="pill pill-30">۰–۳۰</span>
+                                {% elif inv.bucket == 'b31_60' %}<span class="pill pill-60">۳۱–۶۰</span>
+                                {% elif inv.bucket == 'b61_90' %}<span class="pill pill-90">۶۱–۹۰</span>
+                                {% else %}<span class="pill pill-90p">۹۰+</span>{% endif %}
+                              </td>
+                              <td class="num">{{ inv.amount|money_fa }}</td>
+                              <td><a class="btn" href="{% url 'billing:invoice_detail' inv.id %}?embed=1">فاکتور</a></td>
+                            </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    {% else %}
+                      <div class="muted">فاکتوری برای نمایش نیست.</div>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+
+            <tfoot>
+              <tr>
+                <th colspan="2" class="num">جمع کل</th>
+                <th class="num" id="f_b0_30">{{ totals.b0_30|default:0|money_fa }}</th>
+                <th class="num" id="f_b31_60">{{ totals.b31_60|default:0|money_fa }}</th>
+                <th class="num" id="f_b61_90">{{ totals.b61_90|default:0|money_fa }}</th>
+                <th class="num" id="f_b90p">{{ totals.b90p|default:0|money_fa }}</th>
+                <th class="num"><strong id="f_total">{{ totals.total|default:0|money_fa }}</strong></th>
+                <th></th>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      {% else %}
+        <div class="muted">هیچ بدهیِ بازی یافت نشد.</div>
+      {% endif %}
+
+      <div class="muted" style="margin-top:.6rem">
+        <em>تعریف باکت‌ها: ۰–۳۰، ۳۱–۶۰، ۶۱–۹۰، و ۹۰+ روز از تاریخ صدور فاکتور. تنها فاکتورهای «صادرشده» و «تسویه‌نشده» لحاظ می‌شوند.</em>
+      </div>
+
+      <div class="actions no-print" style="margin-top:.75rem">
+        <a class="btn" href="{% url 'billing:reports_home' %}">بازگشت به گزارش‌ها</a>
+        <button type="button" id="printBtn" class="btn">چاپ</button>
+        <!-- CSV با حفظ q/from/to (اگر ویو پشتیبانی کند، سروری خواهد بود) -->
+        <a class="btn" id="csvBtn" href="?{% if q %}q={{ q|urlencode }}&{% endif %}{% if request.GET.from %}from={{ request.GET.from }}&{% endif %}{% if request.GET.to %}to={{ request.GET.to }}&{% endif %}format=csv">خروجی CSV</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block body_extra %}
+  {% if rows %}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>
+      (function(){
+        // Utilities
+        function toFa(n){ try{ return Number(n||0).toLocaleString('fa-IR'); }catch(e){ return n; } }
+        function parseISO(d){ return d ? new Date(d+'T00:00:00') : null; }
+        function inRange(d, fromD, toD){
+          if (!d) return true;
+          if (fromD && d < fromD) return false;
+          if (toD && d > toD) return false;
+          return true;
+        }
+        function getQS(name){
+          var m = new RegExp('[?&]'+name+'=([^&]*)').exec(location.search);
+          return m ? decodeURIComponent(m[1].replace(/\+/g,' ')) : '';
+        }
+
+        // Chart init
+        var chartEl = document.getElementById('agingChart');
+        var _chart = null;
+        function initChart(s0,s1,s2,s3){
+          if (!chartEl) return;
+          if (_chart){ _chart.destroy(); _chart=null; }
+          _chart = new Chart(chartEl, {
+            type: 'bar',
+            data: { labels: ['۰–۳۰','۳۱–۶۰','۶۱–۹۰','۹۰+'],
+              datasets: [{ label: 'مبلغ', data: [s0,s1,s2,s3] }] },
+            options: {
+              responsive:true,
+              plugins:{ legend:{display:false},
+                tooltip:{ callbacks:{ label:function(c){ return ' '+toFa(c.parsed.y||0); } } },
+                title:{display:true,text:'تقسیم‌بندی کلی بدهی‌های باز'} },
+              scales:{ y:{ ticks:{ callback: function(v){ return toFa(v); } } } }
+            }
+          });
+        }
+
+        // Initial sums (server totals approximation for first paint)
+        (function firstChartPaint(){
+          var trs = document.querySelectorAll('#agingTbody > tr:not(.details-row)');
+          var s0=0,s1=0,s2=0,s3=0;
+          trs.forEach(function(tr){
+            s0 += Number(tr.dataset.b0_30||0);
+            s1 += Number(tr.dataset.b31_60||0);
+            s2 += Number(tr.dataset.b61_90||0);
+            s3 += Number(tr.dataset.b90p||0);
+          });
+          initChart(s0,s1,s2,s3);
+        })();
+
+        // Sorting by total
+        function renumber(){
+          var rows = document.querySelectorAll('#agingTbody > tr:not(.details-row)');
+          var idx = 1;
+          rows.forEach(function(tr){
+            if (tr.style.display !== 'none'){
+              var c = tr.querySelector('td:first-child');
+              if (c) c.textContent = toFa(idx++);
+            }
+          });
+        }
+        function sortByTotal(order){
+          var tbody = document.getElementById('agingTbody');
+          if (!tbody) return;
+          var baseRows = Array.prototype.slice.call(tbody.querySelectorAll('tr'))
+            .filter(function(r){ return !r.classList.contains('details-row'); });
+          baseRows.sort(function(a,b){
+            var av = Number(a.dataset.total || 0);
+            var bv = Number(b.dataset.total || 0);
+            return (order === 'asc') ? (av - bv) : (bv - av);
+          });
+          baseRows.forEach(function(r){
+            var det = r.nextElementSibling;
+            tbody.appendChild(r);
+            if (det && det.classList.contains('details-row')) tbody.appendChild(det);
+          });
+          renumber();
+        }
+        document.querySelectorAll('.btn-sort').forEach(function(btn){
+          btn.addEventListener('click', function(){
+            var order = this.getAttribute('data-sort') || 'desc';
+            sortByTotal(order);
+          });
+        });
+
+        // Toggle details
+        document.addEventListener('click', function (e) {
+          var btn = e.target.closest('[data-toggle="row"]');
+          if (!btn) return;
+          var id = btn.getAttribute('data-target');
+          var tr = document.getElementById(id);
+          if (!tr) return;
+          var isHidden = window.getComputedStyle(tr).display === 'none';
+          tr.style.display = isHidden ? 'table-row' : 'none';
+          btn.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+        });
+
+        // Print
+        var pb = document.getElementById('printBtn');
+        if (pb){ pb.addEventListener('click', function(){ window.print(); }); }
+
+        // Quick chips (30/60/90 last days)
+        document.querySelectorAll('.chip[data-quick]').forEach(function(chip){
+          chip.addEventListener('click', function(){
+            var days = Number(this.getAttribute('data-quick')||0);
+            var f = document.querySelector('input[name="from"]');
+            var t = document.querySelector('input[name="to"]');
+            var now = new Date();
+            var from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days-1));
+            function toISO(d){ return d.toISOString().slice(0,10); }
+            if (f) f.value = toISO(from);
+            if (t) t.value = toISO(now);
+            document.getElementById('filterForm').submit();
+          });
+        });
+
+        // Persian date header + range line
+        (function headerDates(){
+          var asOf = document.getElementById('asOf');
+          if (asOf && window.Intl){
+            var now = new Date();
+            var asOfFmt = new Intl.DateTimeFormat('fa-IR-u-ca-persian', { year:'numeric', month:'long', day:'2-digit' });
+            asOf.innerHTML = '<span class="ic">📅</span><span class="date">تا تاریخ: ' + asOfFmt.format(now) + '</span>';
+          }
+          // اگر کاربر بازه انتخاب کرد، همین را نمایش بده
+          var fISO = getQS('from'), tISO = getQS('to');
+          var rangeEl = document.getElementById('rangeLine');
+          if ((fISO || tISO) && window.Intl){
+            var fmt = new Intl.DateTimeFormat('fa-IR-u-ca-persian', { year:'numeric', month:'long', day:'2-digit' });
+            var left = fISO ? fmt.format(parseISO(fISO)) : '—';
+            var right= tISO ? fmt.format(parseISO(tISO)) : '—';
+            rangeEl.textContent = 'بازهٔ انتخابی: ' + left + ' تا ' + right;
+          }else{
+            // در غیر این صورت، دامنهٔ فاکتورهای صفحه (مین/مکس) را نشان بده
+            var invRows = document.querySelectorAll('.details-row tbody tr[data-issued]');
+            var minD=null, maxD=null;
+            invRows.forEach(function(r){
+              var iso = r.getAttribute('data-issued');
+              if (!iso) return;
+              var d = parseISO(iso); if (!d) return;
+              if (!minD || d < minD) minD = d;
+              if (!maxD || d > maxD) maxD = d;
+            });
+            if (minD && maxD && window.Intl){
+              var mFmt = new Intl.DateTimeFormat('fa-IR-u-ca-persian', { year:'numeric', month:'long' });
+              rangeEl.textContent = 'دامنهٔ فاکتورهای صادره: ' + mFmt.format(minD) + ' تا ' + mFmt.format(maxD);
+            }
+          }
+        })();
+
+        // ✅ فیلتر بازهٔ تاریخی (کلاینت‌ساید: KPI/جدول/پاورقی/نمودار به‌روز می‌شوند)
+        function applyRangeFilter(){
+          var fISO = getQS('from'), tISO = getQS('to');
+          var fDate = parseISO(fISO), tDate = parseISO(tISO);
+
+          var tbody = document.getElementById('agingTbody');
+          if (!tbody) return;
+
+          var totals = { b0_30:0, b31_60:0, b61_90:0, b90p:0, total:0 };
+
+          // پیمایش هر پزشک
+          var baseRows = Array.prototype.slice.call(tbody.querySelectorAll('tr'))
+            .filter(function(r){ return !r.classList.contains('details-row'); });
+
+          baseRows.forEach(function(row){
+            var det = row.nextElementSibling;
+            // جمع‌های فیلتر شده برای این پزشک
+            var g = { b0_30:0, b31_60:0, b61_90:0, b90p:0, total:0 };
+
+            if (det && det.classList.contains('details-row')){
+              var invs = det.querySelectorAll('tbody tr[data-issued]');
+              invs.forEach(function(ir){
+                var d = parseISO(ir.getAttribute('data-issued'));
+                if (!inRange(d, fDate, tDate)) return;
+                var bucket = ir.getAttribute('data-bucket');
+                var amount = Number(ir.getAttribute('data-amount')||0);
+                if (bucket === 'b0_30') g.b0_30 += amount;
+                else if (bucket === 'b31_60') g.b31_60 += amount;
+                else if (bucket === 'b61_90') g.b61_90 += amount;
+                else g.b90p += amount;
+              });
+            }
+
+            g.total = g.b0_30 + g.b31_60 + g.b61_90 + g.b90p;
+
+            // نمایش/عدم نمایش ردیف پزشک
+            var show = (g.total > 0) || (!fDate && !tDate); // اگر هیچ بازه‌ای انتخاب نشده، همه نمایش
+            row.style.display = show ? '' : 'none';
+            if (det && det.classList.contains('details-row')) det.style.display = (det.style.display === 'table-row' && show) ? 'table-row' : det.style.display; // وضعیت قبلی حفظ شود
+
+            // آپدیت سلول‌ها و data-*
+            if (show){
+              row.dataset.b0_30 = g.b0_30;
+              row.dataset.b31_60 = g.b31_60;
+              row.dataset.b61_90 = g.b61_90;
+              row.dataset.b90p   = g.b90p;
+              row.dataset.total  = g.total;
+
+              var nums = row.querySelectorAll('td.num');
+              if (nums.length >= 5){
+                nums[0].textContent = toFa(g.b0_30);
+                nums[1].textContent = toFa(g.b31_60);
+                nums[2].textContent = toFa(g.b61_90);
+                nums[3].textContent = toFa(g.b90p);
+                nums[4].innerHTML   = '<strong>'+toFa(g.total)+'</strong>';
+              }
+
+              // تجمیع برای KPI/فوتر/نمودار
+              totals.b0_30 += g.b0_30;
+              totals.b31_60 += g.b31_60;
+              totals.b61_90 += g.b61_90;
+              totals.b90p   += g.b90p;
+              totals.total  += g.total;
+            }
+          });
+
+          // آپدیت KPI
+          var k = {
+            b0_30: document.getElementById('k_b0_30'),
+            b31_60: document.getElementById('k_b31_60'),
+            b61_90: document.getElementById('k_b61_90'),
+            b90p: document.getElementById('k_b90p'),
+            total: document.getElementById('k_total')
+          };
+          if (k.total){ k.total.textContent = toFa(totals.total); }
+          if (k.b0_30){ k.b0_30.textContent = toFa(totals.b0_30); }
+          if (k.b31_60){ k.b31_60.textContent = toFa(totals.b31_60); }
+          if (k.b61_90){ k.b61_90.textContent = toFa(totals.b61_90); }
+          if (k.b90p){ k.b90p.textContent = toFa(totals.b90p); }
+
+          // آپدیت فوتر
+          var f = {
+            b0_30: document.getElementById('f_b0_30'),
+            b31_60: document.getElementById('f_b31_60'),
+            b61_90: document.getElementById('f_b61_90'),
+            b90p: document.getElementById('f_b90p'),
+            total: document.getElementById('f_total')
+          };
+          if (f.total){ f.total.textContent = toFa(totals.total); }
+          if (f.b0_30){ f.b0_30.textContent = toFa(totals.b0_30); }
+          if (f.b31_60){ f.b31_60.textContent = toFa(totals.b31_60); }
+          if (f.b61_90){ f.b61_90.textContent = toFa(totals.b61_90); }
+          if (f.b90p){ f.b90p.textContent = toFa(totals.b90p); }
+
+          // آپدیت نمودار
+          if (_chart){
+            _chart.data.datasets[0].data = [
+              totals.b0_30, totals.b31_60, totals.b61_90, totals.b90p
+            ];
+            _chart.update();
+          }
+
+          // بازشماری شماره‌ها بعد از فیلتر
+          renumber();
+
+          // به‌روزرسانی لینک CSV با پارامترها (برای سازگاری با ویوی آینده)
+          var csv = document.getElementById('csvBtn');
+          if (csv){
+            var qs = [];
+            var qv = getQS('q'); if (qv) qs.push('q='+encodeURIComponent(qv));
+            if (fISO) qs.push('from='+encodeURIComponent(fISO));
+            if (tISO) qs.push('to='+encodeURIComponent(tISO));
+            qs.push('format=csv');
+            csv.href = '?' + qs.join('&');
+          }
+        }
+
+        // اجرای فیلتر هنگام بارگذاری (اگر from/to در URL باشد)
+        applyRangeFilter();
+
+      })();
+    </script>
+  {% endif %}
+{% endblock %}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

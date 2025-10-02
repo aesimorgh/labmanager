@@ -1,0 +1,177 @@
+{% extends "base_user_panel.html" %}
+{% load num_extras %}
+
+{% block title %}گزارش مجموع تخفیف‌ها{% endblock %}
+
+{% block head_extra %}
+  <style>
+    .heading{font-weight:800;font-size:1.25rem;margin:.25rem 0 1rem}
+    .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.75rem;margin-bottom:1rem}
+    .kpi{border:1px solid #e5e7eb;background:#fff;border-radius:.75rem;padding:.9rem}
+    .kpi .t{font-size:.9rem;color:#6b7280;margin-bottom:.25rem}
+    .kpi .v{font-weight:800;font-variant-numeric:tabular-nums}
+    .card{border:1px solid #e5e7eb;background:#fff;border-radius:.75rem}
+    .card-h{padding:.6rem .9rem;border-bottom:1px solid #e5e7eb;font-weight:700}
+    .card-b{padding:.9rem}
+    .table{width:100%;border-collapse:collapse}
+    .table th,.table td{padding:.5rem .6rem;border-top:1px solid #eef2f7;text-align:start}
+    .table thead th{background:#f8fafc}
+    .num{text-align:end;font-variant-numeric:tabular-nums}
+    .muted{color:#6b7280}
+    .actions{display:flex;gap:.5rem;flex-wrap:wrap}
+    .btn{display:inline-block;padding:.45rem .7rem;border:1px solid #e5e7eb;border-radius:.5rem;text-decoration:none;color:#111827}
+    .btn:hover{background:#f8fafc}
+    .search-row{display:flex;gap:.5rem;flex-wrap:wrap;margin:.5rem 0 1rem}
+    .search-row input[type="text"]{border:1px solid #e5e7eb;border-radius:.5rem;padding:.45rem .6rem;min-width:220px}
+  </style>
+{% endblock %}
+
+{% block subtabs %}
+  <ul class="nav nav-pills mb-3">
+    <li class="nav-item"><a class="nav-link" href="{% url 'billing:financial_home' %}">مالی</a></li>
+    <li class="nav-item"><a class="nav-link" href="{% url 'billing:reports_home' %}">گزارش‌ها</a></li>
+    <li class="nav-item"><span class="nav-link active">مجموع تخفیف‌ها</span></li>
+  </ul>
+{% endblock %}
+
+{% block content %}
+  <div class="heading">گزارش مجموع تخفیف‌ها</div>
+
+  <!-- KPIs -->
+  <div class="kpis">
+    <div class="kpi">
+      <div class="t">تعداد فاکتورهای صادرشده</div>
+      <div class="v">{{ grand_count|default:0|int_fa }}</div>
+    </div>
+    <div class="kpi">
+      <div class="t">مجموع تخفیف‌ها (خط + فاکتور)</div>
+      <div class="v">{{ grand_discount|default:0|money_fa }}</div>
+    </div>
+  </div>
+
+  <!-- جستجو -->
+  <form method="get" class="search-row">
+    <input type="text" name="q" value="{{ q }}" placeholder="جستجو: کد فاکتور یا نام دکتر">
+    <button class="btn" type="submit">اعمال</button>
+    {% if q %}
+      <a class="btn" href="?">حذف فیلتر</a>
+    {% endif %}
+  </form>
+
+  <!-- نمودار -->
+  <div class="card" style="margin-bottom:1rem">
+    <div class="card-h">نمودار ماهانهٔ مجموع تخفیف‌ها</div>
+    <div class="card-b">
+      {% if rows %}
+        <canvas id="discountsChart" height="110"></canvas>
+        <div class="muted" style="margin-top:.5rem">
+          مبالغ تجمیعی ماهانه (تخفیف خطوط + تخفیف فاکتور). برچسب‌ها به‌صورت «مهرماه ۱۴۰۴».
+        </div>
+      {% else %}
+        <div class="muted">داده‌ای برای نمایش نیست.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- جدول -->
+  <div class="card">
+    <div class="card-h">جدول تفکیک ماهانه</div>
+    <div class="card-b" style="padding-top:.3rem">
+      {% if rows %}
+        <div class="table-wrap" style="overflow:auto">
+          <table class="table">
+            <thead>
+              <tr>
+                <th style="width:80px">#</th>
+                <th>ماه</th>
+                <th class="num" style="width:160px">تعداد فاکتور</th>
+                <th class="num" style="width:200px">مجموع تخفیف‌ها</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in rows %}
+                <tr>
+                  <td>{{ forloop.counter|int_fa }}</td>
+                  <td>{{ r.month_name }} {{ r.year|int_fa }}</td>
+                  <td class="num">{{ r.count|int_fa }}</td>
+                  <td class="num">{{ r.discount_sum|money_fa }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="muted">آیتمی یافت نشد.</div>
+      {% endif %}
+      <div class="muted" style="margin-top:.6rem">
+        <em>فرمول: مجموع تخفیف‌ها = تخفیفِ خطوط + تخفیفِ سطح فاکتور (برای فاکتورهای صادرشده).</em>
+      </div>
+      <div class="actions" style="margin-top:.75rem">
+        <a class="btn" href="{% url 'billing:reports_home' %}">بازگشت به گزارش‌ها</a>
+        <!-- ✅ دکمهٔ CSV: اگر q بود، حفظ می‌شود -->
+        <a class="btn" href="{% url 'billing:report_discounts' %}{% if q %}?q={{ q|urlencode }}&format=csv{% else %}?format=csv{% endif %}">خروجی CSV</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block body_extra %}
+  {% if rows %}
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>
+      (function(){
+        // آرایه‌ی برچسب‌ها: از قدیم به جدید برای محور X
+        var labels = [
+          {% for r in rows reversed %}'{{ r.month_name }} {{ r.year|int_fa }}'{% if not forloop.last %}, {% endif %}{% endfor %}
+        ];
+        // داده‌ها به همان ترتیب
+        var dataVals = [
+          {% for r in rows reversed %}{{ r.discount_sum|default:0 }}{% if not forloop.last %}, {% endif %}{% endfor %}
+        ];
+
+        var ctx = document.getElementById('discountsChart');
+        if (!ctx) return;
+
+        new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'مجموع تخفیف‌ها',
+              data: dataVals,
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: function(ctx){
+                    try{
+                      var v = Number(ctx.parsed.y || 0);
+                      return ' ' + v.toLocaleString('fa-IR');
+                    }catch(e){ return ' ' + ctx.parsed.y; }
+                  }
+                }
+              },
+              title: {
+                display: true,
+                text: 'مجموع تخفیف‌ها به تفکیک ماه'
+              }
+            },
+            scales: {
+              y: {
+                ticks: {
+                  callback: function(value){ try{return Number(value).toLocaleString('fa-IR');}catch(e){return value;} }
+                }
+              }
+            }
+          }
+        });
+      })();
+    </script>
+  {% endif %}
+{% endblock %}
+

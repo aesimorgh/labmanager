@@ -630,7 +630,7 @@ class InvoicePrintView(View):
 class DoctorAccountView(View):
     """
     صفحهٔ حساب دکتر — رندر قالب billing/doctor_account.html
-    جمع‌ها از روی خطوط محاسبه می‌شوند تا حتی اگر فیلدهای ذخیره‌شده ناقص بود،
+    جمع‌ها از روی خطوط محاسبه می‌شوند تا حتی اگر فیلدهای ذخیره‌شده ناقص بود، 
     نمایش دقیق باشد.
     """
     def get(self, request: HttpRequest, doctor_id: int) -> HttpResponse:
@@ -683,8 +683,10 @@ class DoctorAccountView(View):
                 s=Coalesce(Sum('amount'), Decimal('0'))
             )['s'] or Decimal('0')
 
-        # ماندهٔ جاری: جمع فاکتورهای صادرشده - پرداخت‌ها
-        running_balance = (total_amount_issued - total_paid)
+        # ماندهٔ جاری واقعی: جمع بدهیِ باز فاکتورهای صادرشده
+        # (amount_due = جمع خطوط - تخفیف‌ها - تخصیص پرداخت + مانده قبلی)
+        running_balance = amount_due_issued
+
 
         context = {
             "doctor": doctor,
@@ -763,6 +765,783 @@ class DoctorPaymentCreateView(View):
         return redirect(f"/billing/doctor/{doctor.id}/account/")
 
 
+# ========== NEW: InvoiceListView (فقط اضافه شده؛ هیچ کد قبلی تغییر نکرد) ==========
+@method_decorator(login_required, name='dispatch')
+class InvoiceListView(View):
+    """
+    لیست فاکتورها با امکان فیلتر ساده (q, status) و محاسبهٔ مقادیر نمایشی.
+    قالب: billing/invoice_list.html
+    """
+    def get(self, request: HttpRequest) -> HttpResponse:
+        from billing.models import Invoice
+        qs = Invoice.objects.all().select_related('doctor').order_by('-issued_at', '-id')
+
+        q = (request.GET.get('q') or '').strip()
+        status = (request.GET.get('status') or '').strip()
+
+        if q:
+            # جستجو در کد فاکتور یا نام دکتر (اگر فیلد name داشته باشد)
+            qs = qs.filter(Q(code__icontains=q) | Q(doctor__name__icontains=q))
+
+        if status:
+            qs = qs.filter(status=status)
+
+        invoices = list(qs)
+
+        # محاسبهٔ امن برای نمایش (بدون دست‌کاری پایگاه‌داده)
+        for inv in invoices:
+            try:
+                inv.recompute_totals()
+            except Exception:
+                pass
+            d = _compute_display_totals(inv)
+            inv.total_amount = d['total_amount']
+            inv.amount_due = d['amount_due']
+
+        # وضعیت‌ها برای فیلتر (اگر choices تعریف باشد)
+        try:
+            status_choices = getattr(Invoice.Status, 'choices', [('draft', 'Draft'), ('issued', 'Issued')])
+        except Exception:
+            status_choices = [('draft', 'Draft'), ('issued', 'Issued')]
+
+        ctx = {
+            "invoices": invoices,
+            "q": q,
+            "status": status,
+            "status_choices": status_choices,
+        }
+        return render(request, "billing/invoice_list.html", ctx)
+
+# ========== NEW: DoctorListView (لیست پزشک‌ها برای رفتن به حساب دکتر) ==========
+@method_decorator(login_required, name='dispatch')
+class DoctorListView(View):
+    """
+    نمایش لیست دکترها با جستجو؛ هر ردیف لینک به حساب دکتر دارد.
+    قالب: billing/doctor_list.html
+    """
+    def get(self, request: HttpRequest) -> HttpResponse:
+        from core.models import Doctor
+        q = (request.GET.get('q') or '').strip()
+        qs = Doctor.objects.all().order_by('name')
+        if q:
+            qs = qs.filter(Q(name__icontains=q))
+        doctors = list(qs)
+        ctx = {
+            "doctors": doctors,
+            "q": q,
+        }
+        return render(request, "billing/doctor_list.html", ctx)
+
+# ========== NEW: OpenInvoicesReportView (گزارش مطالبات باز) ==========
+@method_decorator(login_required, name='dispatch')
+class OpenInvoicesReportView(View):
+    """
+    گزارش مطالبات باز: فقط فاکتورهای صادرشده‌ای که هنوز مانده دارند.
+    قالب: billing/report_open_invoices.html
+    """
+    def get(self, request: HttpRequest) -> HttpResponse:
+        from decimal import Decimal
+        from billing.models import Invoice
+
+        issued_val = getattr(Invoice.Status, 'ISSUED', 'issued')
+
+        qs = (
+            Invoice.objects
+            .filter(status=issued_val)
+            .select_related('doctor')
+            .prefetch_related('lines')
+            .order_by('-issued_at', '-id')
+        )
+
+        # فیلتر جستجو (اختیاری): کد فاکتور یا نام پزشک
+        q = (request.GET.get('q') or '').strip()
+        if q:
+            qs = qs.filter(Q(code__icontains=q) | Q(doctor__name__icontains=q))
+
+        invoices = []
+        sum_total = Decimal('0')
+        sum_alloc = Decimal('0')
+        sum_due   = Decimal('0')
+
+        for inv in qs:
+            # محاسبهٔ امنِ مقادیر نمایشی از روی خطوط و تخصیص‌ها
+            try:
+                inv.recompute_totals()
+            except Exception:
+                pass
+
+            d = _compute_display_totals(inv)
+            due = d['amount_due'] or Decimal('0')
+
+            if due > 0:
+                # مقادیر نمایشی برای استفاده در قالب
+                inv.total_amount_display = d['total_amount']
+                inv.allocated_display    = d['allocated']
+                inv.outstanding_display  = due
+                invoices.append(inv)
+
+                sum_total += d['total_amount'] or Decimal('0')
+                sum_alloc += d['allocated'] or Decimal('0')
+                sum_due   += due
+
+        ctx = {
+            "invoices": invoices,
+            "q": q,
+            "sum_total": sum_total,
+            "sum_alloc": sum_alloc,
+            "sum_due": sum_due,
+            "count": len(invoices),
+        }
+        return render(request, "billing/report_open_invoices.html", ctx)
+
+# ========== NEW: MonthlySalesReportView (گزارش فروش ماهانه) ==========
+# ========== NEW: MonthlySalesReportView (گزارش فروش ماهانه - برچسب جلالی) ==========
+# ========== NEW: MonthlySalesReportView (گزارش فروش ماهانه - برچسب جلالی + CSV) ==========
+@method_decorator(login_required, name='dispatch')
+class MonthlySalesReportView(View):
+    """
+    جمع مبلغ فاکتورهای «صادرشده» به تفکیک ماه/سال شمسی.
+    - مبلغ مبنا: total_amount پس از تخفیف‌های خطوط و تخفیف فاکتور (بدون previous_balance).
+    - فیلتر اختیاری: ?q=جستجو در کد/نام دکتر
+    - اگر ?format=csv باشد، خروجی CSV دانلود می‌شود.
+    قالب HTML: billing/report_monthly_sales.html
+    """
+    def get(self, request: HttpRequest) -> HttpResponse:
+        import csv
+        from decimal import Decimal
+        from django.http import HttpResponse
+        from billing.models import Invoice
+        from jalali_date import datetime2jalali  # تبدیل میلادی به جلالی
+
+        issued_val = getattr(Invoice.Status, 'ISSUED', 'issued')
+
+        qs = (
+            Invoice.objects
+            .filter(status=issued_val)
+            .select_related('doctor')
+            .prefetch_related('lines')
+            .order_by('-issued_at', '-id')
+        )
+
+        # فیلتر جستجو اختیاری
+        q = (request.GET.get('q') or '').strip()
+        if q:
+            qs = qs.filter(Q(code__icontains=q) | Q(doctor__name__icontains=q))
+
+        # جمع به تفکیک سال/ماه شمسی
+        buckets = {}  # key: (jy, jm) -> {"count": n, "sum": Decimal}
+        grand_sum = Decimal('0')
+        grand_count = 0
+
+        for inv in qs:
+            issued_at = getattr(inv, 'issued_at', None)
+            if not issued_at:
+                continue
+
+            try:
+                inv.recompute_totals()
+            except Exception:
+                pass
+
+            d = _compute_display_totals(inv)
+            amt = d['total_amount'] or Decimal('0')
+            if amt < 0:
+                amt = Decimal('0')
+
+            jdt = datetime2jalali(issued_at)
+            jy, jm = jdt.year, jdt.month
+
+            key = (jy, jm)
+            if key not in buckets:
+                buckets[key] = {"count": 0, "sum": Decimal('0')}
+            buckets[key]["count"] += 1
+            buckets[key]["sum"] += amt
+
+            grand_sum += amt
+            grand_count += 1
+
+        # خروجی مرتب‌شده از جدید به قدیم
+        rows = []
+        for (jy, jm), v in buckets.items():
+            rows.append({
+                "year": jy,
+                "month": jm,
+                "label": f"{jy:04d}/{jm:02d}",
+                "count": v["count"],
+                "sum":  v["sum"],
+            })
+        rows.sort(key=lambda r: (r["year"], r["month"]), reverse=True)
+
+        # اگر CSV خواسته شده بود
+        if (request.GET.get('format') or '').lower() == 'csv':
+            month_names = {
+                1: "فروردین‌ماه", 2: "اردیبهشت‌ماه", 3: "خرداد‌ماه", 4: "تیر‌ماه",
+                5: "مرداد‌ماه", 6: "شهریور‌ماه", 7: "مهر‌ماه", 8: "آبان‌ماه",
+                9: "آذر‌ماه", 10: "دی‌ماه", 11: "بهمن‌ماه", 12: "اسفند‌ماه",
+            }
+            resp = HttpResponse(content_type='text/csv; charset=utf-8')
+            resp['Content-Disposition'] = 'attachment; filename="monthly_sales.csv"'
+            writer = csv.writer(resp)
+            writer.writerow(["سال", "ماه (عدد)", "نام ماه", "تعداد فاکتور", "جمع فروش (ریال)"])
+            for r in rows:
+                jy = r["year"]
+                jm = r["month"]
+                name = month_names.get(jm, "-")
+                writer.writerow([jy, jm, f"{name}", r["count"], int(r["sum"] or 0)])
+            return resp
+
+        # HTML (پیش‌فرض)
+        ctx = {
+            "rows": rows,
+            "q": q,
+            "grand_sum": grand_sum,
+            "grand_count": grand_count,
+        }
+        return render(request, "billing/report_monthly_sales.html", ctx)
+
+# ========== NEW: DiscountsReportView (گزارش مجموع تخفیف‌ها به تفکیک ماه/سال شمسی) ==========
+@method_decorator(login_required, name='dispatch')
+class DiscountsReportView(View):
+    """
+    مجموع تخفیف‌ها (تخفیف خطوط + تخفیف فاکتور) به تفکیک ماه/سال جلالی.
+    - فقط فاکتورهای صادرشده (ISSUED) محاسبه می‌شوند.
+    - فیلتر اختیاری: ?q=... روی code یا نام دکتر.
+    - HTML: billing/report_discounts.html
+    - CSV:  /billing/reports/discounts/?format=csv  (UTF-8-SIG مناسب اکسل)
+    """
+    def get(self, request: HttpRequest) -> HttpResponse:
+        from decimal import Decimal
+        from billing.models import Invoice
+        from django.db.models import Sum
+        from django.db.models.functions import Coalesce
+        from jalali_date import datetime2jalali
+        from django.db.models import Q
+        import csv
+
+        # ماه‌های فارسی برای نمایش
+        month_names = {
+            1: "فروردین‌ماه", 2: "اردیبهشت‌ماه", 3: "خرداد‌ماه", 4: "تیر‌ماه",
+            5: "مرداد‌ماه", 6: "شهریور‌ماه", 7: "مهرماه", 8: "آبان‌ماه",
+            9: "آذرماه", 10: "دی‌ماه", 11: "بهمن‌ماه", 12: "اسفندماه",
+        }
+
+        issued_val = getattr(Invoice.Status, 'ISSUED', 'issued')
+        qs = (
+            Invoice.objects
+            .filter(status=issued_val)
+            .select_related('doctor')
+            .prefetch_related('lines')
+            .order_by('-issued_at', '-id')
+        )
+
+        q = (request.GET.get('q') or '').strip()
+        if q:
+            qs = qs.filter(Q(code__icontains=q) | Q(doctor__name__icontains=q))
+
+        buckets = {}  # key: (jy, jm) -> {"count": n, "discount_sum": Decimal}
+        grand_discount = Decimal('0')
+        grand_count = 0
+
+        for inv in qs:
+            issued_at = getattr(inv, 'issued_at', None)
+            if not issued_at:
+                continue
+
+            # مجموع تخفیف خطوط
+            line_disc = inv.lines.aggregate(
+                s=Coalesce(Sum('discount_amount'), Decimal('0'))
+            )['s'] or Decimal('0')
+
+            # تخفیف سطح فاکتور
+            try:
+                inv_disc = Decimal(str(getattr(inv, 'discount_amount', 0) or 0))
+            except Exception:
+                inv_disc = Decimal('0')
+
+            total_disc = line_disc + inv_disc
+            if total_disc < 0:
+                total_disc = Decimal('0')
+
+            jdt = datetime2jalali(issued_at)
+            jy, jm = jdt.year, jdt.month
+            key = (jy, jm)
+            if key not in buckets:
+                buckets[key] = {"count": 0, "discount_sum": Decimal('0')}
+            buckets[key]["count"] += 1
+            buckets[key]["discount_sum"] += total_disc
+
+            grand_discount += total_disc
+            grand_count += 1
+
+        # خروجی مرتب از جدید به قدیم
+        rows = []
+        for (jy, jm), v in buckets.items():
+            rows.append({
+                "year": jy,
+                "month": jm,
+                "month_name": month_names.get(jm, "-"),
+                "label": f"{jy:04d}/{jm:02d}",
+                "count": v["count"],
+                "discount_sum": v["discount_sum"],
+            })
+        rows.sort(key=lambda r: (r["year"], r["month"]), reverse=True)
+
+        # === CSV Export (UTF-8-SIG برای اکسل) ===
+        if (request.GET.get('format') or '').lower() == 'csv':
+            # پاسخ متنی با BOM
+            response = HttpResponse(content_type='text/csv; charset=utf-8')
+            response['Content-Disposition'] = 'attachment; filename="discounts_monthly.csv"'
+            # BOM برای UTF-8-SIG
+            response.write('\ufeff')
+            w = csv.writer(response)
+            w.writerow(['سال', 'ماه', 'برچسب', 'تعداد فاکتور', 'مجموع تخفیف'])
+            for r in rows:
+                w.writerow([
+                    r['year'],
+                    r['month_name'],
+                    f"{r['month_name']} {r['year']}",
+                    r['count'],
+                    # مقدار خام بدون فرمت‌گذاری تا در اکسل قابل محاسبه باشد
+                    str(r['discount_sum']),
+                ])
+            return response
+        # =======================================
+
+        ctx = {
+            "rows": rows,
+            "q": q,
+            "grand_discount": grand_discount,
+            "grand_count": grand_count,
+        }
+        return render(request, "billing/report_discounts.html", ctx)
+
+# ========== NEW: AgingReportView (محاسبهٔ باکت‌های 0–30 / 31–60 / 61–90 / 90+ روز) ==========
+from decimal import Decimal
+from django.utils import timezone
+from django.utils.decorators import method_decorator
+from django.contrib.auth.decorators import login_required
+from django.views import View
+from django.shortcuts import render
+from django.db.models import Q
+
+# ========== NEW: AgingReportView (سازگار با قالب report_aging.html) ==========
+@method_decorator(login_required, name='dispatch')
+class AgingReportView(View):
+    """
+    گزارش Aging بدهی‌ها برای فاکتورهای 'ISSUED' که هنوز تسویه کامل نشده‌اند.
+    خروجی مطابق قالب report_aging.html:
+      - totals: {total, b0_30, b31_60, b61_90, b90p}
+      - rows:   [{doctor_id, doctor_name, b0_30, b31_60, b61_90, b90p, total, invoices}, ...]
+    نکته: آرایهٔ invoices برای دریل‌دان است؛ اگر قالب استفاده نکند، مشکلی ایجاد نمی‌شود.
+    """
+    def get(self, request):
+        from decimal import Decimal
+        from billing.models import Invoice
+
+        today = timezone.localdate()
+        issued_val = getattr(Invoice.Status, 'ISSUED', 'issued')
+
+        qs = (
+            Invoice.objects
+            .filter(status=issued_val)
+            .select_related('doctor')
+            .order_by('issued_at', 'id')
+        )
+
+        # فیلتر جستجو (اختیاری)
+        q = (request.GET.get('q') or '').strip()
+        if q:
+            qs = qs.filter(Q(code__icontains=q) | Q(doctor__name__icontains=q))
+
+        # جمع‌های کل
+        totals = {
+            'b0_30': Decimal('0'),
+            'b31_60': Decimal('0'),
+            'b61_90': Decimal('0'),
+            'b90p':  Decimal('0'),
+            'total': Decimal('0'),
+        }
+
+        # گروه‌بندی بر اساس پزشک
+        groups = {}  # key = doctor_id (یا None)
+
+        for inv in qs:
+            # بدهی باز این فاکتور = خطوط − تخفیف‌ها + ماندهٔ قبلی − پرداخت‌های تخصیص‌یافته
+            try:
+                inv.recompute_totals()
+            except Exception:
+                pass
+            d = _compute_display_totals(inv)
+            open_due = d.get('amount_due') or Decimal('0')
+            if open_due <= 0:
+                continue
+
+            # سن بدهی از تاریخ صدور (در نبودِ issued_at، از created_at/امروز)
+            issued_date = None
+            try:
+                issued_date = inv.issued_at.date() if getattr(inv, 'issued_at', None) else None
+            except Exception:
+                issued_date = None
+            if not issued_date:
+                created = getattr(inv, 'created_at', None)
+                try:
+                    issued_date = created.date() if created else timezone.localdate()
+                except Exception:
+                    issued_date = timezone.localdate()
+
+            days = (timezone.localdate() - issued_date).days if issued_date else 0
+            if   days <= 30: bucket = 'b0_30'
+            elif days <= 60: bucket = 'b31_60'
+            elif days <= 90: bucket = 'b61_90'
+            else:            bucket = 'b90p'
+
+            # جمع کل
+            totals[bucket] += open_due
+            totals['total'] += open_due
+
+            # گروه پزشک
+            doc = getattr(inv, 'doctor', None)
+            doc_id = getattr(doc, 'id', None)
+            doc_name = (getattr(doc, 'name', None) or (str(doc) if doc else '—')).strip() if doc else '—'
+
+            row = groups.get(doc_id)
+            if not row:
+                row = {
+                    'doctor_id': doc_id,
+                    'doctor_name': doc_name,
+                    'b0_30': Decimal('0'),
+                    'b31_60': Decimal('0'),
+                    'b61_90': Decimal('0'),
+                    'b90p':  Decimal('0'),
+                    'total': Decimal('0'),
+                    'invoices': [],  # برای دریل‌دان
+                }
+                groups[doc_id] = row
+
+            row[bucket] += open_due
+            row['total'] += open_due
+
+            # فاکتور را هم برای نمایش جزئیات ذخیره می‌کنیم
+            row['invoices'].append({
+                'id':   inv.id,
+                'code': inv.code or f'#{inv.id}',
+                # قالب از inv.issued_at|date... استفاده می‌کند؛ این مقدار را با fallback می‌دهیم
+                'issued_at': getattr(inv, 'issued_at', None) or issued_date,
+                'days': days,
+                'bucket': bucket,
+                'amount': open_due,
+            })
+
+        # خروجی سطرها (مرتب بر اساس نام پزشک)
+        rows = sorted(groups.values(), key=lambda r: r['doctor_name'] or '')
+
+        ctx = {
+            'q': q,
+            'totals': totals,
+            'rows': rows,
+        }
+
+        # --- CSV export (UTF-8 with BOM تا اکسل فارسی را درست نشان دهد)
+        if (request.GET.get('format') or '').lower() == 'csv':
+            import csv
+            from django.http import HttpResponse
+
+            resp = HttpResponse(content_type='text/csv; charset=utf-8')
+            resp['Content-Disposition'] = (
+                'attachment; filename="aging_%s.csv"' % timezone.now().strftime('%Y%m%d_%H%M%S')
+            )
+            resp.write('\ufeff')  # BOM برای Excel
+
+            w = csv.writer(resp)
+            w.writerow(['پزشک', '۰–۳۰', '۳۱–۶۰', '۶۱–۹۰', '۹۰+', 'جمع'])
+            for r in rows:
+                w.writerow([
+                    r['doctor_name'],
+                    r['b0_30'], r['b31_60'], r['b61_90'], r['b90p'],
+                    r['total'],
+                ])
+            w.writerow([
+                'جمع کل',
+                totals['b0_30'], totals['b31_60'], totals['b61_90'], totals['b90p'],
+                totals['total'],
+            ])
+            return resp
+
+        return render(request, "billing/report_aging.html", ctx)
+
+# ========== NEW: FinancialHomeView (پنل هاب مالی - با ماه جلالی در صورت وجود) ==========
+from decimal import Decimal
+import json
+from datetime import timedelta, date as pydate
+from django.utils import timezone
+from django.utils.decorators import method_decorator
+from django.contrib.auth.decorators import login_required
+from django.views import View
+from django.shortcuts import render
+from django.db.models import Sum
+from django.urls import reverse
+from django.db.models import Q
+
+class FinancialHomeView(View):  # ← فقط همین تغییر: حذف @method_decorator(login_required, ...)
+    """
+    داده‌های صفحه‌ی billing/financial_home.html را فراهم می‌کند:
+      ctx = {
+        'kpis': {
+            'open_total', 'over_90',
+            'this_month_payments',   # جمع پرداخت‌های «ماه جاری» (جلالی در صورت وجود jdatetime)
+            'this_month_invoices',   # تعداد فاکتورهای «ماه جاری» (جلالی در صورت وجود jdatetime)
+            'open_count',            # تعداد فاکتورهای باز
+        },
+        'monthly_json': '[{m:"YYYY-MM", sales:number, payments:number}, ...]',
+        'latest_open_invoices': [...],
+        'top_debtors': [...],
+      }
+    """
+    template_name = "billing/financial_home.html"
+
+    # --- کمک‌متدها ------------------------------------------------------------
+    def _get_issued_date(self, inv, default_date):
+        """تاریخ صدور امن (date): issued_at یا created_at یا today"""
+        try:
+            if getattr(inv, 'issued_at', None):
+                return inv.issued_at.date()
+        except Exception:
+            pass
+        try:
+            cd = getattr(inv, 'created_at', None)
+            if cd:
+                return cd.date()
+        except Exception:
+            pass
+        return default_date
+
+    def _month_key(self, d):
+        """کلید ماهیانه ساده: 'YYYY-MM' (برای نمودار؛ میلادی باقی می‌ماند)"""
+        return f"{d.year:04d}-{d.month:02d}"
+
+    def _last_12_months_keys(self, end_date):
+        """لیست 12 ماه اخیر میلادی (برای نمودار)"""
+        keys = []
+        y, m = end_date.year, end_date.month
+        for _ in range(12):
+            keys.append((y, m))
+            m -= 1
+            if m == 0:
+                y -= 1
+                m = 12
+        keys.reverse()
+        return [f"{yy:04d}-{mm:02d}" for yy, mm in keys]
+
+    def _current_month_range(self, today):
+        """
+        مرزهای «ماه جاری» را برمی‌گرداند (start, end, calendar):
+        - اگر jdatetime نصب باشد: ماه جلالی
+        - وگرنه: ماه میلادی
+        """
+        try:
+            import jdatetime as jd  # pip install jdatetime
+            j_today = jd.date.fromgregorian(date=today)
+            jy, jm = j_today.year, j_today.month
+            j_start = jd.date(jy, jm, 1)
+            # اول ماه بعد جلالی
+            if jm == 12:
+                j_next = jd.date(jy + 1, 1, 1)
+            else:
+                j_next = jd.date(jy, jm + 1, 1)
+            start = j_start.togregorian()
+            end = j_next.togregorian() - timedelta(days=1)
+            return start, end, 'jalali'
+        except Exception:
+            # میلادی
+            start = today.replace(day=1)
+            if today.month == 12:
+                nstart = pydate(today.year + 1, 1, 1)
+            else:
+                nstart = pydate(today.year, today.month + 1, 1)
+            end = nstart - timedelta(days=1)
+            return start, end, 'gregorian'
+
+    # --- اکشن اصلی ------------------------------------------------------------
+    def get(self, request):
+        from billing.models import Invoice
+
+        today = timezone.localdate()
+        month_keys = self._last_12_months_keys(today)
+
+        # ظرف نمودار
+        monthly_sales = {k: Decimal('0') for k in month_keys}
+        monthly_pays  = {k: Decimal('0') for k in month_keys}
+
+        # KPI ها
+        open_total = Decimal('0')
+        over_90 = Decimal('0')
+        open_count = 0
+        this_month_invoices = 0
+        this_month_payments = Decimal('0')
+
+        # مرزهای ماه جاری (جلالی در صورت وجود jdatetime)
+        month_start, month_end, _cal = self._current_month_range(today)
+
+        # فقط فاکتورهای ISSUED
+        issued_val = getattr(Invoice.Status, 'ISSUED', 'issued')
+        inv_qs = (Invoice.objects
+                  .filter(status=issued_val)
+                  .select_related('doctor')
+                  .order_by('-issued_at', '-id'))
+
+        latest_open = []
+        latest_open_cap = 8
+
+        # برای «۵ بدهکار برتر»
+        debt_by_doctor = {}  # doc_id -> {'doctor_id', 'doctor_name', 'amount_due': Decimal}
+
+        # پیمایش فاکتورها
+        for inv in inv_qs:
+            try:
+                inv.recompute_totals()
+            except Exception:
+                pass
+
+            try:
+                dct = _compute_display_totals(inv)
+            except Exception:
+                dct = {}
+
+            amount_due = dct.get('amount_due') or Decimal('0')
+            issued_date = self._get_issued_date(inv, today)
+            month_key = self._month_key(issued_date)
+
+            # فروش ماهانه (برای نمودار؛ میلادی)
+            gross = (dct.get('grand_total')
+                     or dct.get('total')
+                     or dct.get('subtotal')
+                     or Decimal('0'))
+            if month_key in monthly_sales:
+                monthly_sales[month_key] += gross
+
+            # بدهی باز / 90+
+            if amount_due > 0:
+                open_total += amount_due
+                open_count += 1
+
+                days = (today - issued_date).days if issued_date else 0
+                if days > 90:
+                    over_90 += amount_due
+
+                # آخرین فاکتورهای باز
+                if len(latest_open) < latest_open_cap:
+                    try:
+                        doc = getattr(inv, 'doctor', None)
+                        doc_name = (getattr(doc, 'name', None) or (str(doc) if doc else '—')).strip()
+                    except Exception:
+                        doc_name = '—'
+                    try:
+                        url = reverse('billing:invoice_detail', args=[inv.id])
+                    except Exception:
+                        url = '#'
+                    latest_open.append({
+                        'id': inv.id,
+                        'code': inv.code or f'#{inv.id}',
+                        'doctor_name': doc_name,
+                        'issued_at': getattr(inv, 'issued_at', None),
+                        'amount_due': amount_due,
+                        'url': url,
+                    })
+
+                # تجمیع برای «۵ بدهکار برتر»
+                try:
+                    doc = getattr(inv, 'doctor', None)
+                    doc_id = getattr(doc, 'id', None)
+                    doc_name = (getattr(doc, 'name', None) or (str(doc) if doc else '—')).strip()
+                except Exception:
+                    doc_id = None
+                    doc_name = '—'
+                grp = debt_by_doctor.get(doc_id)
+                if not grp:
+                    grp = {'doctor_id': doc_id, 'doctor_name': doc_name, 'amount_due': Decimal('0')}
+                    debt_by_doctor[doc_id] = grp
+                grp['amount_due'] += amount_due
+
+            # ✅ تعداد فاکتورهای «ماه جاری» (جلالی/میلادی طبق _current_month_range)
+            if issued_date and (month_start <= issued_date <= month_end):
+                this_month_invoices += 1
+
+        # پرداخت‌های «ماه جاری» (سازگار با DateField/DateTimeField)
+        try:
+            from billing.models import DoctorPayment as _PayModel
+            pay_date_field = None
+            for f in ('paid_at', 'payment_date', 'date', 'created_at'):
+                if hasattr(_PayModel, f):
+                    pay_date_field = f
+                    break
+            amt_field = 'amount' if hasattr(_PayModel, 'amount') else None
+
+            if pay_date_field and amt_field:
+                df = _PayModel._meta.get_field(pay_date_field)
+                # فیلتر تاریخ بر اساس نوع فیلد
+                if df.get_internal_type() == 'DateTimeField':
+                    date_filter = {
+                        f"{pay_date_field}__date__gte": month_start,
+                        f"{pay_date_field}__date__lte": month_end,
+                    }
+                else:
+                    date_filter = {
+                        f"{pay_date_field}__gte": month_start,
+                        f"{pay_date_field}__lte": month_end,
+                    }
+                this_month_payments = (
+                    _PayModel.objects.filter(**date_filter).aggregate(s=Sum(amt_field))['s'] or Decimal('0')
+                )
+
+                # پرداخت‌های 12 ماه اخیر (برای نمودار؛ میلادی)
+                all_pays = _PayModel.objects.all()
+                for p in all_pays:
+                    try:
+                        pd = getattr(p, pay_date_field, None)
+                        if pd is None:
+                            continue
+                        if hasattr(pd, 'date'):
+                            pd = pd.date()
+                        mk = self._month_key(pd)
+                        if mk in monthly_pays:
+                            monthly_pays[mk] += (getattr(p, amt_field, None) or Decimal('0'))
+                    except Exception:
+                        continue
+            else:
+                this_month_payments = Decimal('0')
+        except Exception:
+            this_month_payments = Decimal('0')
+
+        # JSON نمودار
+        monthly = []
+        for k in month_keys:
+            monthly.append({
+                'm': k,
+                'sales': float(monthly_sales.get(k, 0)),
+                'payments': float(monthly_pays.get(k, 0)),
+            })
+        monthly_json = json.dumps(monthly, ensure_ascii=False)
+
+        # ۵ بدهکار برتر
+        top_debtors = sorted(
+            debt_by_doctor.values(),
+            key=lambda r: r['amount_due'],
+            reverse=True
+        )[:5]
+
+        ctx = {
+            'kpis': {
+                'open_total': open_total,
+                'over_90': over_90,
+                'this_month_payments': this_month_payments,
+                'this_month_invoices': this_month_invoices,
+                'open_count': open_count,
+            },
+            'monthly_json': monthly_json,
+            'latest_open_invoices': latest_open,
+            'top_debtors': top_debtors,
+        }
+        return render(request, self.template_name, ctx)
 
 
 

@@ -1,0 +1,120 @@
+{% extends "base_user_panel.html" %}
+{% load num_extras %}
+{% load jalali_tags %}
+{% block title %}گزارش مطالبات باز{% endblock %}
+
+{% block head_extra %}
+  <style>
+    .muted{color:#6b7280}
+    .summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;margin-bottom:1rem}
+    .tile{border:1px solid #e5e7eb;border-radius:.75rem;background:#fff;padding:.75rem}
+    .tile .k{font-size:.85rem;color:#6b7280}
+    .tile .v{font-weight:800;margin-top:.15rem}
+    .table thead th{background:#eef2ff}
+    .num{text-align:end;font-variant-numeric:tabular-nums}
+    .actions a{display:inline-block;margin-inline:.15rem;text-decoration:none;border:1px solid #e5e7eb;border-radius:.5rem;padding:.3rem .55rem}
+    .actions a:hover{background:#f8fafc}
+    .searchbar{display:flex;gap:.5rem;flex-wrap:wrap;margin:.25rem 0 1rem}
+    .searchbar input{flex:1 1 260px;border:1px solid #e5e7eb;border-radius:.5rem;padding:.45rem .6rem}
+    .btn{border:1px solid #e5e7eb;border-radius:.5rem;padding:.45rem .75rem;background:#fff}
+    .btn.primary{border-color:#c7d2fe}
+    .tag{display:inline-block;border:1px dashed #d1d5db;border-radius:9999px;padding:.1rem .5rem;font-size:.8rem;color:#6b7280}
+  </style>
+{% endblock %}
+
+{% block subtabs %}
+  <ul class="nav nav-pills mb-3">
+    <li class="nav-item"><a class="nav-link" href="{% url 'billing:financial_home' %}">مالی</a></li>
+    <li class="nav-item"><a class="nav-link" href="{% url 'billing:reports_home' %}">گزارش‌ها</a></li>
+    <li class="nav-item"><span class="nav-link active">مطالبات باز</span></li>
+  </ul>
+{% endblock %}
+
+{% block content %}
+
+  <!-- جستجو -->
+  <form method="get" class="searchbar">
+    <input type="text" name="q" value="{{ q }}" placeholder="جستجو: کد فاکتور یا نام پزشک">
+    <button class="btn primary">جستجو</button>
+    {% if q %}
+      <a class="btn" href="{% url 'billing:report_open_invoices' %}">حذف فیلتر</a>
+      <span class="tag">فیلتر: {{ q }}</span>
+    {% endif %}
+  </form>
+
+  <!-- خلاصه -->
+  <div class="summary">
+    <div class="tile">
+      <div class="k">تعداد فاکتورهای باز</div>
+      <div class="v">{{ count|default:0|int_fa }}</div>
+    </div>
+    <div class="tile">
+      <div class="k">جمع پس از تخفیف‌ها</div>
+      <div class="v num">{{ sum_total|default:0|money_fa }}</div>
+    </div>
+    <div class="tile">
+      <div class="k">پرداخت تخصیص‌یافته</div>
+      <div class="v num">− {{ sum_alloc|default:0|money_fa }}</div>
+    </div>
+    <div class="tile">
+      <div class="k">ماندهٔ باز</div>
+      <div class="v num" style="color:#b91c1c">{{ sum_due|default:0|money_fa }}</div>
+    </div>
+  </div>
+
+  <!-- جدول -->
+  <div class="card">
+    <div class="card-body" style="padding:0">
+      <div class="table-responsive">
+        <table class="table table-striped table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th style="width:70px">#</th>
+              <th style="width:180px">کد فاکتور</th>
+              <th>پزشک</th>
+              <th style="width:140px">تاریخ صدور</th>
+              <th class="num" style="width:160px">پس از تخفیف‌ها</th>
+              <th class="num" style="width:160px">پرداخت تخصیص‌یافته</th>
+              <th class="num" style="width:160px">ماندهٔ باز</th>
+              <th style="width:180px">اقدامات</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if invoices %}
+              {% for inv in invoices %}
+                <tr>
+                  <td class="num">{{ forloop.counter|int_fa }}</td>
+                  <td>
+                    {% if inv.code %}<strong>{{ inv.code }}</strong>{% else %}<span class="muted">—</span>{% endif %}
+                    <div class="muted small">ID: {{ inv.id|int_fa }}</div>
+                  </td>
+                  <td>
+                    {% if inv.doctor %}{{ inv.doctor }}{% else %}<span class="muted">—</span>{% endif %}
+                  </td>
+                  <td>
+                    {% if inv.issued_at %}{{ inv.issued_at|to_jalali:"%Y/%m/%d" }}{% else %}<span class="muted">—</span>{% endif %}
+                  </td>
+                  <td class="num">{{ inv.total_amount_display|default:0|money_fa }}</td>
+                  <td class="num">− {{ inv.allocated_display|default:0|money_fa }}</td>
+                  <td class="num"><strong>{{ inv.outstanding_display|default:0|money_fa }}</strong></td>
+                  <td class="actions">
+                    <a href="{% url 'billing:invoice_detail' inv.id %}">جزئیات</a>
+                    <a href="{% url 'billing:invoice_print' inv.id %}" target="_blank" rel="noopener">چاپ</a>
+                  </td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr><td colspan="8" class="text-center muted py-4">هیچ فاکتور بازی یافت نشد.</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <p class="muted small" style="margin-top:.75rem">
+    فرمول نمایش مانده: <strong>ماندهٔ باز = (جمع پس از تخفیف‌ها) − پرداخت‌های تخصیص‌یافته</strong>.
+    (اگر «ماندهٔ قبلی» روی فاکتور استفاده شده باشد، در محاسبات لحاظ شده است.)
+  </p>
+
+{% endblock %}

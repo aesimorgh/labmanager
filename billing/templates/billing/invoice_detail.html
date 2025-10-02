@@ -1,17 +1,16 @@
+{% extends "base_user_panel.html" %}
 {% load static %}
 {% load num_extras %}
 {% load jalali_tags %}
-<!DOCTYPE html>
-<html lang="fa" dir="rtl">
-<head>
-  <meta charset="UTF-8" />
-  <title>جزئیات فاکتور</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- Bootstrap -->
+{% block title %}جزئیات فاکتور{% endblock %}
+
+{% block head_extra %}
+  <!-- Bootstrap (مثل قبل) -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
+    /* ✅ حفظ ظاهر قبلی دقیقاً مثل نسخه‌ی شما */
     body { font-family: Tahoma, sans-serif; background: #f8f9fa; }
     .container-narrow { max-width: 1100px; }
     .invoice-head { display:flex; align-items:start; justify-content:space-between; gap:1rem; }
@@ -39,16 +38,20 @@
     }
     .bank-box h6{ margin:0 0 .5rem; font-weight:700; font-size:.95rem; color:#212529; }
     .bank-box .line{ margin:.15rem 0; }
-  </style>
 
+    /* ⛔️ مخفی‌کردن هدر و تب‌های اسکلت برای حفظ ظاهر قدیمی همین صفحه */
+    .header, .tabs { display:none !important; }
+    main.container { padding-block: 0 !important; }
+  </style>
   <script>
-    // اگر داخل iframe بودیم، کلاس is-embed را به <html> اضافه کن تا استایل مینیمال شود
+    // اگر داخل iframe بودیم، کلاس is-embed را به <html> اضافه کن تا استایل مینیمال مثل قبل اعمال شود
     (function(){
       try { if (window.self !== window.top) { document.documentElement.classList.add('is-embed'); } } catch(e){}
     })();
   </script>
-</head>
-<body>
+{% endblock %}
+
+{% block content %}
 <div class="page-wrap container container-narrow py-3">
 
   <!-- هدر و اکشن‌ها -->
@@ -110,12 +113,8 @@
         {% elif LAB_PROFILE.logo_static_path %}
           <img class="brand-logo" src="{% static LAB_PROFILE.logo_static_path %}" alt="{{ LAB_PROFILE.name|default:'Lab' }}">
         {% endif %}
-        {% if LAB_PROFILE.name %}
-          <div class="brand-title">{{ LAB_PROFILE.name }}</div>
-        {% endif %}
-        {% if LAB_PROFILE.slogan %}
-          <div class="brand-sub">{{ LAB_PROFILE.slogan }}</div>
-        {% endif %}
+        {% if LAB_PROFILE.name %}<div class="brand-title">{{ LAB_PROFILE.name }}</div>{% endif %}
+        {% if LAB_PROFILE.slogan %}<div class="brand-sub">{{ LAB_PROFILE.slogan }}</div>{% endif %}
       </div>
     {% endif %}
   {% endif %}
@@ -297,32 +296,35 @@
   </div>
 
 </div>
+{% endblock %}
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<script>
-  // بستن مودال از داخل iframe (اگر در مودال باشیم)
-  (function(){
-    var btn = document.getElementById('btn-close-embed');
-    if (!btn) return;
-    btn.addEventListener('click', function(e){
-      e.preventDefault();
-      try {
-        if (window.self !== window.top) {
-          var modalEl = window.parent.document.getElementById('invoiceModal');
-          if (modalEl && window.parent.bootstrap) {
-            var inst = window.parent.bootstrap.Modal.getOrCreateInstance(modalEl);
-            inst.hide();
-            return;
+{% block body_extra %}
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // بستن مودال از داخل iframe (اگر در مودال باشیم)
+    (function(){
+      var btn = document.getElementById('btn-close-embed');
+      if (!btn) return;
+      btn.addEventListener('click', function(e){
+        e.preventDefault();
+        try {
+          if (window.self !== window.top) {
+            var modalEl = window.parent.document.getElementById('invoiceModal');
+            if (modalEl && window.parent.bootstrap) {
+              var inst = window.parent.bootstrap.Modal.getOrCreateInstance(modalEl);
+              inst.hide();
+              return;
+            }
           }
-        }
-      } catch(_) {}
-      // اگر مودال نبود، برگرد به صفحهٔ قبل
-      if (history.length > 1) history.back();
-    });
-  })();
-</script>
-</body>
-</html>
+        } catch(_) {}
+        // اگر مودال نبود، برگرد به صفحهٔ قبل
+        if (history.length > 1) history.back();
+      });
+    })();
+  </script>
+{% endblock %}
+
+
 
 
 

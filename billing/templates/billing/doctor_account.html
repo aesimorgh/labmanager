@@ -38,7 +38,6 @@
     <li class="nav-item">
       <span class="nav-link active">حساب دکتر{% if doctor %} — {{ doctor.name }}{% endif %}</span>
     </li>
-    <!-- در آینده می‌توان ساب‌تب‌های مالی دیگر را افزود -->
   </ul>
 {% endblock %}
 
@@ -154,8 +153,11 @@
         </div>
         <div class="col-md-3">
           <label class="form-label">تاریخ پرداخت</label>
-          <input type="text" name="date" id="pay_date" class="form-control" placeholder="YYYY/MM/DD">
-          <div class="form-text">در صورت خالی بودن، تاریخ امروز ثبت می‌شود.</div>
+          <!-- فیلد نمایشی شمسی -->
+          <input type="text" id="pay_date" class="form-control" placeholder="YYYY/MM/DD" autocomplete="off">
+          <!-- فیلد پنهان که میلادیِ درست را با name=date ارسال می‌کند -->
+          <input type="hidden" name="date" id="pay_date_hidden">
+          <div class="form-text">اگر خالی باشد، تاریخ امروز ثبت می‌شود.</div>
         </div>
         <div class="col-md-3">
           <label class="form-label">روش پرداخت</label>
@@ -195,7 +197,8 @@
               {% for p in payments %}
                 <tr>
                   <td class="num">{{ forloop.counter|int_fa }}</td>
-                  <td>{% if p.date %}{{ p.date|to_jalali:"%Y/%m/%d" }}{% else %}—{% endif %}</td>
+                  <!-- تاریخِ ذخیره‌شده را به صورت ISO می‌گذاریم؛ JS پایین تصمیم می‌گیرد چگونه نمایش دهد -->
+                  <td class="pdate" data-gdate="{{ p.date|date:'Y-m-d' }}"></td>
                   <td class="num">{{ p.amount|default:0|money_fa }}</td>
                   <td>{% if p.method %}{{ p.method }}{% else %}—{% endif %}</td>
                   <td class="small">{{ p.note|default:"—" }}</td>
@@ -210,7 +213,7 @@
     </div>
   </div>
 
-  <div class="text-center text-muted small mt-3">Doctor Account • v1.2</div>
+  <div class="text-center text-muted small mt-3">Doctor Account • v1.3</div>
 
 </div>
 {% endblock %}
@@ -220,8 +223,8 @@
   <script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
   <script>
-    // تقویم شمسی برای تاریخ پرداخت
     (function(){
+      // --- فعال‌سازی تقویم شمسی روی فیلد نمایشی
       try {
         var $el = $("#pay_date");
         if ($el.length && !$el.data('pDatepicker')) {
@@ -232,9 +235,60 @@
           });
         }
       } catch(e){}
+
+      // --- تبدیل مقدار شمسی به میلادی و ارسال در hidden[name=date]
+      $("#paymentForm").on("submit", function(){
+        var v = ($("#pay_date").val() || "").trim();
+        if (!v){
+          $("#pay_date_hidden").val(""); // خالی = بگذار سرور تاریخ امروز بگذارد
+          return true;
+        }
+        try{
+          // ورودی به شکل 1404/07/10
+          var parts = v.replace(/-/g,'/').split('/');
+          var jy = parseInt(parts[0],10),
+              jm = parseInt(parts[1],10),
+              jd = parseInt(parts[2],10);
+          // تبدیل به میلادی با persian-date
+          var g = persianDate.toGregorian(jy, jm, jd);  // {gy, gm, gd}
+          var pad = function(n){ return (n<10?'0':'')+n; };
+          var iso = g.gy + '-' + pad(g.gm) + '-' + pad(g.gd);
+          $("#pay_date_hidden").val(iso);
+        }catch(err){
+          // اگر هر دلیلی نشد، همان مقدار را نگذار تا سرور خطا نگیرد
+          $("#pay_date_hidden").val("");
+        }
+        return true;
+      });
+
+      // --- نمایش تاریخ پرداخت‌ها به‌صورت شمسی درست
+      // اگر سالِ ذخیره‌شده >= 1700 باشد یعنی میلادیِ صحیح → به شمسی تبدیل کن.
+      // اگر سال < 1700 (مثل 1404) یعنی قبلاً شمسی را اشتباهی میلادی ذخیره کرده‌ایم → همان را نمایش بده (فقط ارقام فارسی).
+      function faDigits(s){ return (s+'').replace(/\d/g, d=>"۰۱۲۳۴۵۶۷۸۹"[d]); }
+
+      document.querySelectorAll('td.pdate[data-gdate]').forEach(function(td){
+        var iso = td.getAttribute('data-gdate');   // مثل "1404-07-10" یا "2025-10-02"
+        if(!iso){ td.textContent='—'; return; }
+        var y = parseInt(iso.slice(0,4),10);
+        if (y >= 1700) {
+          // میلادی → شمسی
+          try{
+            var g = new Date(iso + 'T00:00:00');
+            var p = new persianDate(g).calendar('persian').format('YYYY/MM/DD');
+            td.textContent = p;
+          }catch(e){
+            td.textContent = faDigits(iso.replace(/-/g,'/'));
+          }
+        } else {
+          // موردِ خرابِ قبلی (شمسی را میلادی ذخیره کرده بودیم) → همان را با ارقام فارسی نشان بده
+          td.textContent = faDigits(iso.replace(/-/g,'/'));
+        }
+        td.classList.add('muted');
+      });
     })();
   </script>
 {% endblock %}
+
 
 
 

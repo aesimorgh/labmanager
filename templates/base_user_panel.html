@@ -5,7 +5,6 @@
   <meta charset="utf-8">
   <title>{% block title %}پنل کاربری{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-
   <style>
     :root{--c-border:#e5e7eb;--c-bg:#fff;--c-muted:#6b7280;--c-active:#0d6efd;}
     body{margin:0;background:#f8fafc;font-family:system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans",Tahoma;}
@@ -24,7 +23,6 @@
     .alert-error{border-color:#fca5a5;background:#fef2f2;}
     .small{font-size:.875rem;color:var(--c-muted);}
   </style>
-
   {% block head_extra %}{% endblock %}
 </head>
 <body>
@@ -48,7 +46,6 @@
 <div class="tabs">
   <div class="container">
     <ul class="nav" role="tablist">
-      <!-- اگر مسیرهایت متفاوت است، فقط همین hrefها را به اسلاگ‌های واقعی پروژه‌ات تغییر بده -->
       <li><a data-key="/dashboard" href="/dashboard/" class="{% if '/dashboard' in request.path or request.path == '/' %}active{% endif %}">داشبورد</a></li>
       <li><a data-key="/orders"    href="/orders/"    class="{% if '/orders'    in request.path %}active{% endif %}">سفارش‌ها</a></li>
       <li><a data-key="/billing"   href="/billing/"   class="{% if '/billing'   in request.path %}active{% endif %}">مالی</a></li>
@@ -68,36 +65,45 @@
     </div>
   {% endif %}
 
+  {# هردو حالت را پشتیبانی می‌کنیم + پیام پیش‌فرض اگر هیچ کدام نبود #}
   {% block content %}
-    <div class="card"><div class="card-body">
-      <p class="small">اسکلت پنل کاربری آماده است. صفحات دیگر می‌توانند از این قالب ارث‌بری کنند.</p>
-    </div></div>
+    {% block body %}
+      <div class="card"><div class="card-body">
+        <p class="small">اسکلت پنل کاربری آماده است. صفحات دیگر می‌توانند از این قالب ارث‌بری کنند.</p>
+      </div></div>
+    {% endblock %}
   {% endblock %}
 </main>
 
 {% block body_extra %}{% endblock %}
 
 <script>
-/* فعال‌سازی بصری تب مناسب اگر از سمت سرور ست نشده باشد */
 (function(){
   const nav = document.querySelector('.tabs .nav');
   if(!nav) return;
   const links = Array.from(nav.querySelectorAll('a'));
+  const path = (location && location.pathname) ? location.pathname.replace(/\/+$/,'') : '';
 
-  function setActive(el){
-    links.forEach(a => a.classList.remove('active'));
-    if(el) el.classList.add('active');
+  // بر اساس data-key تطبیق می‌دهیم
+  let matched = null;
+  for (const a of links) {
+    const key = (a.dataset.key || '').replace(/\/+$/,'');
+    if (key && (path === key || path.startsWith(key + '/'))) {
+      matched = a;
+      break;
+    }
   }
 
-  const hasActive = links.some(a => a.classList.contains('active'));
-  if(!hasActive){
-    const path = (location && location.pathname) ? location.pathname : '';
-    const match = links.find(a => a.dataset.key && path.indexOf(a.dataset.key) !== -1);
-    setActive(match || links[0]);
+  // فقط اگر match پیدا شد، active را جابجا کن
+  if (matched) {
+    links.forEach(a => a.classList.remove('active'));
+    matched.classList.add('active');
   }
 })();
 </script>
 </body>
 </html>
+
+
 
 

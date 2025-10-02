@@ -1,0 +1,31 @@
+{# templates/core/partials/_orders_table.html #}
+<div style="overflow:auto">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>#</th><th>بیمار</th><th>پزشک</th><th>نوع</th><th>وضعیت</th><th>تحویل</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% if rows %}
+      {% for o in rows %}
+      <tr>
+        <td class="num">{{ forloop.counter|int_fa }}</td>
+        <td>{{ o.patient_name }}</td>
+        <td>{{ o.doctor }}</td>
+        <td>{{ o.get_order_type_display|default:o.order_type }}</td>
+        <td>
+          {% if o.status == 'done' or o.status == 'delivered' %}<span class="muted">تحویل‌شده</span>
+          {% elif o.status == 'in_progress' %}<span>درحال انجام</span>
+          {% else %}<span class="muted">{{ o.status }}</span>{% endif %}
+        </td>
+        <td class="muted">{% if o.due_date %}{{ o.due_date|jalali_date }}{% else %}—{% endif %}</td>
+        <td><a class="btn" href="{% url 'core:order_detail' o.id %}">جزئیات</a></td>
+      </tr>
+      {% endfor %}
+    {% else %}
+      <tr><td colspan="7" class="muted">آیتمی برای نمایش نیست.</td></tr>
+    {% endif %}
+    </tbody>
+  </table>
+</div>
