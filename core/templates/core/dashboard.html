@@ -131,6 +131,7 @@
                   <th>نوع</th>
                   <th>وضعیت</th>
                   <th>تحویل</th>
+                  <th>ثبت</th>
                   <th></th>
                 </tr>
               </thead>
@@ -155,6 +156,9 @@
                   <td class="muted">
                     {% if o.due_date %}{{ o.due_date|jalali_date }}{% else %}—{% endif %}
                   </td>
+                  <td class="muted">
+                    {% if o.order_date %}{{ o.order_date|jalali_date }}{% else %}—{% endif %}
+                  </td>
                   <td><a class="btn" href="{% url 'core:order_detail' o.id %}">جزئیات</a></td>
                 </tr>
               {% endfor %}
@@ -173,7 +177,8 @@
 <div id="content-orders-today" class="hidden">
   <div style="overflow:auto">
     <table class="table">
-      <thead><tr><th>#</th><th>بیمار</th><th>پزشک</th><th>نوع</th><th>وضعیت</th><th>تحویل</th><th></th></tr></thead>
+      <thead><tr><th>#</th><th>بیمار</th><th>پزشک</th><th>نوع</th><th>وضعیت</th><th>تحویل</th><th>ثبت</th>
+<th></th></tr></thead>
       <tbody>
       {% if orders_today_list %}
         {% for o in orders_today_list %}
@@ -189,6 +194,9 @@
               {% else %}<span class="muted">{{ o.status }}</span>{% endif %}
             </td>
             <td class="muted">{% if o.due_date %}{{ o.due_date|jalali_date }}{% else %}—{% endif %}</td>
+            <td class="muted">
+              {% if o.order_date %}{{ o.order_date|jalali_date }}{% else %}—{% endif %}
+            </td>
             <td><a class="btn" href="{% url 'core:order_detail' o.id %}">جزئیات</a></td>
           </tr>
         {% endfor %}
@@ -203,7 +211,8 @@
 <div id="content-orders-month" class="hidden">
   <div style="overflow:auto">
     <table class="table">
-      <thead><tr><th>#</th><th>بیمار</th><th>پزشک</th><th>نوع</th><th>وضعیت</th><th>تحویل</th><th></th></tr></thead>
+      <thead><tr><th>#</th><th>بیمار</th><th>پزشک</th><th>نوع</th><th>وضعیت</th><th>تحویل</th><th>ثبت</th>
+<th></th></tr></thead>
       <tbody>
       {% if orders_month_list %}
         {% for o in orders_month_list %}
@@ -219,6 +228,9 @@
               {% else %}<span class="muted">{{ o.status }}</span>{% endif %}
             </td>
             <td class="muted">{% if o.due_date %}{{ o.due_date|jalali_date }}{% else %}—{% endif %}</td>
+            <td class="muted">
+              {% if o.order_date %}{{ o.order_date|jalali_date }}{% else %}—{% endif %}
+            </td>
             <td><a class="btn" href="{% url 'core:order_detail' o.id %}">جزئیات</a></td>
           </tr>
         {% endfor %}

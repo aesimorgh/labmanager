@@ -313,71 +313,215 @@ def deliver_order(request, order_id):
     next_url = request.GET.get("next") or request.META.get("HTTP_REFERER") or reverse("core:home")
     return redirect(next_url)
 
-# --- Dashboard (program) ---
-# --- Dashboard (program) ---
+
+from datetime import date
 from django.utils import timezone
 from django.shortcuts import render
-from django.db.models import Q
 from django.apps import apps
 
 def dashboard(request):
     """
-    داشبورد برنامه: KPIهای سفارش‌ها + آخرین سفارش‌ها.
-    (موقتا بدون login_required تا صفحه بالا بیاد)
+    داشبورد برنامه: KPIهای سفارش‌ها + آخرین سفارش‌ها + لیست‌های خام برای مودال‌ها.
+    مبنای KPI ماه جاری = order_date (کل ماه جاری، نه فقط تا امروز).
+    برای TODAY همان منطق قبلی حفظ شده.
     """
+    # import های محلی تا نیاز به تغییر سرِ فایل نباشد
+    from datetime import date, timedelta
+    try:
+        import jdatetime
+    except Exception:
+        jdatetime = None
+
     try:
         Order = apps.get_model('core', 'Order')
     except Exception:
         Order = None
 
-    today_g = timezone.localdate()
+    today_g = timezone.localdate()  # میلادی
+    tomorrow_g = date.fromordinal(today_g.toordinal() + 1)
 
+    # ---------- کمکی‌ها ----------
+    def pick_date_field(Model):
+        fns = {f.name for f in Model._meta.get_fields()}
+        return 'order_date' if 'order_date' in fns else ('created_at' if 'created_at' in fns else None)
+
+    def field_type(Model, fname):
+        return Model._meta.get_field(fname).get_internal_type() if fname else None
+
+    def sample_value(Model, fname):
+        if not fname:
+            return None
+        try:
+            return Model.objects.exclude(**{fname: None}).order_by('-id').values_list(fname, flat=True).first()
+        except Exception:
+            return None
+
+    # ---------- آماده‌سازی ----------
     kpis = {
         'orders_today': 0,
         'orders_month': 0,
         'in_progress': 0,
         'done': 0,
         'overdue': 0,
+        'deliveries_today': 0,
+        'deliveries_tomorrow': 0,
         'open_invoices': None,
     }
+    orders_today_list = []
+    orders_month_list = []
+    in_progress_list = []
+    delivered_list = []
+    overdue_list = []
+    deliveries_today_list = []
+    deliveries_tomorrow_list = []
     latest_orders = []
 
     if Order is not None:
-        orders = Order.objects.all()
-        field_names = {f.name for f in Order._meta.get_fields()}
+        qs_all = Order._base_manager.all()
+        fns = {f.name for f in Order._meta.get_fields()}
 
-        date_field = 'order_date' if 'order_date' in field_names else ('created_at' if 'created_at' in field_names else None)
-        status_field = 'status' if 'status' in field_names else None
+        date_field = pick_date_field(Order)
+        status_field = 'status' if 'status' in fns else None
+        df_type = field_type(Order, date_field)
 
-        def _date_filters(start_date_g, end_date_g):
-            if not date_field:
-                return {}
-            df_type = Order._meta.get_field(date_field).get_internal_type()
-            if df_type == 'DateTimeField':
-                return {f'{date_field}__date__gte': start_date_g, f'{date_field}__date__lte': end_date_g}
+        # آیا مقدار فیلد تاریخ از جنس jdatetime.date است؟
+        sample = sample_value(Order, date_field)
+        is_jalali_value = bool(
+            jdatetime and (
+                date_field == 'order_date'
+                or (sample is not None and getattr(sample, '__class__', type(sample)).__module__.startswith('jdatetime'))
+            )
+        )
+
+        # تاریخ‌های امروز/ماه جاری (جلالی/میلادی)
+        if jdatetime:
+            jt_today = jdatetime.date.fromgregorian(date=today_g)
+            # مرزهای ماه جلالی: اول ماه جاری تا آخر ماه جاری
+            jt_month_start = jdatetime.date(jt_today.year, jt_today.month, 1)
+            if jt_today.month == 12:
+                jt_next_month_first = jdatetime.date(jt_today.year + 1, 1, 1)
             else:
-                return {f'{date_field}__gte': start_date_g, f'{date_field}__lte': end_date_g}
-
-        if date_field:
-            kpis['orders_today'] = orders.filter(**_date_filters(today_g, today_g)).count()
-            month_start = today_g.replace(day=1)
-            kpis['orders_month'] = orders.filter(**_date_filters(month_start, today_g)).count()
+                jt_next_month_first = jdatetime.date(jt_today.year, jt_today.month + 1, 1)
+            jt_month_end = jt_next_month_first - timedelta(days=1)
         else:
-            kpis['orders_today'] = kpis['orders_month'] = orders.count()
+            jt_today = jt_month_start = jt_month_end = None
 
+        # مرزهای ماه میلادی (برای fallback‌ها یا وقتی فیلد میلادی است)
+        month_start_g = today_g.replace(day=1)
+        if today_g.month == 12:
+            next_month_first_g = date(today_g.year + 1, 1, 1)
+        else:
+            next_month_first_g = date(today_g.year, today_g.month + 1, 1)
+        month_end_g = next_month_first_g - timedelta(days=1)
+
+        # ---------- امروز ----------
+        if date_field:
+            if is_jalali_value:
+                # فیلد تاریخ جلالی (jdatetime.date)
+                q_today = qs_all.filter(**{date_field: jt_today})
+            else:
+                # فیلد تاریخ میلادی (Date/DateTime)
+                if df_type == 'DateTimeField':
+                    q_today = qs_all.filter(**{f'{date_field}__date': today_g})
+                elif df_type == 'DateField':
+                    q_today = qs_all.filter(**{date_field: today_g})
+                else:
+                    q_today = qs_all.none()
+
+            kpis['orders_today'] = q_today.count()
+            orders_today_list = list(q_today[:200])
+
+        # ---------- ماه جاری (مبنای order_date، «کل ماه»، نه فقط تا امروز) ----------
+        if date_field:
+            if is_jalali_value:
+                # order_date جلالی: کل ماه
+                q_month = qs_all.filter(**{
+                    f'{date_field}__gte': jt_month_start,
+                    f'{date_field}__lte': jt_month_end
+                })
+            else:
+                # order_date میلادی
+                if df_type == 'DateTimeField':
+                    q_month = qs_all.filter(**{
+                        f'{date_field}__date__gte': month_start_g,
+                        f'{date_field}__date__lte': month_end_g
+                    })
+                elif df_type == 'DateField':
+                    q_month = qs_all.filter(**{
+                        f'{date_field}__gte': month_start_g,
+                        f'{date_field}__lte': month_end_g
+                    })
+                else:
+                    q_month = qs_all.none()
+
+            kpis['orders_month'] = q_month.count()
+            orders_month_list = list(q_month[:500])
+
+        # ---------- وضعیت‌ها ----------
         if status_field:
-            kpis['in_progress'] = orders.filter(**{f'{status_field}__iexact': 'in_progress'}).count()
-            kpis['done']        = orders.filter(**{f'{status_field}__iexact': 'delivered'}).count()
+            q_inp  = qs_all.filter(**{f'{status_field}__iexact': 'in_progress'})
+            q_delv = qs_all.filter(**{f'{status_field}__iexact': 'delivered'})
+            kpis['in_progress'] = q_inp.count()
+            kpis['done']        = q_delv.count()
+            in_progress_list    = list(q_inp[:300])
+            delivered_list      = list(q_delv[:300])
 
-        if 'due_date' in field_names:
-            q = Q(due_date__lt=str(today_g))
-            if status_field:
-                q &= ~Q(**{f'{status_field}__iexact': 'delivered'})
-            kpis['overdue'] = orders.filter(q).count()
+        # ---------- معوق / تحویل‌های امروز/فردا ----------
+        if 'due_date' in fns:
+            due_type = field_type(Order, 'due_date')
+            due_sample = sample_value(Order, 'due_date')
+            due_is_jalali = bool(jdatetime and due_sample is not None and due_sample.__class__.__module__.startswith('jdatetime'))
 
+            if due_is_jalali:
+                q_over = qs_all.filter(due_date__lt=jt_today)
+                if status_field:
+                    q_over = q_over.exclude(**{f'{status_field}__iexact': 'delivered'})
+                kpis['overdue'] = q_over.count()
+                overdue_list    = list(q_over[:300])
+
+                q_dt = qs_all.filter(due_date=jt_today)
+                q_tm = qs_all.filter(due_date=jdatetime.date.fromgregorian(date=tomorrow_g))
+                if status_field:
+                    q_dt = q_dt.exclude(**{f'{status_field}__iexact': 'delivered'})
+                    q_tm = q_tm.exclude(**{f'{status_field}__iexact': 'delivered'})
+                kpis['deliveries_today']    = q_dt.count()
+                kpis['deliveries_tomorrow'] = q_tm.count()
+                deliveries_today_list       = list(q_dt[:300])
+                deliveries_tomorrow_list    = list(q_tm[:300])
+
+            else:
+                if due_type == 'DateField':
+                    q_over = qs_all.filter(due_date__lt=today_g)
+                elif due_type == 'DateTimeField':
+                    q_over = qs_all.filter(due_date__date__lt=today_g)
+                else:
+                    q_over = qs_all.none()
+                if status_field:
+                    q_over = q_over.exclude(**{f'{status_field}__iexact': 'delivered'})
+                kpis['overdue'] = q_over.count()
+                overdue_list    = list(q_over[:300])
+
+                if due_type == 'DateField':
+                    q_dt = qs_all.filter(due_date=today_g)
+                    q_tm = qs_all.filter(due_date=tomorrow_g)
+                elif due_type == 'DateTimeField':
+                    q_dt = qs_all.filter(due_date__date=today_g)
+                    q_tm = qs_all.filter(due_date__date=tomorrow_g)
+                else:
+                    q_dt = q_tm = qs_all.none()
+                if status_field:
+                    q_dt = q_dt.exclude(**{f'{status_field}__iexact': 'delivered'})
+                    q_tm = q_tm.exclude(**{f'{status_field}__iexact': 'delivered'})
+                kpis['deliveries_today']    = q_dt.count()
+                kpis['deliveries_tomorrow'] = q_tm.count()
+                deliveries_today_list       = list(q_dt[:300])
+                deliveries_tomorrow_list    = list(q_tm[:300])
+
+        # ---------- آخرین سفارش‌ها ----------
         order_by = f'-{date_field}' if date_field else '-id'
-        latest_orders = list(orders.order_by(order_by)[:8])
+        latest_orders = list(qs_all.order_by(order_by)[:8])
 
+    # فاکتورهای باز (اگر app billing باشد)
     try:
         Invoice = apps.get_model('billing', 'Invoice')
         issued_val = getattr(Invoice.Status, 'ISSUED', 'issued')
@@ -388,7 +532,17 @@ def dashboard(request):
     return render(request, 'core/dashboard.html', {
         'kpis': kpis,
         'latest_orders': latest_orders,
+        'orders_today_list': orders_today_list,
+        'orders_month_list': orders_month_list,
+        'in_progress_list': in_progress_list,
+        'delivered_list': delivered_list,
+        'overdue_list': overdue_list,
+        'deliveries_today_list': deliveries_today_list,
+        'deliveries_tomorrow_list': deliveries_tomorrow_list,
     })
+
+
+
 
 
 
