@@ -732,6 +732,42 @@ admin.site.index_title = "داشبورد مدیریت"
 admin.site.site_title = "مدیریت لابراتوار"
 
 
+# =======================================================================
+# 🆕 فقط اضافه شد: ثبت «LabSettings» به‌صورت Singleton (اگر مدل موجود باشد)
+# =======================================================================
+try:
+    from django.apps import apps as _apps
+    LabSettings = _apps.get_model('core', 'LabSettings')
+except Exception:
+    LabSettings = None
+
+if LabSettings:
+    @admin.register(LabSettings)
+    class LabSettingsAdmin(admin.ModelAdmin):
+        """ادمین تنظیمات؛ فقط یک رکورد مجاز است و لیست به ویرایش منتقل می‌شود."""
+
+        # فیلدهای فرم را داینامیک از مدل می‌خوانیم (بدون 'id')
+        def get_fields(self, request, obj=None):
+            return [f.name for f in LabSettings._meta.fields if f.editable and f.name != 'id']
+
+        # ستون‌های لیست را کوتاه و کاربردی نگه می‌داریم
+        def get_list_display(self, request):
+            fields = self.get_fields(request)
+            preferred = [f for f in ('facility_name', 'owner_name', 'phone', 'email', 'default_currency') if f in fields]
+            return tuple(preferred) or tuple(fields[:4])
+
+        # فقط یک رکورد مجاز است
+        def has_add_permission(self, request):
+            return LabSettings.objects.count() == 0
+
+        # لیست را به «ویرایش اولین رکورد» ریدایرکت می‌کنیم
+        def changelist_view(self, request, extra_context=None):
+            qs = LabSettings.objects.all()
+            if qs.exists():
+                obj = qs.first()
+                return HttpResponseRedirect(reverse('admin:core_labsettings_change', args=[obj.pk]))
+            return HttpResponseRedirect(reverse('admin:core_labsettings_add'))
+
 
 
 

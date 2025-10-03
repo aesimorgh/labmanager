@@ -14,14 +14,14 @@ from django.views.generic import TemplateView
 urlpatterns = [
     path('admin/', admin.site.urls),
 
-    # روت اپ core (خانه، سفارش‌ها، داشبوردِ خودت و ... از همین‌جا می‌آید)
+    # روت اپ core (خانه، سفارش‌ها، داشبورد و ...)
     path('', include(('core.urls', 'core'), namespace='core')),
 
-    # ✅ خیلی مهم: روت مالی باید به billing.urls وصل باشد (نه TemplateView)
+    # روت مالی
     path('billing/', include(('billing.urls', 'billing'), namespace='billing')),
 
-    # Placeholder برای تنظیمات (لازم داری حفظش کن)
-    path('settings/', TemplateView.as_view(template_name='base_user_panel.html'), name='settings'),
+    # Placeholder تنظیمات (همان چیزی که قبل داشتی)
+    path('settings/', include(('settings_app.urls', 'settings_app'), namespace='settings_app')),
 ]
 
 # DEBUG: سروِ مدیا

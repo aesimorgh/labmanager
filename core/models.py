@@ -161,6 +161,38 @@ class Doctor(models.Model):
     def __str__(self):
         return self.name
 
+# =========================
+# Lab-wide Settings (singleton)
+# =========================
+class LabSettings(models.Model):
+    lab_name          = models.CharField(max_length=200, verbose_name="نام لابراتوار", blank=True, default="")
+    address           = models.TextField(verbose_name="آدرس", blank=True, default="")
+    phone             = models.CharField(max_length=50, verbose_name="تلفن", blank=True, default="")
+    whatsapp          = models.CharField(max_length=50, verbose_name="واتس‌اپ", blank=True, default="")
+    currency          = models.CharField(max_length=20, verbose_name="واحد پول", default="تومان", blank=True)
+    tax_rate          = models.DecimalField(max_digits=5, decimal_places=2, verbose_name="نرخ مالیات (%)", default=0)
+    default_due_days  = models.PositiveSmallIntegerField(verbose_name="مهلت پیش‌فرض (روز)", default=7)
+    jalali_enabled    = models.BooleanField(verbose_name="تقویم جلالی فعال باشد؟", default=True)
+    logo              = models.ImageField(upload_to='settings/', null=True, blank=True, verbose_name="لوگو (اختیاری)")
+
+    created_at        = models.DateTimeField(auto_now_add=True)
+    updated_at        = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "تنظیمات لابراتوار"
+        verbose_name_plural = "تنظیمات لابراتوار"
+        # فقط یک رکورد نگه می‌داریم؛ ترتیب اهمیتی ندارد
+
+    def __str__(self):
+        return self.lab_name or "تنظیمات لابراتوار"
+
+    @classmethod
+    def get_solo(cls):
+        """
+        همیشه رکورد با pk=1 را برمی‌گرداند؛ اگر نبود می‌سازد.
+        """
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
 
 
 
