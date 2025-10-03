@@ -9,9 +9,25 @@
     .wrap{display:grid;gap:1rem}
     .heading{font-weight:800;font-size:1.25rem;margin:.25rem 0 1rem}
     .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem}
-    .kpi{border:1px solid #e5e7eb;background:#fff;border-radius:.75rem;padding:.8rem;cursor:pointer}
-    .kpi .t{font-size:.9rem;color:#6b7280;margin-bottom:.25rem}
-    .kpi .v{font-weight:800;font-size:1.2rem;font-variant-numeric:tabular-nums}
+    .kpi{border:1px solid #e5e7eb;background:#fff;border-radius:.75rem;padding:.9rem;cursor:pointer;transition:transform .12s ease, box-shadow .12s ease}
+    .kpi:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(0,0,0,.08)}
+    .kpi .t{font-size:.9rem;color:#64748b;margin-bottom:.35rem}
+    .kpi .v{font-weight:800;font-size:1.25rem;font-variant-numeric:tabular-nums;color:#0f172a}
+
+    /* کارت‌های رنگی ملایم (pastel) */
+    .kpi.colored{color:#0f172a;border-color:#e5e7eb}
+    .kpi.colored .t{color:#475569}
+    .kpi--blue  {background:linear-gradient(135deg,#eef4ff 0%, #e6eeff 100%)}
+    .kpi--green {background:linear-gradient(135deg,#e8f8ef 0%, #dcf6e7 100%)}
+    .kpi--amber {background:linear-gradient(135deg,#fff6e1 0%, #ffefcc 100%)}
+    .kpi--purple{background:linear-gradient(135deg,#f3eaff 0%, #ece2ff 100%)}
+    .kpi--red   {background:linear-gradient(135deg,#ffe9e9 0%, #ffdede 100%)}
+    .kpi--teal  {background:linear-gradient(135deg,#e9fffb 0%, #d8fbf5 100%)}
+    .kpi--indigo{background:linear-gradient(135deg,#eef0ff 0%, #e6e8ff 100%)}
+    .kpi--slate {background:linear-gradient(135deg,#f2f6fa 0%, #eef3f8 100%)}
+
+    .kpi--link{display:block;text-decoration:none}
+
     .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1rem;margin-top:1rem}
     .card{border:1px solid #e5e7eb;background:#fff;border-radius:.75rem}
     .card-h{padding:.6rem .9rem;border-bottom:1px solid #e5e7eb;font-weight:700}
@@ -23,7 +39,7 @@
     .search input{border:1px solid #e5e7eb;border-radius:.5rem;padding:.5rem .6rem;min-width:260px}
     .table{width:100%;border-collapse:collapse}
     .table th,.table td{padding:.45rem .55rem;border-top:1px solid #eef2f7;text-align:start}
-    .table thead th{background:#f8fafc;white-space:nowrap}
+    .table thead th{background:#f8fafc;white-space:nowrap;position:sticky;top:0;z-index:1}
     .num{text-align:end;font-variant-numeric:tabular-nums}
     .muted{color:#6b7280}
     @media (max-width: 520px){ .search input{flex:1} }
@@ -32,10 +48,20 @@
     .m-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:1000}
     .m-card{background:#fff;max-width:980px;width:96%;border-radius:.75rem;border:1px solid #e5e7eb;box-shadow:0 10px 30px rgba(0,0,0,.15)}
     .m-h{display:flex;align-items:center;justify-content:space-between;padding:.7rem 1rem;border-bottom:1px solid #e5e7eb;font-weight:700}
-    .m-b{padding:1rem;max-height:70vh;overflow:auto}
+    .m-b{padding:1rem;max-height:70vh;overflow:auto}  /* تنها اسکرولر همین‌جاست */
     .m-close{border:none;background:transparent;font-size:1.2rem;line-height:1;cursor:pointer}
-    .hidden{display:none}
+
+    .tbl-toolbar{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.5rem}
+    .chip{border:1px solid #e5e7eb;border-radius:999px;padding:.25rem .6rem;background:#fff;cursor:pointer;font-size:.9rem}
+    .chip.active{background:#111827;color:#fff;border-color:#111827}
+    th.sortable{cursor:pointer}
+    th.sortable:after{content:"↕";margin-inline-start:.35rem;font-size:.8em;color:#9ca3af}
+    th.sortable.asc:after{content:"↑"}
+    th.sortable.desc:after{content:"↓"}
+
+    .chart-wrap{height:320px}
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 {% endblock %}
 
 {% block subtabs %}
@@ -43,7 +69,6 @@
     <li class="nav-item"><span class="nav-link active">داشبورد</span></li>
     <li class="nav-item"><a class="nav-link" href="{% url 'core:orders_home' %}">سفارش‌ها</a></li>
     <li class="nav-item"><a class="nav-link" href="{% url 'billing:financial_home' %}">مالی</a></li>
-    {# 🔧 FIX: مسیر تنظیمات در روت پروژه با نام 'settings' است، نه 'core:settings' #}
     <li class="nav-item"><a class="nav-link" href="{% url 'settings' %}">تنظیمات</a></li>
   </ul>
 {% endblock %}
@@ -52,51 +77,47 @@
 <div class="wrap">
   <div class="heading">خلاصهٔ وضعیت</div>
 
-  <!-- KPI -->
   <div class="kpis">
-    <div class="kpi" data-title="سفارش‌های امروز" data-target="content-orders-today">
+    <div class="kpi colored kpi--blue" data-title="سفارش‌های امروز" data-target="content-orders-today">
       <div class="t">سفارش‌های امروز</div>
       <div class="v">{{ kpis.orders_today|default:0|int_fa }}</div>
     </div>
-    <div class="kpi" data-title="سفارش‌های ماه جاری" data-target="content-orders-month">
+    <div class="kpi colored kpi--indigo" data-title="سفارش‌های ماه جاری" data-target="content-orders-month">
       <div class="t">سفارش‌های ماه جاری (تعداد)</div>
       <div class="v">{{ kpis.orders_month|default:0|int_fa }}</div>
     </div>
-    <div class="kpi" data-title="درحال انجام" data-target="content-in-progress">
+    <div class="kpi colored kpi--purple" data-title="درحال انجام" data-target="content-in-progress">
       <div class="t">درحال انجام</div>
       <div class="v">{{ kpis.in_progress|default:0|int_fa }}</div>
     </div>
-    <div class="kpi" data-title="تحویل‌شده" data-target="content-delivered">
+    <div class="kpi colored kpi--green" data-title="تحویل‌شده" data-target="content-delivered">
       <div class="t">تحویل‌شده</div>
       <div class="v">{{ kpis.done|default:0|int_fa }}</div>
     </div>
-    <div class="kpi" data-title="معوق (سررسید گذشته)" data-target="content-overdue">
+    <div class="kpi colored kpi--red" data-title="معوق (سررسید گذشته)" data-target="content-overdue">
       <div class="t">معوق (سررسید گذشته)</div>
       <div class="v">{{ kpis.overdue|default:0|int_fa }}</div>
     </div>
-    <!-- دو کارت جدید -->
-    <div class="kpi" data-title="تحویل‌های امروز" data-target="content-deliveries-today">
+    <div class="kpi colored kpi--amber" data-title="تحویل‌های امروز" data-target="content-deliveries-today">
       <div class="t">تحویل‌های امروز</div>
       <div class="v">{{ kpis.deliveries_today|default:0|int_fa }}</div>
     </div>
-    <div class="kpi" data-title="تحویل‌های فردا" data-target="content-deliveries-tomorrow">
+    <div class="kpi colored kpi--teal" data-title="تحویل‌های فردا" data-target="content-deliveries-tomorrow">
       <div class="t">تحویل‌های فردا</div>
       <div class="v">{{ kpis.deliveries_tomorrow|default:0|int_fa }}</div>
     </div>
-    <div class="kpi">
+    <a class="kpi colored kpi--slate kpi--link" href="{% url 'billing:report_open_invoices' %}">
       <div class="t">فاکتورهای باز (مالی)</div>
       <div class="v">
         {% if kpis.open_invoices is not None %}
           {{ kpis.open_invoices|int_fa }}
         {% else %}
-          <span class="muted">—</span>
+          <span style="opacity:.8">—</span>
         {% endif %}
       </div>
-      <div class="muted" style="margin-top:.25rem"><a class="muted" href="{% url 'billing:report_open_invoices' %}">مشاهدهٔ مطالبات باز</a></div>
-    </div>
+    </a>
   </div>
 
-  <!-- دو ستون: جستجوی سریع + آخرین سفارش‌ها -->
   <div class="grid">
     <div class="card">
       <div class="card-h">میانبرها و جستجوی سریع</div>
@@ -153,12 +174,8 @@
                       <span class="muted">{{ o.status }}</span>
                     {% endif %}
                   </td>
-                  <td class="muted">
-                    {% if o.due_date %}{{ o.due_date|jalali_date }}{% else %}—{% endif %}
-                  </td>
-                  <td class="muted">
-                    {% if o.order_date %}{{ o.order_date|jalali_date }}{% else %}—{% endif %}
-                  </td>
+                  <td class="muted">{% if o.due_date %}{{ o.due_date|jalali_date }}{% else %}—{% endif %}</td>
+                  <td class="muted">{% if o.order_date %}{{ o.order_date|jalali_date }}{% else %}—{% endif %}</td>
                   <td><a class="btn" href="{% url 'core:order_detail' o.id %}">جزئیات</a></td>
                 </tr>
               {% endfor %}
@@ -171,223 +188,239 @@
       </div>
     </div>
   </div>
-</div>
 
-{# ---------- محتوای مخفی هر KPI: جداول inline (بدون هیچ include خارجی) ---------- #}
-<div id="content-orders-today" class="hidden">
-  <div style="overflow:auto">
-    <table class="table">
-      <thead><tr><th>#</th><th>بیمار</th><th>پزشک</th><th>نوع</th><th>وضعیت</th><th>تحویل</th><th>ثبت</th>
-<th></th></tr></thead>
-      <tbody>
-      {% if orders_today_list %}
-        {% for o in orders_today_list %}
-          <tr>
-            <td class="num">{{ forloop.counter|int_fa }}</td>
-            <td>{{ o.patient_name }}</td>
-            <td>{{ o.doctor }}</td>
-            <td>{{ o.get_order_type_display|default:o.order_type }}</td>
-            <td>
-              {% if o.status == 'done' %}<span class="muted">انجام‌شده</span>
-              {% elif o.status == 'delivered' %}<span class="muted">تحویل‌شده</span>
-              {% elif o.status == 'in_progress' %}<span>درحال انجام</span>
-              {% else %}<span class="muted">{{ o.status }}</span>{% endif %}
-            </td>
-            <td class="muted">{% if o.due_date %}{{ o.due_date|jalali_date }}{% else %}—{% endif %}</td>
-            <td class="muted">
-              {% if o.order_date %}{{ o.order_date|jalali_date }}{% else %}—{% endif %}
-            </td>
-            <td><a class="btn" href="{% url 'core:order_detail' o.id %}">جزئیات</a></td>
-          </tr>
-        {% endfor %}
-      {% else %}
-        <tr><td colspan="7" class="muted">آیتمی برای نمایش نیست.</td></tr>
-      {% endif %}
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<div id="content-orders-month" class="hidden">
-  <div style="overflow:auto">
-    <table class="table">
-      <thead><tr><th>#</th><th>بیمار</th><th>پزشک</th><th>نوع</th><th>وضعیت</th><th>تحویل</th><th>ثبت</th>
-<th></th></tr></thead>
-      <tbody>
+  <div class="card">
+    <div class="card-h">تفکیک نوع کار در ماه جاری</div>
+    <div class="card-b">
       {% if orders_month_list %}
-        {% for o in orders_month_list %}
-          <tr>
-            <td class="num">{{ forloop.counter|int_fa }}</td>
-            <td>{{ o.patient_name }}</td>
-            <td>{{ o.doctor }}</td>
-            <td>{{ o.get_order_type_display|default:o.order_type }}</td>
-            <td>
-              {% if o.status == 'done' %}<span class="muted">انجام‌شده</span>
-              {% elif o.status == 'delivered' %}<span class="muted">تحویل‌شده</span>
-              {% elif o.status == 'in_progress' %}<span>درحال انجام</span>
-              {% else %}<span class="muted">{{ o.status }}</span>{% endif %}
-            </td>
-            <td class="muted">{% if o.due_date %}{{ o.due_date|jalali_date }}{% else %}—{% endif %}</td>
-            <td class="muted">
-              {% if o.order_date %}{{ o.order_date|jalali_date }}{% else %}—{% endif %}
-            </td>
-            <td><a class="btn" href="{% url 'core:order_detail' o.id %}">جزئیات</a></td>
-          </tr>
-        {% endfor %}
+        <div class="chart-wrap">
+          <canvas id="orders-type-chart" aria-label="Orders By Type Pie" role="img"></canvas>
+        </div>
       {% else %}
-        <tr><td colspan="7" class="muted">آیتمی برای نمایش نیست.</td></tr>
+        <div class="muted">داده‌ای برای نمایش نمودار وجود ندارد.</div>
       {% endif %}
-      </tbody>
-    </table>
+    </div>
   </div>
+
 </div>
 
-<div id="content-in-progress" class="hidden">
-  <div style="overflow:auto">
+{# ===== محتواهای KPI برای مودال‌ها (بدون overflow داخلی تا sticky کار کند) ===== #}
+
+<template id="content-orders-today">
+  <div>
+    <div class="tbl-toolbar" data-has-status="1">
+      <span class="chip active" data-status="all">همه</span>
+      <span class="chip" data-status="in_progress">درحال انجام</span>
+      <span class="chip" data-status="delivered">تحویل‌شده</span>
+    </div>
     <table class="table">
-      <thead><tr><th>#</th><th>بیمار</th><th>پزشک</th><th>نوع</th><th>وضعیت</th><th>تحویل</th><th></th></tr></thead>
+      <thead><tr>
+        <th class="sortable">#</th><th class="sortable">بیمار</th><th class="sortable">پزشک</th>
+        <th class="sortable">نوع</th><th class="sortable">وضعیت</th>
+        <th class="sortable">تحویل</th><th class="sortable">ثبت</th><th></th></tr></thead>
       <tbody>
-      {% if in_progress_list %}
-        {% for o in in_progress_list %}
-          <tr>
-            <td class="num">{{ forloop.counter|int_fa }}</td>
-            <td>{{ o.patient_name }}</td>
-            <td>{{ o.doctor }}</td>
-            <td>{{ o.get_order_type_display|default:o.order_type }}</td>
-            <td>
-              {% if o.status == 'done' %}<span class="muted">انجام‌شده</span>
-              {% elif o.status == 'delivered' %}<span class="muted">تحویل‌شده</span>
-              {% elif o.status == 'in_progress' %}<span>درحال انجام</span>
-              {% else %}<span class="muted">{{ o.status }}</span>{% endif %}
-            </td>
-            <td class="muted">{% if o.due_date %}{{ o.due_date|jalali_date }}{% else %}—{% endif %}</td>
-            <td><a class="btn" href="{% url 'core:order_detail' o.id %}">جزئیات</a></td>
-          </tr>
-        {% endfor %}
-      {% else %}
-        <tr><td colspan="7" class="muted">آیتمی برای نمایش نیست.</td></tr>
-      {% endif %}
+      {% for o in orders_today_list %}
+        <tr>
+          <td class="num">{{ forloop.counter|int_fa }}</td>
+          <td>{{ o.patient_name }}</td>
+          <td>{{ o.doctor }}</td>
+          <td>{{ o.get_order_type_display|default:o.order_type }}</td>
+          <td>{% if o.status == 'done' %}<span class="muted">انجام‌شده</span>{% elif o.status == 'delivered' %}<span class="muted">تحویل‌شده</span>{% elif o.status == 'in_progress' %}<span>درحال انجام</span>{% else %}<span class="muted">{{ o.status }}</span>{% endif %}</td>
+          <td class="muted">{% if o.due_date %}{{ o.due_date|jalali_date }}{% else %}—{% endif %}</td>
+          <td class="muted">{% if o.order_date %}{{ o.order_date|jalali_date }}{% else %}—{% endif %}</td>
+          <td><a class="btn" href="{% url 'core:order_detail' o.id %}">جزئیات</a></td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="8" class="muted">آیتمی برای نمایش نیست.</td></tr>
+      {% endfor %}
       </tbody>
     </table>
   </div>
-</div>
+</template>
 
-<div id="content-delivered" class="hidden">
-  <div style="overflow:auto">
+<template id="content-orders-month">
+  <div>
+    <div class="tbl-toolbar" data-has-status="1">
+      <span class="chip active" data-status="all">همه</span>
+      <span class="chip" data-status="in_progress">درحال انجام</span>
+      <span class="chip" data-status="delivered">تحویل‌شده</span>
+    </div>
     <table class="table">
-      <thead><tr><th>#</th><th>بیمار</th><th>پزشک</th><th>نوع</th><th>وضعیت</th><th>تحویل</th><th></th></tr></thead>
+      <thead><tr>
+        <th class="sortable">#</th><th class="sortable">بیمار</th><th class="sortable">پزشک</th>
+        <th class="sortable">نوع</th><th class="sortable">وضعیت</th>
+        <th class="sortable">تحویل</th><th class="sortable">ثبت</th><th></th></tr></thead>
       <tbody>
-      {% if delivered_list %}
-        {% for o in delivered_list %}
-          <tr>
-            <td class="num">{{ forloop.counter|int_fa }}</td>
-            <td>{{ o.patient_name }}</td>
-            <td>{{ o.doctor }}</td>
-            <td>{{ o.get_order_type_display|default:o.order_type }}</td>
-            <td><span class="muted">تحویل‌شده</span></td>
-            <td class="muted">{% if o.due_date %}{{ o.due_date|jalali_date }}{% else %}—{% endif %}</td>
-            <td><a class="btn" href="{% url 'core:order_detail' o.id %}">جزئیات</a></td>
-          </tr>
-        {% endfor %}
-      {% else %}
-        <tr><td colspan="7" class="muted">آیتمی برای نمایش نیست.</td></tr>
-      {% endif %}
+      {% for o in orders_month_list %}
+        <tr>
+          <td class="num">{{ forloop.counter|int_fa }}</td>
+          <td>{{ o.patient_name }}</td>
+          <td>{{ o.doctor }}</td>
+          <td>{{ o.get_order_type_display|default:o.order_type }}</td>
+          <td>{% if o.status == 'done' %}<span class="muted">انجام‌شده</span>{% elif o.status == 'delivered' %}<span class="muted">تحویل‌شده</span>{% elif o.status == 'in_progress' %}<span>درحال انجام</span>{% else %}<span class="muted">{{ o.status }}</span>{% endif %}</td>
+          <td class="muted">{% if o.due_date %}{{ o.due_date|jalali_date }}{% else %}—{% endif %}</td>
+          <td class="muted">{% if o.order_date %}{{ o.order_date|jalali_date }}{% else %}—{% endif %}</td>
+          <td><a class="btn" href="{% url 'core:order_detail' o.id %}">جزئیات</a></td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="8" class="muted">آیتمی برای نمایش نیست.</td></tr>
+      {% endfor %}
       </tbody>
     </table>
   </div>
-</div>
+</template>
 
-<div id="content-overdue" class="hidden">
-  <div style="overflow:auto">
+<template id="content-in-progress">
+  <div>
+    <div class="tbl-toolbar" data-has-status="1">
+      <span class="chip active" data-status="all">همه</span>
+      <span class="chip" data-status="in_progress">درحال انجام</span>
+      <span class="chip" data-status="delivered">تحویل‌شده</span>
+    </div>
     <table class="table">
-      <thead><tr><th>#</th><th>بیمار</th><th>پزشک</th><th>نوع</th><th>وضعیت</th><th>تحویل</th><th></th></tr></thead>
+      <thead><tr>
+        <th class="sortable">#</th><th class="sortable">بیمار</th><th class="sortable">پزشک</th>
+        <th class="sortable">نوع</th><th class="sortable">وضعیت</th>
+        <th class="sortable">تحویل</th><th></th></tr></thead>
       <tbody>
-      {% if overdue_list %}
-        {% for o in overdue_list %}
-          <tr>
-            <td class="num">{{ forloop.counter|int_fa }}</td>
-            <td>{{ o.patient_name }}</td>
-            <td>{{ o.doctor }}</td>
-            <td>{{ o.get_order_type_display|default:o.order_type }}</td>
-            <td>
-              {% if o.status == 'done' %}<span class="muted">انجام‌شده</span>
-              {% elif o.status == 'delivered' %}<span class="muted">تحویل‌شده</span>
-              {% elif o.status == 'in_progress' %}<span>درحال انجام</span>
-              {% else %}<span class="muted">{{ o.status }}</span>{% endif %}
-            </td>
-            <td class="muted">{% if o.due_date %}{{ o.due_date|jalali_date }}{% else %}—{% endif %}</td>
-            <td><a class="btn" href="{% url 'core:order_detail' o.id %}">جزئیات</a></td>
-          </tr>
-        {% endfor %}
-      {% else %}
+      {% for o in in_progress_list %}
+        <tr>
+          <td class="num">{{ forloop.counter|int_fa }}</td>
+          <td>{{ o.patient_name }}</td>
+          <td>{{ o.doctor }}</td>
+          <td>{{ o.get_order_type_display|default:o.order_type }}</td>
+          <td>درحال انجام</td>
+          <td class="muted">{% if o.due_date %}{{ o.due_date|jalali_date }}{% else %}—{% endif %}</td>
+          <td><a class="btn" href="{% url 'core:order_detail' o.id %}">جزئیات</a></td>
+        </tr>
+      {% empty %}
         <tr><td colspan="7" class="muted">آیتمی برای نمایش نیست.</td></tr>
-      {% endif %}
+      {% endfor %}
       </tbody>
     </table>
   </div>
-</div>
+</template>
 
-<div id="content-deliveries-today" class="hidden">
-  <div style="overflow:auto">
+<template id="content-delivered">
+  <div>
     <table class="table">
-      <thead><tr><th>#</th><th>بیمار</th><th>پزشک</th><th>نوع</th><th>وضعیت</th><th>تحویل</th><th></th></tr></thead>
+      <thead><tr>
+        <th class="sortable">#</th><th class="sortable">بیمار</th><th class="sortable">پزشک</th>
+        <th class="sortable">نوع</th><th>وضعیت</th>
+        <th class="sortable">تحویل</th><th></th></tr></thead>
       <tbody>
-      {% if deliveries_today_list %}
-        {% for o in deliveries_today_list %}
-          <tr>
-            <td class="num">{{ forloop.counter|int_fa }}</td>
-            <td>{{ o.patient_name }}</td>
-            <td>{{ o.doctor }}</td>
-            <td>{{ o.get_order_type_display|default:o.order_type }}</td>
-            <td>
-              {% if o.status == 'done' %}<span class="muted">انجام‌شده</span>
-              {% elif o.status == 'delivered' %}<span class="muted">تحویل‌شده</span>
-              {% elif o.status == 'in_progress' %}<span>درحال انجام</span>
-              {% else %}<span class="muted">{{ o.status }}</span>{% endif %}
-            </td>
-            <td class="muted">{% if o.due_date %}{{ o.due_date|jalali_date }}{% else %}—{% endif %}</td>
-            <td><a class="btn" href="{% url 'core:order_detail' o.id %}">جزئیات</a></td>
-          </tr>
-        {% endfor %}
-      {% else %}
+      {% for o in delivered_list %}
+        <tr>
+          <td class="num">{{ forloop.counter|int_fa }}</td>
+          <td>{{ o.patient_name }}</td>
+          <td>{{ o.doctor }}</td>
+          <td>{{ o.get_order_type_display|default:o.order_type }}</td>
+          <td><span class="muted">تحویل‌شده</span></td>
+          <td class="muted">{% if o.due_date %}{{ o.due_date|jalali_date }}{% else %}—{% endif %}</td>
+          <td><a class="btn" href="{% url 'core:order_detail' o.id %}">جزئیات</a></td>
+        </tr>
+      {% empty %}
         <tr><td colspan="7" class="muted">آیتمی برای نمایش نیست.</td></tr>
-      {% endif %}
+      {% endfor %}
       </tbody>
     </table>
   </div>
-</div>
+</template>
 
-<div id="content-deliveries-tomorrow" class="hidden">
-  <div style="overflow:auto">
+<template id="content-overdue">
+  <div>
     <table class="table">
-      <thead><tr><th>#</th><th>بیمار</th><th>پزشک</th><th>نوع</th><th>وضعیت</th><th>تحویل</th><th></th></tr></thead>
+      <thead><tr>
+        <th class="sortable">#</th><th class="sortable">بیمار</th><th class="sortable">پزشک</th>
+        <th class="sortable">نوع</th><th class="sortable">وضعیت</th>
+        <th class="sortable">تحویل</th><th></th></tr></thead>
       <tbody>
-      {% if deliveries_tomorrow_list %}
-        {% for o in deliveries_tomorrow_list %}
-          <tr>
-            <td class="num">{{ forloop.counter|int_fa }}</td>
-            <td>{{ o.patient_name }}</td>
-            <td>{{ o.doctor }}</td>
-            <td>{{ o.get_order_type_display|default:o.order_type }}</td>
-            <td>
-              {% if o.status == 'done' %}<span class="muted">انجام‌شده</span>
-              {% elif o.status == 'delivered' %}<span class="muted">تحویل‌شده</span>
-              {% elif o.status == 'in_progress' %}<span>درحال انجام</span>
-              {% else %}<span class="muted">{{ o.status }}</span>{% endif %}
-            </td>
-            <td class="muted">{% if o.due_date %}{{ o.due_date|jalali_date }}{% else %}—{% endif %}</td>
-            <td><a class="btn" href="{% url 'core:order_detail' o.id %}">جزئیات</a></td>
-          </tr>
-        {% endfor %}
-      {% else %}
+      {% for o in overdue_list %}
+        <tr>
+          <td class="num">{{ forloop.counter|int_fa }}</td>
+          <td>{{ o.patient_name }}</td>
+          <td>{{ o.doctor }}</td>
+          <td>{{ o.get_order_type_display|default:o.order_type }}</td>
+          <td>{% if o.status == 'done' %}<span class="muted">انجام‌شده</span>{% elif o.status == 'delivered' %}<span class="muted">تحویل‌شده</span>{% elif o.status == 'in_progress' %}<span>درحال انجام</span>{% else %}<span class="muted">{{ o.status }}</span>{% endif %}</td>
+          <td class="muted">{% if o.due_date %}{{ o.due_date|jalali_date }}{% else %}—{% endif %}</td>
+          <td><a class="btn" href="{% url 'core:order_detail' o.id %}">جزئیات</a></td>
+        </tr>
+      {% empty %}
         <tr><td colspan="7" class="muted">آیتمی برای نمایش نیست.</td></tr>
-      {% endif %}
+      {% endfor %}
       </tbody>
     </table>
   </div>
-</div>
+</template>
 
-<!-- Modal -->
+<template id="content-deliveries-today">
+  <div>
+    <table class="table">
+      <thead><tr>
+        <th class="sortable">#</th><th class="sortable">بیمار</th><th class="sortable">پزشک</th>
+        <th class="sortable">نوع</th><th class="sortable">وضعیت</th>
+        <th class="sortable">تحویل</th><th></th></tr></thead>
+      <tbody>
+      {% for o in deliveries_today_list %}
+        <tr>
+          <td class="num">{{ forloop.counter|int_fa }}</td>
+          <td>{{ o.patient_name }}</td>
+          <td>{{ o.doctor }}</td>
+          <td>{{ o.get_order_type_display|default:o.order_type }}</td>
+          <td>{% if o.status == 'done' %}<span class="muted">انجام‌شده</span>{% elif o.status == 'delivered' %}<span class="muted">تحویل‌شده</span>{% elif o.status == 'in_progress' %}<span>درحال انجام</span>{% else %}<span class="muted">{{ o.status }}</span>{% endif %}</td>
+          <td class="muted">{% if o.due_date %}{{ o.due_date|jalali_date }}{% else %}—{% endif %}</td>
+          <td><a class="btn" href="{% url 'core:order_detail' o.id %}">جزئیات</a></td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="7" class="muted">آیتمی برای نمایش نیست.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</template>
+
+<template id="content-deliveries-tomorrow">
+  <div>
+    <table class="table">
+      <thead><tr>
+        <th class="sortable">#</th><th class="sortable">بیمار</th><th class="sortable">پزشک</th>
+        <th class="sortable">نوع</th><th class="sortable">وضعیت</th>
+        <th class="sortable">تحویل</th><th></th></tr></thead>
+      <tbody>
+      {% for o in deliveries_tomorrow_list %}
+        <tr>
+          <td class="num">{{ forloop.counter|int_fa }}</td>
+          <td>{{ o.patient_name }}</td>
+          <td>{{ o.doctor }}</td>
+          <td>{{ o.get_order_type_display|default:o.order_type }}</td>
+          <td>{% if o.status == 'done' %}<span class="muted">انجام‌شده</span>{% elif o.status == 'delivered' %}<span class="muted">تحویل‌شده</span>{% elif o.status == 'in_progress' %}<span>درحال انجام</span>{% else %}<span class="muted">{{ o.status }}</span>{% endif %}</td>
+          <td class="muted">{% if o.due_date %}{{ o.due_date|jalali_date }}{% else %}—{% endif %}</td>
+          <td><a class="btn" href="{% url 'core:order_detail' o.id %}">جزئیات</a></td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="7" class="muted">آیتمی برای نمایش نیست.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</template>
+
+<template id="content-open-invoices">
+  <div style="padding:.25rem .25rem .75rem">
+    <div class="muted" style="margin-bottom:.5rem">برای مشاهدهٔ لیست دقیق مطالبات باز، از لینک زیر استفاده کنید.</div>
+    <a class="btn" href="{% url 'billing:report_open_invoices' %}">مشاهدهٔ مطالبات باز در مالی</a>
+  </div>
+</template>
+
+{# دادهٔ نمودار — اگر orders_type_for_chart از ویو بیاد از همون می‌گیریم، وگرنه از orders_month_list #}
+<script id="orders-type-data" type="application/json">[
+{% if orders_type_for_chart %}
+  {% for t in orders_type_for_chart %}"{{ t|escapejs }}"{% if not forloop.last %},{% endif %}{% endfor %}
+{% else %}
+  {% for o in orders_month_list %}"{{ o.get_order_type_display|default:o.order_type|escapejs }}"{% if not forloop.last %},{% endif %}{% endfor %}
+{% endif %}
+]</script>
+
 <div id="m" class="m-backdrop" role="dialog" aria-modal="true" aria-hidden="true">
   <div class="m-card">
     <div class="m-h">
@@ -399,25 +432,94 @@
 </div>
 
 <script>
-  function openModal(title, html) {
+  function openModal(title, html){
     document.getElementById('m-title').textContent = title || 'جزئیات';
     document.getElementById('m-body').innerHTML = html || '<div class="muted">موردی یافت نشد.</div>';
     document.getElementById('m').style.display = 'flex';
     document.body.style.overflow = 'hidden';
+    enhanceModalTable();
   }
-  function closeModal() {
+  function closeModal(){
     document.getElementById('m').style.display = 'none';
     document.body.style.overflow = '';
   }
+
+  function enhanceModalTable(){
+    const body = document.getElementById('m-body');
+    const table = body.querySelector('table');
+    if(!table) return;
+
+    // sorting
+    const ths = table.querySelectorAll('thead th.sortable');
+    ths.forEach((th, idx)=>{
+      th.addEventListener('click', ()=>{
+        const tbody = table.tBodies[0];
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        const dir = th.classList.contains('asc') ? 'desc' : 'asc';
+        ths.forEach(x=>x.classList.remove('asc','desc'));
+        th.classList.add(dir);
+
+        const getText = tr => (tr.children[idx]?.innerText || '').trim();
+        const isNumCol = th.textContent.trim() === '#' || th.classList.contains('num');
+        const norm = v => isNumCol ? (parseFloat(v.replace(/[^\d.-]/g,'')) || 0) : v;
+
+        rows.sort((a,b)=>{
+          const va = norm(getText(a)), vb = norm(getText(b));
+          if(va < vb) return dir==='asc' ? -1 : 1;
+          if(va > vb) return dir==='asc' ? 1 : -1;
+          return 0;
+        });
+        rows.forEach(r=>tbody.appendChild(r));
+      });
+    });
+
+    // status filter
+    const toolbar = body.querySelector('.tbl-toolbar');
+    if(!toolbar) return;
+    const hasStatus = toolbar.getAttribute('data-has-status') === '1';
+    if(!hasStatus) return;
+
+    const chips = toolbar.querySelectorAll('.chip');
+    const statusColIndex = (()=>{
+      const headers = Array.from(table.querySelectorAll('thead th')).map(th=>th.textContent.trim());
+      return headers.findIndex(h => h.includes('وضعیت'));
+    })();
+    if(statusColIndex < 0) return;
+
+    const normalize = txt => {
+      txt = (txt||'').trim();
+      if(txt.includes('تحویل')) return 'delivered';
+      if(txt.includes('درحال')) return 'in_progress';
+      if(txt.includes('انجام')) return 'done';
+      return 'other';
+    };
+
+    chips.forEach(ch=>{
+      ch.addEventListener('click', ()=>{
+        chips.forEach(c=>c.classList.remove('active'));
+        ch.classList.add('active');
+        const key = ch.getAttribute('data-status');
+        table.querySelectorAll('tbody tr').forEach(tr=>{
+          const cell = tr.children[statusColIndex];
+          const val = normalize(cell ? cell.innerText : '');
+          tr.style.display = (key==='all') ? '' : (val===key ? '' : 'none');
+        });
+      });
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function(){
     document.querySelectorAll('.kpi[data-target]').forEach(function(el){
       el.addEventListener('click', function(){
-        var target = this.getAttribute('data-target');
-        var title  = this.getAttribute('data-title') || this.querySelector('.t')?.textContent || 'جزئیات';
-        var src    = document.getElementById(target);
-        openModal(title, src ? src.innerHTML : '<div class="muted">لیستی برای نمایش نیست.</div>');
+        const target = this.getAttribute('data-target');
+        const title  = this.getAttribute('data-title') || this.querySelector('.t')?.textContent || 'جزئیات';
+        const tpl    = document.getElementById(target);
+        let html = '<div class="muted">لیستی برای نمایش نیست.</div>';
+        if(tpl){ html = tpl.innerHTML; }
+        openModal(title, html);
       });
     });
+
     document.getElementById('m').addEventListener('click', function(e){
       if(e.target === this) closeModal();
     });
@@ -425,8 +527,56 @@
       if(e.key === 'Escape'){ closeModal(); }
     });
   });
+
+  // رسم نمودار پای
+  document.addEventListener('DOMContentLoaded', function(){
+    const dataEl = document.getElementById('orders-type-data');
+    const canvas = document.getElementById('orders-type-chart');
+    if(!dataEl || !canvas) return;
+
+    let raw = dataEl.textContent || '[]';
+    let arr = [];
+    try { arr = JSON.parse(raw); } catch(e){ arr = []; }
+
+    const counts = {};
+    arr.forEach(t=>{
+      const key = (t || 'نامشخص').toString().trim();
+      counts[key] = (counts[key]||0) + 1;
+    });
+
+    const labels = Object.keys(counts);
+    const values = labels.map(l => counts[l]);
+    if(values.length === 0){ return; }
+
+    const palette = ['#e6eeff','#dcf6e7','#ffefcc','#ece2ff','#ffdede','#d8fbf5','#e6e8ff','#eef3f8','#fbe5ff','#e0f2fe','#fee2e2','#dcfce7'];
+    const colors = labels.map((_,i)=> palette[i % palette.length]);
+
+    new Chart(canvas.getContext('2d'), {
+      type: 'pie',
+      data: { labels, datasets: [{ data: values, backgroundColor: colors, borderColor: '#ffffff', borderWidth: 1 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', rtl: true, labels: { usePointStyle: true, boxWidth: 10 } },
+          tooltip: { callbacks: { label: (ctx)=> (ctx.label||'') + ' – ' + (ctx.parsed||0).toLocaleString('fa-IR') + ' مورد' } }
+        }
+      }
+    });
+  });
 </script>
 {% endblock %}
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

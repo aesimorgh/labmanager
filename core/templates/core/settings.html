@@ -1,0 +1,278 @@
+{% extends "base_user_panel.html" %}
+{% load static %}
+
+{% block title %}تنظیمات{% endblock %}
+
+{% block head_extra %}
+<style>
+  .wrap{display:grid;gap:1rem}
+  .heading{font-weight:800;font-size:1.25rem;margin:.25rem 0 1rem}
+  .sub{color:#6b7280;margin-top:-.5rem}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1rem}
+  .card{border:1px solid #e5e7eb;background:#fff;border-radius:.75rem}
+  .card-h{padding:.6rem .9rem;border-bottom:1px solid #e5e7eb;font-weight:700}
+  .card-b{padding:1rem .9rem}
+  .row{display:grid;grid-template-columns:140px 1fr;gap:.75rem;align-items:center;margin:.6rem 0}
+  .row label{color:#374151;font-weight:600}
+  .row input[type="text"], .row input[type="tel"], .row input[type="email"], .row select, .row textarea{
+    border:1px solid #e5e7eb;border-radius:.5rem;padding:.5rem .6rem;width:100%
+  }
+  .help{color:#6b7280;font-size:.85rem;margin-top:.25rem}
+  .actions{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1rem}
+  .btn{display:inline-block;padding:.55rem .85rem;border:1px solid #e5e7eb;border-radius:.5rem;text-decoration:none;color:#111827;background:#fff}
+  .btn:hover{background:#f8fafc}
+  .btn.primary{background:#111827;color:#fff;border-color:#111827}
+  .note{background:#fffbeb;border:1px solid #fde68a;color:#92400e;padding:.6rem .8rem;border-radius:.5rem;margin:.75rem 0}
+  .switch{display:inline-flex;align-items:center;gap:.5rem;cursor:pointer}
+  .switch input{display:none}
+  .switch .track{width:42px;height:22px;background:#e5e7eb;border-radius:999px;position:relative;transition:.15s}
+  .switch .thumb{position:absolute;top:2px;left:2px;width:18px;height:18px;background:#fff;border-radius:50%;box-shadow:0 1px 2px rgba(0,0,0,.15);transition:.15s}
+  .switch input:checked + .track{background:#16a34a}
+  .switch input:checked + .track .thumb{left:22px}
+
+  .kpi-preview{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem;margin-top:.5rem}
+  .pill{display:inline-flex;gap:.4rem;align-items:center;padding:.25rem .6rem;border:1px solid #e5e7eb;border-radius:999px;background:#fff}
+  .muted{color:#6b7280}
+</style>
+{% endblock %}
+
+{% block subtabs %}
+<ul class="nav nav-pills mb-3">
+  <li class="nav-item"><a class="nav-link" href="{% url 'core:orders_home' %}">سفارش‌ها</a></li>
+  <li class="nav-item"><a class="nav-link" href="{% url 'billing:financial_home' %}">مالی</a></li>
+  <li class="nav-item"><span class="nav-link active">تنظیمات</span></li>
+</ul>
+{% endblock %}
+
+{% block content %}
+<div class="wrap">
+  <div>
+    <div class="heading">تنظیمات سامانه</div>
+    <div class="sub">این صفحه فعلاً فقط رابط کاربری دارد؛ برای ذخیرهٔ واقعی، بعداً به دیتابیس متصل می‌کنیم.</div>
+  </div>
+
+  <div class="grid">
+    <!-- اطلاعات مجموعه -->
+    <div class="card">
+      <div class="card-h">اطلاعات مجموعه</div>
+      <div class="card-b">
+        <div class="row">
+          <label for="lab_name">نام لابراتوار</label>
+          <div>
+            <input id="lab_name" type="text" placeholder="مثلاً: لابراتوار دندانسازی…">
+            <div class="help">در سربرگ‌ها و گزارش‌ها نمایش داده می‌شود.</div>
+          </div>
+        </div>
+        <div class="row">
+          <label for="lab_phone">تلفن</label>
+          <div><input id="lab_phone" type="tel" placeholder="مثلاً: 021-xxxxxxx"></div>
+        </div>
+        <div class="row">
+          <label for="lab_email">ایمیل</label>
+          <div><input id="lab_email" type="email" placeholder="info@example.com"></div>
+        </div>
+        <div class="row">
+          <label for="lab_addr">آدرس</label>
+          <div><textarea id="lab_addr" rows="2" placeholder="نشانی کامل…"></textarea></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ترجیحات نمایش -->
+    <div class="card">
+      <div class="card-h">ترجیحات نمایش</div>
+      <div class="card-b">
+        <div class="row">
+          <label>تقویم</label>
+          <div>
+            <label class="pill"><input type="radio" name="calendar" value="jalali" checked> جلالی</label>
+            <label class="pill"><input type="radio" name="calendar" value="gregorian"> میلادی</label>
+            <div class="help">فقط UI — منطق اصلی برنامه همان‌طور که هست می‌ماند.</div>
+          </div>
+        </div>
+        <div class="row">
+          <label>قالب اعداد</label>
+          <div>
+            <label class="pill"><input type="radio" name="digits" value="fa" checked> فارسی</label>
+            <label class="pill"><input type="radio" name="digits" value="en"> لاتین</label>
+          </div>
+        </div>
+        <div class="row">
+          <label>سفارش‌های داشبورد</label>
+          <div class="kpi-preview">
+            <label class="switch">
+              <input id="show_overdue" type="checkbox" checked><span class="track"><span class="thumb"></span></span>
+              <span>نمایش «معوق»</span>
+            </label>
+            <label class="switch">
+              <input id="show_tomorrow" type="checkbox" checked><span class="track"><span class="thumb"></span></span>
+              <span>نمایش «تحویل‌های فردا»</span>
+            </label>
+          </div>
+          <div class="help">فقط برای نمایش کارت‌ها در داشبورد؛ داده‌ها تغییر نمی‌کنند.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- اعلان‌ها -->
+    <div class="card">
+      <div class="card-h">اعلان‌ها</div>
+      <div class="card-b">
+        <div class="row">
+          <label>یادآوری موعد تحویل</label>
+          <div>
+            <label class="switch">
+              <input id="notif_due" type="checkbox" checked><span class="track"><span class="thumb"></span></span>
+              <span>فعال</span>
+            </label>
+            <div class="help">فعلاً فقط تنظیم ظاهری است؛ بعداً زمان‌بندی واقعی اضافه می‌کنیم.</div>
+          </div>
+        </div>
+        <div class="row">
+          <label for="notif_time">ساعت ارسال</label>
+          <div><input id="notif_time" type="text" placeholder="مثلاً 09:00"></div>
+        </div>
+        <div class="row">
+          <label>کانال</label>
+          <div>
+            <label class="pill"><input type="checkbox" id="ch_inapp" checked> داخل برنامه</label>
+            <label class="pill"><input type="checkbox" id="ch_email"> ایمیل</label>
+            <label class="pill"><input type="checkbox" id="ch_sms"> پیامک</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- سایر -->
+    <div class="card">
+      <div class="card-h">سایر</div>
+      <div class="card-b">
+        <div class="row">
+          <label>لینک‌های مفید</label>
+          <div class="actions">
+            <a class="btn" href="{% url 'core:orders_home' %}">📋 لیست سفارش‌ها</a>
+            <a class="btn" href="{% url 'billing:report_open_invoices' %}">💳 مطالبات باز</a>
+            <a class="btn" href="{% url 'dashboard' %}">🏠 داشبورد</a>
+          </div>
+        </div>
+        <div class="note">
+          ⓘ ذخیره‌سازی این صفحه فعلاً فقط در مرورگر شما انجام می‌شود. در گام بعدی ذخیرهٔ پایدار در دیتابیس را اضافه می‌کنیم.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- اکشن‌ها -->
+  <div class="actions">
+    <button id="save-local" class="btn primary">ذخیرهٔ موقت در مرورگر</button>
+    <button id="reset-local" class="btn">بازگردانی به حالت اولیه</button>
+  </div>
+
+  <div id="toast" class="muted" style="display:none;margin-top:.5rem"></div>
+</div>
+
+<script>
+(function(){
+  const KEY = "lm_settings_v1";
+  const $ = sel => document.querySelector(sel);
+
+  const fields = {
+    lab_name:   $("#lab_name"),
+    lab_phone:  $("#lab_phone"),
+    lab_email:  $("#lab_email"),
+    lab_addr:   $("#lab_addr"),
+    calendar:   () => document.querySelector('input[name="calendar"]:checked'),
+    digits:     () => document.querySelector('input[name="digits"]:checked"),
+    show_overdue: $("#show_overdue"),
+    show_tomorrow: $("#show_tomorrow"),
+    notif_due:  $("#notif_due"),
+    notif_time: $("#notif_time"),
+    ch_inapp:   $("#ch_inapp"),
+    ch_email:   $("#ch_email"),
+    ch_sms:     $("#ch_sms"),
+  };
+
+  function showToast(msg){
+    const t = $("#toast");
+    t.textContent = msg;
+    t.style.display = "block";
+    setTimeout(()=> t.style.display = "none", 3000);
+  }
+
+  function load(){
+    try{
+      const raw = localStorage.getItem(KEY);
+      if(!raw) return;
+      const v = JSON.parse(raw);
+
+      if(fields.lab_name)  fields.lab_name.value  = v.lab_name  || "";
+      if(fields.lab_phone) fields.lab_phone.value = v.lab_phone || "";
+      if(fields.lab_email) fields.lab_email.value = v.lab_email || "";
+      if(fields.lab_addr)  fields.lab_addr.value  = v.lab_addr  || "";
+
+      if(v.calendar){
+        const r = document.querySelector('input[name="calendar"][value="'+v.calendar+'"]');
+        if(r) r.checked = true;
+      }
+      if(v.digits){
+        const r = document.querySelector('input[name="digits"][value="'+v.digits+'"]');
+        if(r) r.checked = true;
+      }
+
+      if(fields.show_overdue)   fields.show_overdue.checked   = !!v.show_overdue;
+      if(fields.show_tomorrow)  fields.show_tomorrow.checked  = !!v.show_tomorrow;
+      if(fields.notif_due)      fields.notif_due.checked      = !!v.notif_due;
+      if(fields.notif_time)     fields.notif_time.value       = v.notif_time || "";
+      if(fields.ch_inapp)       fields.ch_inapp.checked       = !!v.ch_inapp;
+      if(fields.ch_email)       fields.ch_email.checked       = !!v.ch_email;
+      if(fields.ch_sms)         fields.ch_sms.checked         = !!v.ch_sms;
+    }catch(e){}
+  }
+
+  function save(){
+    const val = {
+      lab_name:   fields.lab_name?.value || "",
+      lab_phone:  fields.lab_phone?.value || "",
+      lab_email:  fields.lab_email?.value || "",
+      lab_addr:   fields.lab_addr?.value || "",
+      calendar:   fields.calendar()?.value || "jalali",
+      digits:     fields.digits()?.value || "fa",
+      show_overdue:  !!fields.show_overdue?.checked,
+      show_tomorrow: !!fields.show_tomorrow?.checked,
+      notif_due:  !!fields.notif_due?.checked,
+      notif_time: fields.notif_time?.value || "",
+      ch_inapp:   !!fields.ch_inapp?.checked,
+      ch_email:   !!fields.ch_email?.checked,
+      ch_sms:     !!fields.ch_sms?.checked,
+    };
+    localStorage.setItem(KEY, JSON.stringify(val));
+    showToast("تنظیمات به‌صورت موقت در مرورگر ذخیره شد.");
+  }
+
+  function reset(){
+    localStorage.removeItem(KEY);
+    document.querySelectorAll('input[type="text"], input[type="tel"], input[type="email"], textarea').forEach(el=> el.value = "");
+    document.querySelector('input[name="calendar"][value="jalali"]').checked = true;
+    document.querySelector('input[name="digits"][value="fa"]').checked = true;
+    if(fields.show_overdue) fields.show_overdue.checked = true;
+    if(fields.show_tomorrow) fields.show_tomorrow.checked = true;
+    if(fields.notif_due) fields.notif_due.checked = true;
+    if(fields.notif_time) fields.notif_time.value = "";
+    if(fields.ch_inapp) fields.ch_inapp.checked = true;
+    if(fields.ch_email) fields.ch_email.checked = false;
+    if(fields.ch_sms) fields.ch_sms.checked = false;
+    showToast("به حالت اولیه برگشت.");
+  }
+
+  document.addEventListener('DOMContentLoaded', ()=>{
+    load();
+    const btnSave = document.getElementById('save-local');
+    const btnReset = document.getElementById('reset-local');
+    if(btnSave) btnSave.addEventListener('click', save);
+    if(btnReset) btnReset.addEventListener('click', reset);
+  });
+})();
+</script>
+{% endblock %}
+
+
