@@ -5,34 +5,90 @@
 
 {% block head_extra %}
 <style>
-  .wrap{display:grid;gap:1rem}
-  .heading{font-weight:800;font-size:1.25rem;margin:.25rem 0 1rem}
-  .sub{color:#6b7280;margin-top:-.5rem}
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1rem}
-  .card{border:1px solid #e5e7eb;background:#fff;border-radius:.75rem}
-  .card-h{padding:.6rem .9rem;border-bottom:1px solid #e5e7eb;font-weight:700}
-  .card-b{padding:1rem .9rem}
-  .row{display:grid;grid-template-columns:140px 1fr;gap:.75rem;align-items:center;margin:.6rem 0}
-  .row label{color:#374151;font-weight:600}
-  .row input[type="text"], .row input[type="tel"], .row input[type="email"], .row select, .row textarea{
-    border:1px solid #e5e7eb;border-radius:.5rem;padding:.5rem .6rem;width:100%
+  /* پایه‌ی سالم برای اندازه‌گیری‌ها و شکست متن‌های بلند */
+  *, *::before, *::after { box-sizing: border-box; }
+  img { max-width: 100%; height: auto; }
+  .wrap{direction:rtl;max-width:1200px;margin:0 auto;display:grid;gap:1.25rem}
+  .heading{font-weight:800;font-size:1.25rem;margin:.25rem 0 .5rem}
+  .sub{color:#6b7280;margin-top:-.25rem}
+
+  /* شبکهٔ کارت‌ها */
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(380px,1fr));
+    gap:1.25rem;
+    align-items:start; /* هر کارت مستقل بایستد */
   }
-  .help{color:#6b7280;font-size:.85rem;margin-top:.25rem}
-  .actions{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1rem}
-  .btn{display:inline-block;padding:.55rem .85rem;border:1px solid #e5e7eb;border-radius:.5rem;text-decoration:none;color:#111827;background:#fff}
-  .btn:hover{background:#f8fafc}
-  .btn.primary{background:#111827;color:#fff;border-color:#111827}
-  .note{background:#fffbeb;border:1px solid #fde68a;color:#92400e;padding:.6rem .8rem;border-radius:.5rem;margin:.75rem 0}
+  .card{
+    border:1px solid #e5e7eb;background:#fff;border-radius:.9rem;
+    box-shadow:0 4px 14px rgba(0,0,0,.05);
+    overflow:hidden;           /* محتوای بیرون‌زن کنترل شود */
+  }
+  .card-h{padding:.75rem 1rem;border-bottom:1px solid #e5e7eb;font-weight:700}
+  .card-b{
+    padding:1rem;
+    overflow-wrap:anywhere;    /* لینک/متن‌های طولانی کارت کناری را هل ندهند */
+    word-break:break-word;
+  }
+
+  /* ردیف‌های فرم */
+  .row{
+    display:grid;grid-template-columns:170px 1fr;
+    gap:.9rem;align-items:center;margin:.75rem 0
+  }
+  .row label{color:#374151;font-weight:700;white-space:nowrap}
+  @media (max-width:740px){
+    .row{grid-template-columns:1fr}
+    .row label{margin-bottom:.25rem;white-space:normal}
+  }
+
+  /* کنترل‌ها: هماهنگ و محدود به کارت */
+  .row input[type="text"], .row input[type="tel"], .row input[type="email"],
+  .row select, .row textarea, .form-control{
+    border:1px solid #e5e7eb;border-radius:.6rem;padding:.6rem .75rem;
+    width:100%;max-width:100%;background:#fff;outline:none;
+    transition:border-color .15s, box-shadow .15s
+  }
+  .row input:focus, .row select:focus, .row textarea:focus, .form-control:focus{
+    border-color:#111827; box-shadow:0 0 0 3px rgba(17,24,39,.1)
+  }
+
+  /* سوییچ و گزینه‌ها */
+  .kpi-preview{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.5rem;margin-top:.25rem}
+  .pill{display:inline-flex;gap:.4rem;align-items:center;padding:.3rem .65rem;border:1px solid #e5e7eb;border-radius:999px;background:#fff}
+  .muted{color:#6b7280}
+
+  /* سوییچ */
   .switch{display:inline-flex;align-items:center;gap:.5rem;cursor:pointer}
   .switch input{display:none}
-  .switch .track{width:42px;height:22px;background:#e5e7eb;border-radius:999px;position:relative;transition:.15s}
-  .switch .thumb{position:absolute;top:2px;left:2px;width:18px;height:18px;background:#fff;border-radius:50%;box-shadow:0 1px 2px rgba(0,0,0,.15);transition:.15s}
-  .switch input:checked + .track{background:#16a34a}
-  .switch input:checked + .track .thumb{left:22px}
+  .switch .track{width:46px;height:24px;background:#e5e7eb;border-radius:999px;position:relative;transition:.15s}
+  .switch .thumb{position:absolute;top:3px;left:3px;width:18px;height:18px;background:#fff;border-radius:50%;box-shadow:0 1px 2px rgba(0,0,0,.15);transition:.15s}
+  .switch input:checked + .track{background:#111827}
+  .switch input:checked + .track .thumb{left:25px}
 
-  .kpi-preview{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem;margin-top:.5rem}
-  .pill{display:inline-flex;gap:.4rem;align-items:center;padding:.25rem .6rem;border:1px solid #e5e7eb;border-radius:999px;background:#fff}
-  .muted{color:#6b7280}
+  /* دکمه‌ها */
+  .actions{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1rem}
+  .btn{display:inline-block;padding:.6rem .95rem;border:1px solid #e5e7eb;border-radius:.6rem;text-decoration:none;color:#111827;background:#fff}
+  .btn:hover{background:#f8fafc}
+  .btn.primary{background:#111827;color:#fff;border-color:#111827}
+  .btn.primary:hover{filter:brightness(1.05)}
+
+  /* نوتیس و Toast */
+  .note{background:#fffbeb;border:1px solid #fde68a;color:#92400e;padding:.7rem .9rem;border-radius:.6rem;margin:.75rem 0}
+
+  /* --- افزوده‌ها برای نمایش خطاها --- */
+  .errorlist{margin:.25rem 0 0;padding:0;list-style:none;color:#b91c1c;font-size:.85rem}
+  .errorlist li{margin:0}
+  .help.error{color:#b91c1c}
+  .field-error input[type="text"],
+  .field-error input[type="tel"],
+  .field-error input[type="email"],
+  .field-error select,
+  .field-error textarea,
+  .field-error .form-control{
+    border-color:#b91c1c !important;
+    box-shadow:0 0 0 3px rgba(185,28,28,.12) !important;
+  }
 </style>
 {% endblock %}
 
@@ -50,12 +106,130 @@
     <div class="heading">تنظیمات سامانه</div>
     <div class="sub">این صفحه فعلاً فقط رابط کاربری دارد؛ برای ذخیرهٔ واقعی، بعداً به دیتابیس متصل می‌کنیم.</div>
   </div>
-
   <div class="grid">
+      <!-- فرم ذخیره در دیتابیس -->
+  <div class="card">
+    <div class="card-h">ذخیرهٔ اطلاعات در دیتابیس</div>
+    <div class="card-b">
+      <form method="post" enctype="multipart/form-data" action="">
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+          <ul class="errorlist">
+            {% for err in form.non_field_errors %}<li>{{ err }}</li>{% endfor %}
+          </ul>
+        {% endif %}
+
+        <div class="row">
+          <label for="{{ form.name.id_for_label }}">نام لابراتوار</label>
+          <div class="{% if form.name.errors %}field-error{% endif %}">{{ form.name }}
+            {% if form.name.errors %}
+              <ul class="errorlist">{% for e in form.name.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="row">
+          <label for="{{ form.slogan.id_for_label }}">شعار</label>
+          <div class="{% if form.slogan.errors %}field-error{% endif %}">{{ form.slogan }}
+            {% if form.slogan.errors %}
+              <ul class="errorlist">{% for e in form.slogan.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="row">
+          <label for="{{ form.logo_file.id_for_label }}">لوگو (فایل)</label>
+          <div class="{% if form.logo_file.errors %}field-error{% endif %}">{{ form.logo_file }}
+            {% if form.logo_file.errors %}
+              <ul class="errorlist">{% for e in form.logo_file.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="row">
+          <label for="{{ form.logo_static_path.id_for_label }}">مسیر استاتیک لوگو</label>
+          <div class="{% if form.logo_static_path.errors %}field-error{% endif %}">
+            {{ form.logo_static_path }}
+            {% if form.logo_static_path.errors %}
+              <ul class="errorlist">{% for e in form.logo_static_path.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
+            <div class="help">مثال: <code>img/academy-logo.png</code> (برای {% templatetag openblock %} static {% templatetag closeblock %})</div>
+          </div>
+        </div>
+
+        <div class="row">
+          <label for="{{ form.card_no.id_for_label }}">شماره کارت</label>
+          <div class="{% if form.card_no.errors %}field-error{% endif %}">{{ form.card_no }}
+            {% if form.card_no.errors %}
+              <ul class="errorlist">{% for e in form.card_no.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="row">
+          <label for="{{ form.iban.id_for_label }}">شماره شِبا</label>
+          <div class="{% if form.iban.errors %}field-error{% endif %}">{{ form.iban }}
+            {% if form.iban.errors %}
+              <ul class="errorlist">{% for e in form.iban.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="row">
+          <label for="{{ form.account_name.id_for_label }}">به نام</label>
+          <div class="{% if form.account_name.errors %}field-error{% endif %}">{{ form.account_name }}
+            {% if form.account_name.errors %}
+              <ul class="errorlist">{% for e in form.account_name.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="actions">
+          <button type="submit" class="btn primary">ذخیره در دیتابیس</button>
+          <a href="" class="btn">انصراف</a>
+        </div>
+      </form>
+    </div>
+  </div>
     <!-- اطلاعات مجموعه -->
     <div class="card">
       <div class="card-h">اطلاعات مجموعه</div>
       <div class="card-b">
+        {% if lab_profile %}
+  <div class="row">
+    <label>نام/شعار</label>
+    <div>
+      <div><strong>{{ lab_profile.name }}</strong>{% if lab_profile.slogan %} — <span class="muted">{{ lab_profile.slogan }}</span>{% endif %}</div>
+      <div class="help">این بخش فقط نمایش از دیتابیس است؛ فرم‌های پایین هنوز به DB وصل نیستند.</div>
+    </div>
+  </div>
+  <div class="row">
+    <label>لوگو</label>
+    <div>
+      {% with lf=lab_profile.get_logo_url %}
+        {% if lf %}
+          <img src="{{ lf }}" alt="logo" style="max-height:48px">
+        {% elif lab_profile.logo_static_path %}
+          <img src="{% static lab_profile.logo_static_path %}" alt="logo" style="max-height:48px">
+        {% else %}
+          <span class="muted">لوگو تنظیم نشده است</span>
+        {% endif %}
+      {% endwith %}
+    </div>
+  </div>
+  <div class="row">
+    <label>اطلاعات بانکی</label>
+    <div class="muted">
+      {% if lab_profile.card_no %}کارت: {{ lab_profile.card_no }}{% endif %}
+      {% if lab_profile.iban %}{% if lab_profile.card_no %} — {% endif %}شبا: {{ lab_profile.iban }}{% endif %}
+      {% if not lab_profile.card_no and not lab_profile.iban %}ثبت نشده{% endif %}
+      {% if lab_profile.account_name %}<div>به نام: {{ lab_profile.account_name }}</div>{% endif %}
+    </div>
+  </div>
+{% else %}
+  <div class="note">هنوز Lab profile در سیستم ثبت نشده است. از «ادمین» یک مورد بساز.</div>
+{% endif %}
         <div class="row">
           <label for="lab_name">نام لابراتوار</label>
           <div>
@@ -274,4 +448,5 @@
 })();
 </script>
 {% endblock %}
+
 
