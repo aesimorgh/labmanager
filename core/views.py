@@ -475,6 +475,13 @@ def dashboard(request):
         kpis['open_invoices'] = Invoice.objects.filter(status=issued_val).count()
     except Exception:
         pass
+    
+        # --- Lab profile برای هدر ---
+    try:
+        LabProfile = apps.get_model('billing', 'LabProfile')
+        lab_profile = LabProfile.objects.first()
+    except Exception:
+        lab_profile = None
 
     return render(request, 'core/dashboard.html', {
         'kpis': kpis,
@@ -486,6 +493,7 @@ def dashboard(request):
         'overdue_list': overdue_list,
         'deliveries_today_list': deliveries_today_list,
         'deliveries_tomorrow_list': deliveries_tomorrow_list,
+        'lab_profile': lab_profile,
     })
 
 
