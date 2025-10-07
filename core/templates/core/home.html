@@ -1,3 +1,4 @@
+core/templates/core/home.html:
 {% extends "base_user_panel.html" %}
 {% load crispy_forms_tags %}
 {% load num_extras %}
@@ -21,10 +22,7 @@
       vertical-align: middle; white-space: nowrap;
       padding-top:.6rem; padding-bottom:.6rem;
     }
-    /* لینکِ سورت: همیشه خوانا و قابل کلیک */
-    .table thead th .sort-link{
-      display:inline-block; color:inherit !important; text-decoration:none;
-    }
+    .table thead th .sort-link{ display:inline-block; color:inherit !important; text-decoration:none; }
     .table thead th .sort-link:hover{ opacity:.9; text-decoration:none; }
     .sort-arrow{ font-size:.9em; line-height:1; }
 
@@ -43,6 +41,88 @@
     .btn-chip { border-radius: 9999px; padding-inline: 0.9rem; }
     .input-group-sm .form-control { min-width: 95px; }
     .filter-row .form-select, .filter-row .form-control { height: 36px; padding-top: 2px; padding-bottom: 2px; }
+
+    /* ===== Tooth Picker (چیپ‌های مینیمال) ===== */
+    .tooth-card{
+      width:100%;
+      background:#fff; border:1px solid #dee2e6; border-radius:.65rem;
+      padding:1rem; margin-top:.25rem; overflow:hidden; box-sizing:border-box;
+    }
+    .tooth-card .section-title{font-weight:700;margin-bottom:.5rem}
+    .tooth-row{ margin:0; }
+
+    .tooth-grid{
+      display:flex; flex-wrap:nowrap; align-items:center;
+      justify-content:space-between; width:100%;
+      gap:.4rem; padding:0 .25rem; box-sizing:border-box;
+    }
+    .tooth-group{
+      display:flex; align-items:center; gap:.35rem;
+      justify-content:space-between; flex:1 1 0; min-width:0;
+    }
+
+    /* خط عمودی نقطه‌چین بین دو «۱» (راست/چپ) */
+    .midline{
+      width:0; height:28px; position:relative; flex:0 0 0;
+      border-left:2px dashed #9ca3af;
+    }
+
+    /* خط افقی دقیقاً بین دو ردیف بالا/پایین */
+    .sep-h{
+      height:0; border-top:2px dashed #9ca3af;
+      margin:.5rem 0;
+      pointer-events:none;
+    }
+
+    .tooth-chip{
+      border:1px solid #dee2e6;background:#fff;border-radius:9999px;
+      padding:.24rem .5rem; font-size:.9rem; line-height:1.1; cursor:pointer; user-select:none;
+      flex:0 0 auto;
+    }
+    .tooth-chip.active{background:#0d6efd;color:#fff;border-color:#0d6efd}
+
+    .tooth-help{color:#6b7280;font-size:.86rem;margin-top:.3rem}
+    .tooth-actions{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.45rem}
+    .tooth-summary{margin-top:.4rem;color:#374151;font-size:.92rem}
+
+    /* ===== لیست سفارش‌ها: اسکرول و استیکی ===== */
+    .table-wrap {
+      position: relative;
+      max-height: 65vh;
+      overflow: auto;
+      border: 1px solid #e5e7eb;
+      border-radius: .5rem;
+    }
+    .table thead th{
+      position: sticky; top: 0; z-index: 5;
+      background-color:#0d6efd !important; color:#fff !important;
+    }
+    .sticky-patient {
+      position: sticky; right: 0; z-index: 6;
+      background: #fff;
+      box-shadow: -4px 0 0 rgba(13,110,253,.08);
+      white-space: nowrap; text-overflow: ellipsis; overflow: hidden;
+      max-width: 220px;
+    }
+
+    /* نمای نمادین دندان‌ها داخل لیست (اگر بعداً استفاده شد) */
+    .toothplus-cell{ min-width: 92px; }
+    .toothplus{ position: relative; width: 80px; height: 80px; margin: 0 auto; font-size: 12px; line-height: 1.1; color:#111; user-select:none; }
+    .toothplus::before, .toothplus::after{ content:""; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); background:#9ca3af; }
+    .toothplus::before{ width:2px; height:86%; }
+    .toothplus::after { height:2px; width:86%; }
+    .tp{ position:absolute; display:flex; gap:2px; flex-wrap:wrap; max-width:40px; }
+    .tp span{ padding:0 2px; border-radius:4px; }
+    /* اعداد را به مرکز + نزدیک‌تر می‌کنیم */
+    .tp-ur{ top:12px; right:18px; justify-content:flex-end; text-align:right; }
+    .tp-ul{ top:12px; left:18px;  text-align:left; }
+    .tp-ll{ bottom:12px; left:18px; text-align:left; }
+    .tp-lr{ bottom:12px; right:18px; justify-content:flex-end; text-align:right; }
+
+     /* کمی جمع‌وجورتر شدن چیدمان داخل هر ربع (اختیاریِ سبک) */
+    .tp{ max-width:34px; gap:1px; }
+
+    .tp span.active{ background:#0d6efd; color:#fff; }
   </style>
 {% endblock %}
 
@@ -79,6 +159,7 @@
 
           <form method="post">
             {% csrf_token %}
+
             <div id="order-row" class="row g-3">
               <!-- ستون راست -->
               <div class="col-12 col-md-6 order-md-1">
@@ -86,18 +167,105 @@
                 {{ order_form.doctor|as_crispy_field }}
                 {{ order_form.order_type|as_crispy_field }}
                 {{ order_form.unit_count|as_crispy_field }}
+
+                <!-- ===== انتخاب دندان‌ها ===== -->
+                <div class="tooth-card">
+                  <div class="section-title">شماره دندان‌ها</div>
+
+                  <!-- خلاصه -->
+                  <div id="tooth-summary" class="tooth-summary text-muted">هنوز دندانی انتخاب نشده است.</div>
+
+                  <!-- ردیف بالا -->
+                  <div class="tooth-row">
+                    <div class="tooth-grid">
+                      <!-- بالا راست (Q1: 18..11) -->
+                      <div class="tooth-group" aria-label="بالا راست">
+                        <span class="tooth-chip" data-q="1" data-n="8">8</span>
+                        <span class="tooth-chip" data-q="1" data-n="7">7</span>
+                        <span class="tooth-chip" data-q="1" data-n="6">6</span>
+                        <span class="tooth-chip" data-q="1" data-n="5">5</span>
+                        <span class="tooth-chip" data-q="1" data-n="4">4</span>
+                        <span class="tooth-chip" data-q="1" data-n="3">3</span>
+                        <span class="tooth-chip" data-q="1" data-n="2">2</span>
+                        <span class="tooth-chip" data-q="1" data-n="1">1</span>
+                      </div>
+
+                      <span class="midline" aria-hidden="true"></span>
+
+                      <!-- بالا چپ (Q2: 21..28) -->
+                      <div class="tooth-group" aria-label="بالا چپ">
+                        <span class="tooth-chip" data-q="2" data-n="1">1</span>
+                        <span class="tooth-chip" data-q="2" data-n="2">2</span>
+                        <span class="tooth-chip" data-q="2" data-n="3">3</span>
+                        <span class="tooth-chip" data-q="2" data-n="4">4</span>
+                        <span class="tooth-chip" data-q="2" data-n="5">5</span>
+                        <span class="tooth-chip" data-q="2" data-n="6">6</span>
+                        <span class="tooth-chip" data-q="2" data-n="7">7</span>
+                        <span class="tooth-chip" data-q="2" data-n="8">8</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- خط افقی وسط -->
+                  <div class="sep-h" aria-hidden="true"></div>
+
+                  <!-- ردیف پایین -->
+                  <div class="tooth-row">
+                    <div class="tooth-grid">
+                      <!-- پایین چپ (Q3: 38..31) -->
+                      <div class="tooth-group" aria-label="پایین چپ">
+                        <span class="tooth-chip" data-q="3" data-n="8">8</span>
+                        <span class="tooth-chip" data-q="3" data-n="7">7</span>
+                        <span class="tooth-chip" data-q="3" data-n="6">6</span>
+                        <span class="tooth-chip" data-q="3" data-n="5">5</span>
+                        <span class="tooth-chip" data-q="3" data-n="4">4</span>
+                        <span class="tooth-chip" data-q="3" data-n="3">3</span>
+                        <span class="tooth-chip" data-q="3" data-n="2">2</span>
+                        <span class="tooth-chip" data-q="3" data-n="1">1</span>
+                      </div>
+
+                      <span class="midline" aria-hidden="true"></span>
+
+                      <!-- پایین راست (Q4: 41..48) -->
+                      <div class="tooth-group" aria-label="پایین راست">
+                        <span class="tooth-chip" data-q="4" data-n="1">1</span>
+                        <span class="tooth-chip" data-q="4" data-n="2">2</span>
+                        <span class="tooth-chip" data-q="4" data-n="3">3</span>
+                        <span class="tooth-chip" data-q="4" data-n="4">4</span>
+                        <span class="tooth-chip" data-q="4" data-n="5">5</span>
+                        <span class="tooth-chip" data-q="4" data-n="6">6</span>
+                        <span class="tooth-chip" data-q="4" data-n="7">7</span>
+                        <span class="tooth-chip" data-q="4" data-n="8">8</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="tooth-actions">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bulk="upper-all">انتخاب همهٔ فک بالا</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bulk="lower-all">انتخاب همهٔ فک پایین</button>
+                    <button type="button" class="btn btn-sm btn-outline-danger" data-bulk="clear">پاک‌کردن همه</button>
+                  </div>
+
+                  <!-- ورودی مخفی برای ارسال FDI Codes -->
+                  <input type="hidden" name="order-teeth_fdi" id="teeth_fdi" value="">
+                  <div class="tooth-help">راهنما: کدگذاری FDI (۱۱–۱۸ بالا راست، ۲۱–۲۸ بالا چپ، ۳۱–۳۸ پایین چپ، ۴۱–۴۸ پایین راست). انتخاب‌ها در «یادداشت» نیز ذخیره می‌شوند.</div>
+                </div>
+                <!-- ===== پایان انتخاب دندان‌ها ===== -->
               </div>
+
               <!-- ستون چپ -->
               <div class="col-12 col-md-6 order-md-2">
                 {{ order_form.shade|as_crispy_field }}
                 {{ order_form.price|as_crispy_field }}
                 {{ order_form.serial_number|as_crispy_field }}
-                {{ order_form.status|as_crispy_field }}
+                <input type="hidden" name="order-status" value="in_progress">
+                {# {{ order_form.status|as_crispy_field }} #}
                 {{ order_form.order_date|as_crispy_field }}
                 {{ order_form.due_date|as_crispy_field }}
                 {{ order_form.notes|as_crispy_field }}
               </div>
             </div>
+
             <div class="mt-3">
               <button type="submit" class="btn btn-success">ثبت سفارش</button>
             </div>
@@ -111,7 +279,7 @@
     <div class="tab-pane fade" id="list-tab-pane" role="tabpanel" aria-labelledby="list-tab">
       <div class="card shadow-sm mt-3">
         <div class="card-header bg-secondary text-white">لیست سفارش‌ها</div>
-        <div class="card-body table-responsive">
+        <div class="card-body">
 
           <!-- فیلتر سروری + جستجو -->
           <form method="get" class="row g-2 mb-3 filter-row" action="#list-tab-pane">
@@ -145,11 +313,12 @@
           <!-- جستجوی جلوی‌صفحه -->
           <input class="form-control mb-3" id="searchInput" type="text" placeholder="جستجوی سریع داخل صفحه...">
 
+          <div class="table-wrap">
           <table class="table table-striped table-hover align-middle">
             <thead>
               <tr>
                 <th>ID</th>
-                <th>بیمار</th>
+                <th class="sticky-patient">بیمار</th>
                 <th>پزشک</th>
                 <th>نوع سفارش</th>
                 <th>تعداد واحد</th>
@@ -161,15 +330,12 @@
                   <a class="sort-link"
                      href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort=total_price&dir={% if sort == 'total_price' and dir == 'asc' %}desc{% else %}asc{% endif %}#list-tab-pane">
                     قیمت کل
-                    <span class="sort-arrow">
-                      {% if sort == 'total_price' %}
-                        {% if dir == 'asc' %}▲{% else %}▼{% endif %}
-                      {% else %}↕{% endif %}
-                    </span>
+                    <span class="sort-arrow">{% if sort == 'total_price' %}{% if dir == 'asc' %}▲{% else %}▼{% endif %}{% else %}↕{% endif %}</span>
                   </a>
                 </th>
 
                 <th>رنگ</th>
+                <th>دندان‌ها</th>
                 <th>وضعیت</th>
 
                 <!-- تاریخ تحویل (قابل سورت) -->
@@ -177,11 +343,7 @@
                   <a class="sort-link"
                      href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort=due_date&dir={% if sort == 'due_date' and dir == 'asc' %}desc{% else %}asc{% endif %}#list-tab-pane">
                     تاریخ تحویل
-                    <span class="sort-arrow">
-                      {% if sort == 'due_date' %}
-                        {% if dir == 'asc' %}▲{% else %}▼{% endif %}
-                      {% else %}↕{% endif %}
-                    </span>
+                    <span class="sort-arrow">{% if sort == 'due_date' %}{% if dir == 'asc' %}▲{% else %}▼{% endif %}{% else %}↕{% endif %}</span>
                   </a>
                 </th>
 
@@ -190,11 +352,7 @@
                   <a class="sort-link"
                      href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort=created_at&dir={% if sort == 'created_at' and dir == 'asc' %}desc{% else %}asc{% endif %}#list-tab-pane">
                     تاریخ ثبت
-                    <span class="sort-arrow">
-                      {% if sort == 'created_at' %}
-                        {% if dir == 'asc' %}▲{% else %}▼{% endif %}
-                      {% else %}↕{% endif %}
-                    </span>
+                    <span class="sort-arrow">{% if sort == 'created_at' %}{% if dir == 'asc' %}▲{% else %}▼{% endif %}{% else %}↕{% endif %}</span>
                   </a>
                 </th>
 
@@ -207,7 +365,7 @@
               {% for order in orders %}
                 <tr>
                   <td>{{ order.id|int_fa }}</td>
-                  <td>{{ order.patient_name }}</td>
+                  <td class="sticky-patient">{{ order.patient_name }}</td>
                   <td>{{ order.doctor }}</td>
                   <td>{{ order.get_order_type_display }}</td>
                   <td>{{ order.unit_count|int_fa }}</td>
@@ -215,6 +373,17 @@
                   <td>{{ order.price|money_fa }}</td>
                   <td>{{ order.total_price|money_fa }}</td>
                   <td>{{ order.shade }}</td>
+                  <td class="toothplus-cell">
+                    <div class="toothplus"
+                         data-q="{{ order.teeth_quadrants|default:'' }}"
+                         data-fdi="{{ order.teeth_fdi|default:'' }}"
+                         data-notes="{{ order.notes|default_if_none:''|striptags }}">
+                      <div class="tp tp-ul"></div>
+                      <div class="tp tp-ur"></div>
+                      <div class="tp tp-ll"></div>
+                      <div class="tp tp-lr"></div>
+                    </div>
+                  </td>
                   <td>
                     {% if order.status == 'done' %}
                       <span class="badge bg-success">{{ order.get_status_display }}</span>
@@ -226,50 +395,50 @@
                   </td>
                   <td>{{ order.due_date|jalali_date }}</td>
                   <td>{{ order.created_at|jalali_date }}</td>
-                  <td>
-                    <a href="{% url 'core:order_detail' order.id %}" class="btn btn-sm btn-outline-primary btn-chip">جزئیات</a>
-                  </td>
+
+                  <td><a href="{% url 'core:order_detail' order.id %}" class="btn btn-sm btn-outline-primary btn-chip">جزئیات</a></td>
+
                   <td>
                     {% if not order.shipped_date %}
                       <form method="post" action="{% url 'core:deliver_order' order.id %}?next={{ request.get_full_path|urlencode }}#list-tab-pane" class="d-inline-block">
                         {% csrf_token %}
-                        <div class="input-group input-group-sm" style="width: 180px;">
+                        <div class="input-group input-group-sm" style="width: 200px;">
                           <input type="text" name="shipped_date" class="form-control jalali_date" placeholder="تاریخ ارسال">
                           <button type="submit" class="btn btn-success">ارسال شد</button>
                         </div>
                       </form>
                     {% else %}
-                      <span class="text-muted">{{ order.shipped_date|dash_to_slash|digits_fa }}</span>
+                      <div class="d-flex align-items-center gap-2">
+                        <span class="text-muted">{{ order.shipped_date|dash_to_slash|digits_fa }}</span>
+                        <form method="post" action="{% url 'core:deliver_order' order.id %}?next={{ request.get_full_path|urlencode }}#list-tab-pane" class="d-inline">
+                          {% csrf_token %}
+                          <input type="hidden" name="undo" value="1">
+                          <button type="submit" class="btn btn-outline-danger btn-sm">برگردان</button>
+                        </form>
+                      </div>
                     {% endif %}
                   </td>
                 </tr>
               {% empty %}
                 <tr>
-                  <td colspan="14" class="text-center text-muted">هیچ سفارشی ثبت نشده است.</td>
+                  <td colspan="15" class="text-center text-muted">هیچ سفارشی ثبت نشده است.</td>
                 </tr>
               {% endfor %}
             </tbody>
           </table>
+          </div> <!-- /.table-wrap -->
 
           {% if page_obj.paginator.num_pages > 1 %}
           <nav aria-label="pagination" class="mt-3">
             <ul class="pagination pagination-sm justify-content-center">
               {% if page_obj.has_previous %}
-                <li class="page-item">
-                  <a class="page-link" href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort={{ sort|urlencode }}&dir={{ dir|urlencode }}&page={{ page_obj.previous_page_number }}#list-tab-pane">قبلی</a>
-                </li>
+                <li class="page-item"><a class="page-link" href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort={{ sort|urlencode }}&dir={{ dir|urlencode }}&page={{ page_obj.previous_page_number }}#list-tab-pane">قبلی</a></li>
               {% else %}
                 <li class="page-item disabled"><span class="page-link">قبلی</span></li>
               {% endif %}
-
-              <li class="page-item disabled">
-                <span class="page-link">{{ page_obj.number|int_fa }} / {{ page_obj.paginator.num_pages|int_fa }}</span>
-              </li>
-
+              <li class="page-item disabled"><span class="page-link">{{ page_obj.number|int_fa }} / {{ page_obj.paginator.num_pages|int_fa }}</span></li>
               {% if page_obj.has_next %}
-                <li class="page-item">
-                  <a class="page-link" href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort={{ sort|urlencode }}&dir={{ dir|urlencode }}&page={{ page_obj.next_page_number }}#list-tab-pane">بعدی</a>
-                </li>
+                <li class="page-item"><a class="page-link" href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort={{ sort|urlencode }}&dir={{ dir|urlencode }}&page={{ page_obj.next_page_number }}#list-tab-pane">بعدی</a></li>
               {% else %}
                 <li class="page-item disabled"><span class="page-link">بعدی</span></li>
               {% endif %}
@@ -299,14 +468,18 @@
       }
     } catch (e) {}
 
-    // فعال‌سازی تاریخ شمسی در فرم ثبت و فرم‌های «ارسال شد»
+    // ==== تاریخ (عین نسخهٔ سالم قدیمی) ====
     const $dateInputs = $("#order-tab-pane input.jalali_date, #order-tab-pane input[name='order_date'], #order-tab-pane input[name='due_date'], #list-tab-pane input.jalali_date");
     $dateInputs.each(function(){
       try { if (this.type !== 'text') this.type = 'text'; } catch(e){}
       $(this).attr('autocomplete', 'off');
     });
     $dateInputs.filter(function(){ return !$(this).data('pDatepicker'); })
-        .persianDatepicker({ format: 'YYYY/MM/DD', autoClose: true, calendar: { persian: { locale: 'fa' } } });
+      .persianDatepicker({
+        format: 'YYYY/MM/DD',
+        autoClose: true,
+        calendar: { persian: { locale: 'fa' } }
+      });
 
     // جستجوی سریع داخل صفحه
     $("#searchInput").on("keyup", function() {
@@ -315,9 +488,259 @@
         $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1)
       });
     });
+
+    // ===== Tooth Picker logic (FDI) =====
+    const chips = document.querySelectorAll('.tooth-chip');
+    const hidden = document.getElementById('teeth_fdi');
+    const summary = document.getElementById('tooth-summary');
+
+    function fdiCode(q, n){ return (q*10 + n).toString(); }
+
+    function refreshSummary(){
+      const codes = (hidden.value || '').split(',').filter(Boolean);
+      if (!codes.length){
+        summary.textContent = 'هنوز دندانی انتخاب نشده است.';
+        summary.classList.add('text-muted');
+        return;
+      }
+      summary.classList.remove('text-muted');
+      const groups = {1:[],2:[],3:[],4:[]};
+      codes.forEach(c=>{
+        const q = parseInt(c[0],10);
+        const n = parseInt(c.slice(1),10);
+        if(groups[q]) groups[q].push(n);
+      });
+      Object.keys(groups).forEach(k=> groups[k].sort((a,b)=>a-b));
+      const parts = [];
+      if(groups[1].length) parts.push('بالا راست: ' + groups[1].join(', '));
+      if(groups[2].length) parts.push('بالا چپ: '   + groups[2].join(', '));
+      if (groups[3].length) parts.push('پایین چپ: ' + groups[3].join(', '));
+      if(groups[4].length) parts.push('پایین راست: ' + groups[4].join(', '));
+      summary.textContent = parts.join('  |  ');
+    }
+
+    function toggleChip(el){
+      el.classList.toggle('active');
+      const q = parseInt(el.dataset.q,10);
+      const n = parseInt(el.dataset.n,10);
+      const code = fdiCode(q,n);
+      let arr = (hidden.value || '').split(',').filter(Boolean);
+      if (el.classList.contains('active')){ if (!arr.includes(code)) arr.push(code); }
+      else { arr = arr.filter(c => c !== code); }
+      arr.sort((a,b)=>parseInt(a,10)-parseInt(b,10));
+      hidden.value = arr.join(',');
+      refreshSummary();
+    }
+
+    chips.forEach(el=> el.addEventListener('click', ()=> toggleChip(el)));
+
+    document.querySelectorAll('[data-bulk]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const t = btn.getAttribute('data-bulk');
+        if (t === 'clear'){
+          chips.forEach(c=> c.classList.remove('active'));
+          hidden.value = '';
+          refreshSummary();
+          return;
+        }
+        const selectQuadrants = (qs)=>{
+          chips.forEach(c=>{
+            const q = parseInt(c.dataset.q,10);
+            if (qs.includes(q)){ if (!c.classList.contains('active')) c.classList.add('active'); }
+          });
+          const arr = [];
+          chips.forEach(c=>{
+            if (c.classList.contains('active')){
+              const q = parseInt(c.dataset.q,10);
+              const n = parseInt(c.dataset.n,10);
+              arr.push(fdiCode(q,n));
+            }
+          });
+          arr.sort((a,b)=>parseInt(a,10)-parseInt(b,10));
+          hidden.value = arr.join(',');
+          refreshSummary();
+        };
+        if (t === 'upper-all') selectQuadrants([1,2]);
+        if (t === 'lower-all') selectQuadrants([3,4]);
+      });
+    });
+
+    // [جدید] چسباندن انتخاب‌ها به «notes» قبل از ارسال فرم (selector صحیح)
+    const _form = document.querySelector('#order-tab-pane form');
+    if (_form){
+      _form.addEventListener('submit', ()=>{
+        const codes = (hidden && hidden.value || '').trim();
+        if (!codes) return;
+         const notes = _form.querySelector('textarea[name$="notes"]');
+       if (notes){
+          const tag = '\nدندان‌ها: ' + codes.replaceAll(',', ', ');
+          if (notes.value.indexOf('دندان‌ها:') === -1){
+            notes.value = (notes.value || '') + tag;
+          }
+        }
+      });
+    }
+
+    // رندر نمای دندان‌ها در لیست (در صورت داشتن داده)
+    (function(){
+      function parseQuadrants(qstr){
+        const res = {UR:[], UL:[], LL:[], LR:[]};
+        if(!qstr) return res;
+        qstr.split('|').forEach(seg=>{
+          const [k,v=''] = seg.split('=');
+          const key = (k||'').trim().toUpperCase();
+          if(res[key] && v.trim()){
+            res[key] = v.split(',').map(s=>s.trim()).filter(Boolean);
+          }
+        });
+        return res;
+      }
+      function parseFDI(fdi){
+        const groups = {1:[],2:[],3:[],4:[]};
+        if(!fdi) return groups;
+        fdi.split(',').map(s=>s.trim()).filter(Boolean).forEach(code=>{
+          const q = parseInt(code[0],10);
+          const n = parseInt(code.slice(1),10);
+          if(groups[q] && n>=1 && n<=8) groups[q].push(String(n));
+        });
+        Object.keys(groups).forEach(k=> groups[k].sort((a,b)=>parseInt(a,10)-parseInt(b,10)));
+        return groups;
+      }
+      // [جدید] استخراج از notes در صورت نبودِ دادهٔ اختصاصی
+      function fromNotes(notes){
+        if(!notes) return null;
+        // تبدیل ارقام فارسی/عربی به لاتین
+        const fa='۰۱۲۳۴۵۶۷۸۹', ar='٠١٢٣٤٥٦٧٨٩';
+        function dnorm(s){
+          return String(s)
+            .replace(/[۰-۹]/g, d => ''+fa.indexOf(d))
+            .replace(/[٠-٩]/g, d => ''+ar.indexOf(d));
+        }
+        const m = dnorm(notes).match(/دندان‌ها\s*:\s*([0-9,\s،]+)/);
+        if(!m) return null;
+        const csv = m[1].replace(/،/g, ',');
+        const codes = csv.split(',').map(s=>s.trim()).filter(Boolean);
+        if(!codes.length) return null;
+        const g = {1:[],2:[],3:[],4:[]};
+        codes.forEach(code=>{
+          const q = parseInt(code[0],10);
+          const n = parseInt(code.slice(1),10);
+          if(g[q] && n>=1 && n<=8) g[q].push(String(n));
+        });
+        Object.keys(g).forEach(k=> g[k].sort((a,b)=>parseInt(a,10)-parseInt(b,10)));
+        // نگاشت به ربع‌ها
+        return { UL:g[2], UR:g[1], LL:g[3], LR:g[4] };
+      }
+      function fill(el){
+        const qstr  = el.getAttribute('data-q') || '';
+        const fdi   = el.getAttribute('data-fdi') || '';
+        const notes = el.getAttribute('data-notes') || '';
+        let UL=[], UR=[], LL=[], LR=[];
+        if(qstr){
+          const q = parseQuadrants(qstr);
+          UL=q.UL; UR=q.UR; LL=q.LL; LR=q.LR;
+        }else if(fdi){
+          const g = parseFDI(fdi);
+          UL = g[2]; UR = g[1]; LL = g[3]; LR = g[4];
+        }else{
+          const n = fromNotes(notes);
+          if(n){ UL=n.UL; UR=n.UR; LL=n.LL; LR=n.LR; }
+        }
+        const map = { 'tp-ul':UL, 'tp-ur':UR, 'tp-ll':LL, 'tp-lr':LR };
+        Object.keys(map).forEach(cls=>{
+          const box = el.querySelector('.'+cls);
+          if(!box) return;
+          box.innerHTML = '';
+          map[cls].forEach(num=>{
+            const s = document.createElement('span');
+            s.textContent = num;
+            s.className = 'active';
+            box.appendChild(s);
+          });
+        });
+      }
+      document.querySelectorAll('.toothplus').forEach(fill);
+    })();
+
+    // ===== [جدید] نرمال‌سازی و تبدیل تاریخ‌ها به میلادی قبل از ارسال =====
+    function fa2enDigits(s){
+      if(!s) return '';
+      // ارقام فارسی و عربی -> لاتین
+      var fa = '۰۱۲۳۴۵۶۷۸۹', ar = '٠١٢٣٤٥٦٧٨٩';
+      return String(s)
+        .replace(/[۰-۹]/g, d => String(fa.indexOf(d)))
+        .replace(/[٠-٩]/g, d => String(ar.indexOf(d)));
+    }
+    function toGregorianISO(jalali){
+  // ورودی مثل 1404/07/13 یا ۱۴۰۴/۰۷/۱۳
+  var en = fa2enDigits((jalali || '').trim()).replace(/-/g,'/');
+  if(!/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(en)) return en; // اگر الگو درست نبود، همونو برگردون
+
+  try{
+    var p = en.split('/');
+    var y = parseInt(p[0], 10), m = parseInt(p[1], 10), d = parseInt(p[2], 10);
+    // persian-date باید آرایه بگیرد؛ سپس به میلادی تبدیل می‌کنیم
+    var pd = new persianDate([y, m, d]);
+    // بعضی نسخه‌ها toCalendar دارند، بعضی‌ها calendar
+    if (typeof pd.toCalendar === 'function') {
+      return pd.toCalendar('gregorian').format('YYYY-MM-DD');
+    } else if (typeof pd.calendar === 'function') {
+      return pd.calendar('gregorian').format('YYYY-MM-DD');
+    } else if (typeof pd.toGregorian === 'function') {
+      // در برخی فورک‌ها
+      var g = pd.toGregorian();
+      // g ممکن است آبجکت باشد: {year, month, day}
+      if (g && g.year) {
+        var mm = ('0' + g.month).slice(-2);
+        var dd = ('0' + g.day).slice(-2);
+        return g.year + '-' + mm + '-' + dd;
+      }
+    }
+    // اگر هیچکدام نبود، همان ورودی تمیزشده را برگردان
+    return en;
+  }catch(e){
+    return en;
+  }
+}
+
+    var $orderForm = $('#order-tab-pane form');
+    if($orderForm.length){
+      $orderForm.on('submit', function(){
+        ['order_date','due_date'].forEach(function(name){
+          // فیلدهای crispy ممکن است prefix داشته باشند؛ با ends-with می‌گیریم
+          var $inp = $orderForm.find('input[name$="'+name+'"]');
+          if(!$inp.length) return;
+          try { $inp[0].type = 'text'; } catch(e){}
+          var val = $inp.val();
+          $inp.val( toGregorianISO(val) );
+        });
+      });
+    }
+
+    // اگر از قبل داشتیش، بماند
+    refreshSummary();
   });
-  </script>
+</script>
 {% endblock %}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
