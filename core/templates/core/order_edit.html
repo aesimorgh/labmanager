@@ -8,6 +8,12 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
 <style>
   .card { max-width: 920px; margin: 24px auto; }
+  /* استایل کوچک برای چیپ‌ها (فقط همین صفحه) */
+  .tooth-chip{
+    border:1px solid #dee2e6;background:#fff;border-radius:9999px;
+    padding:.24rem .5rem; font-size:.9rem; line-height:1.1; cursor:pointer; user-select:none; flex:0 0 auto;
+  }
+  .tooth-chip.active{background:#0d6efd;color:#fff;border-color:#0d6efd}
 </style>
 {% endblock %}
 
@@ -42,6 +48,103 @@
           {{ form.due_date|as_crispy_field }}
         </div>
 
+        <!-- Tooth picker (BEGIN) -->
+        <div class="col-12">
+          <!-- مارکر کمکی برای پرکردن اولیه -->
+          <span id="teeth_init" data-codes="{{ form.instance.teeth_fdi|default_if_none:'' }}" style="display:none"></span>
+
+          <div class="tooth-card" style="width:100%;background:#fff;border:1px solid #dee2e6;border-radius:.65rem;padding:1rem;margin-top:.25rem;overflow:hidden;box-sizing:border-box;">
+            <div class="section-title" style="font-weight:700;margin-bottom:.5rem">شماره دندان‌ها</div>
+
+            <!-- خلاصه انتخاب -->
+            <div id="tooth-summary" class="text-muted" style="margin-top:.4rem;color:#374151;font-size:.92rem">هنوز دندانی انتخاب نشده است.</div>
+
+            <!-- ردیف بالا -->
+            <div class="tooth-row" style="margin:0;">
+              <div class="tooth-grid" style="display:flex;flex-wrap:nowrap;align-items:center;justify-content:space-between;width:100%;gap:.4rem;padding:0 .25rem;box-sizing:border-box;">
+                <!-- بالا راست -->
+                <div class="tooth-group" aria-label="بالا راست" style="display:flex;align-items:center;gap:.35rem;justify-content:space-between;flex:1 1 0;min-width:0;">
+                  <span class="tooth-chip" data-q="1" data-n="8">8</span>
+                  <span class="tooth-chip" data-q="1" data-n="7">7</span>
+                  <span class="tooth-chip" data-q="1" data-n="6">6</span>
+                  <span class="tooth-chip" data-q="1" data-n="5">5</span>
+                  <span class="tooth-chip" data-q="1" data-n="4">4</span>
+                  <span class="tooth-chip" data-q="1" data-n="3">3</span>
+                  <span class="tooth-chip" data-q="1" data-n="2">2</span>
+                  <span class="tooth-chip" data-q="1" data-n="1">1</span>
+                </div>
+
+                <!-- خط وسط عمودی -->
+                <span style="width:0;height:28px;position:relative;flex:0 0 0;border-left:2px dashed #9ca3af;" aria-hidden="true"></span>
+
+                <!-- بالا چپ -->
+                <div class="tooth-group" aria-label="بالا چپ" style="display:flex;align-items:center;gap:.35rem;justify-content:space-between;flex:1 1 0;min-width:0;">
+                  <span class="tooth-chip" data-q="2" data-n="1">1</span>
+                  <span class="tooth-chip" data-q="2" data-n="2">2</span>
+                  <span class="tooth-chip" data-q="2" data-n="3">3</span>
+                  <span class="tooth-chip" data-q="2" data-n="4">4</span>
+                  <span class="tooth-chip" data-q="2" data-n="5">5</span>
+                  <span class="tooth-chip" data-q="2" data-n="6">6</span>
+                  <span class="tooth-chip" data-q="2" data-n="7">7</span>
+                  <span class="tooth-chip" data-q="2" data-n="8">8</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- خط افقی وسط -->
+            <div style="height:0;border-top:2px dashed #9ca3af;margin:.5rem 0;pointer-events:none;" aria-hidden="true"></div>
+
+            <!-- ردیف پایین -->
+            <div class="tooth-row" style="margin:0;">
+              <div class="tooth-grid" style="display:flex;flex-wrap:nowrap;align-items:center;justify-content:space-between;width:100%;gap:.4rem;padding:0 .25rem;box-sizing:border-box;">
+                <!-- پایین چپ -->
+                <div class="tooth-group" aria-label="پایین چپ" style="display:flex;align-items:center;gap:.35rem;justify-content:space-between;flex:1 1 0;min-width:0;">
+                  <span class="tooth-chip" data-q="3" data-n="8">8</span>
+                  <span class="tooth-chip" data-q="3" data-n="7">7</span>
+                  <span class="tooth-chip" data-q="3" data-n="6">6</span>
+                  <span class="tooth-chip" data-q="3" data-n="5">5</span>
+                  <span class="tooth-chip" data-q="3" data-n="4">4</span>
+                  <span class="tooth-chip" data-q="3" data-n="3">3</span>
+                  <span class="tooth-chip" data-q="3" data-n="2">2</span>
+                  <span class="tooth-chip" data-q="3" data-n="1">1</span>
+                </div>
+
+                <span style="width:0;height:28px;position:relative;flex:0 0 0;border-left:2px dashed #9ca3af;" aria-hidden="true"></span>
+
+                <!-- پایین راست -->
+                <div class="tooth-group" aria-label="پایین راست" style="display:flex;align-items:center;gap:.35rem;justify-content:space-between;flex:1 1 0;min-width:0;">
+                  <span class="tooth-chip" data-q="4" data-n="1">1</span>
+                  <span class="tooth-chip" data-q="4" data-n="2">2</span>
+                  <span class="tooth-chip" data-q="4" data-n="3">3</span>
+                  <span class="tooth-chip" data-q="4" data-n="4">4</span>
+                  <span class="tooth-chip" data-q="4" data-n="5">5</span>
+                  <span class="tooth-chip" data-q="4" data-n="6">6</span>
+                  <span class="tooth-chip" data-q="4" data-n="7">7</span>
+                  <span class="tooth-chip" data-q="4" data-n="8">8</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- اکشن‌ها -->
+            <div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.45rem">
+              <button type="button" class="btn btn-sm btn-outline-secondary" data-bulk="upper-all">همهٔ فک بالا</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" data-bulk="lower-all">همهٔ فک پایین</button>
+              <button type="button" class="btn btn-sm btn-outline-danger" data-bulk="clear">پاک‌کردن همه</button>
+            </div>
+
+            <!-- مقدار پنهان؛ با دادهٔ فعلی پر می‌شود -->
+            <div id="tooth-card" data-fdi="{{ form.instance.teeth_fdi|default_if_none:'' }}">
+              <input type="hidden" name="order-teeth_fdi" id="teeth_fdi"
+                 value="{{ form.instance.teeth_fdi|default_if_none:'' }}">
+            </div>
+
+            <div class="text-muted" style="color:#6b7280;font-size:.86rem;margin-top:.3rem">
+              راهنما: FDI (۱۱–۱۸ بالا راست، ۲۱–۲۸ بالا چپ، ۳۱–۳۸ پایین چپ، ۴۱–۴۸ پایین راست)
+            </div>
+          </div>
+        </div>
+        <!-- Tooth picker (END) -->
+
         <div class="col-12">
           {{ form.notes|as_crispy_field }}
         </div>
@@ -69,7 +172,7 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-  // تبدیل ISO↔︎Jalali فقط برای نمایش/نرمال‌سازی
+  // تبدیل ISO↔︎Jalali فقط برای نمایش/نرمال‌سازی (دست‌نخورده)
   function isoToJalali(iso){
     var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((iso||'').trim());
     if(!m) return null;
@@ -95,7 +198,7 @@
       return null;
     }catch(e){ return null; }
   }
-  // فقط برای «تاریخ ثبت»: جبرانِ عقب‌افتادگی یک‌روزه (بدون تایم‌زون)
+  // فقط برای «تاریخ ثبت»: جبران یک‌روزه (فعلاً استفاده نمی‌شود)
   function addOneDayISO(iso){
     var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((iso||'').trim());
     if(!m) return iso;
@@ -108,30 +211,23 @@
     return y+'-'+('0'+mo).slice(-2)+'-'+('0'+d).slice(-2);
   }
 
+  // === تاریخ‌ها (مثل قبل) ===
   $(function(){
     const $dateInputs = $("input[name$='order_date'], input[name$='due_date']");
 
-    // 1) type=text + خاموشی autocomplete
     $dateInputs.each(function(){
       try { this.type = 'text'; } catch(e){}
       $(this).attr('autocomplete','off');
     });
 
-    // 2) برای هر فیلد یک hidden (alt) بسازیم که میلادی را نگه دارد
     $dateInputs.each(function(idx){
       const $vis = $(this);
-      const name = ($vis.attr('name') || '');
-      const isOrderDate = /order_date$/.test(name);
-
       const altId = ($vis.attr('id') ? $vis.attr('id') : ('datefld_' + idx)) + '_alt';
       if (!document.getElementById(altId)) {
         $('<input>', {type:'hidden', id:altId}).insertAfter($vis);
       }
       const $alt = $('#'+altId);
 
-      // مقدار اولیه را تنظیم کنیم:
-      // اگر ISO بود -> همان را به hidden بده و نمای جلالی را در visible
-      // اگر جلالی بود -> ISO را محاسبه و در hidden بگذار
       const v = ($vis.val() || '').trim();
       if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
         $alt.val(v);
@@ -142,7 +238,6 @@
         if (iso) $alt.val(iso);
       }
 
-      // 3) فعال‌سازی Persian Datepicker با altField (خروجی میلادی در hidden)
       $vis.persianDatepicker({
         format: 'YYYY/MM/DD',
         autoClose: true,
@@ -153,20 +248,167 @@
         altCalendar: 'gregorian'
       });
 
-      // 4) قبل از submit: مقدار ارسال‌شونده باید میلادی باشد
-      //    برای due_date: همان alt کافی است
-      //    برای order_date: یک روز به alt اضافه می‌کنیم تا مشکل «دیروز» جبران شود
       const $form = $('form[method="post"]');
       if ($form.length){
         $form.on('submit', function(){
           let iso = $alt.val();
           if (iso){
-            if (isOrderDate) iso = addOneDayISO(iso); // فقط برای تاریخ ثبت
             $vis.val(iso); // ارسال به بک‌اند
           }
         });
       }
     });
   });
+
+  // === Tooth Picker (با پیش‌خواندن از notes و بروزرسانی notes روی ذخیره) ===
+  $(function(){
+    const chips   = document.querySelectorAll('.tooth-chip');
+    const hidden  = document.getElementById('teeth_fdi');
+    const initEl  = document.getElementById('teeth_init');
+    const toothCard = document.getElementById('tooth-card');
+    const summary = document.getElementById('tooth-summary');
+    const notesEl = document.getElementById('id_notes'); // textarea
+
+    // کمکــی‌ها
+    function fdiCode(q, n){ return String(q*10 + n); }
+    function fa2en(s){
+      const fa='۰۱۲۳۴۵۶۷۸۹', ar='٠١٢٣٤٥٦٧٨٩';
+      return String(s||'')
+        .replace(/[۰-۹]/g, d => ''+fa.indexOf(d))
+        .replace(/[٠-٩]/g, d => ''+ar.indexOf(d));
+    }
+    function parseFDI(csv){
+      return (csv||'').split(',').map(s=>s.trim()).filter(Boolean);
+    }
+    function extractFromNotes(txt){
+      if(!txt) return '';
+      const clean = fa2en(String(txt));
+      const m = clean.match(/دندان‌ها\s*:\s*([0-9,\s،]+)/);
+      if(!m) return '';
+      return m[1].replace(/،/g, ',').split(',')
+        .map(s=>s.trim()).filter(Boolean).join(',');
+    }
+    function refreshSummary(){
+      if(!hidden || !summary) return;
+      const codes = parseFDI(hidden.value);
+      if(!codes.length){
+        summary.textContent = 'هنوز دندانی انتخاب نشده است.';
+        summary.classList.add('text-muted');
+        return;
+      }
+      summary.classList.remove('text-muted');
+      const g={1:[],2:[],3:[],4:[]};
+      codes.forEach(c=>{
+        const q = parseInt(c[0],10);
+        const n = parseInt(c.slice(1),10);
+        if(g[q]) g[q].push(n);
+      });
+      Object.keys(g).forEach(k=> g[k].sort((a,b)=>a-b));
+      const parts=[];
+      if(g[1].length) parts.push('بالا راست: ' + g[1].join(', '));
+      if(g[2].length) parts.push('بالا چپ: '   + g[2].join(', '));
+      if(g[3].length) parts.push('پایین چپ: '  + g[3].join(', '));
+      if(g[4].length) parts.push('پایین راست: '+ g[4].join(', '));
+      summary.textContent = parts.join('  |  ');
+    }
+
+    function toggleChip(el){
+      if(!hidden) return;
+      el.classList.toggle('active');
+      const q = parseInt(el.dataset.q,10);
+      const n = parseInt(el.dataset.n,10);
+      const code = fdiCode(q,n);
+      let arr = parseFDI(hidden.value);
+      if (el.classList.contains('active')){
+        if(!arr.includes(code)) arr.push(code);
+      }else{
+        arr = arr.filter(c => c !== code);
+      }
+      arr.sort((a,b)=>parseInt(a,10)-parseInt(b,10));
+      hidden.value = arr.join(',');
+      refreshSummary();
+    }
+
+    chips.forEach(el=> el.addEventListener('click', ()=> toggleChip(el)));
+
+    document.querySelectorAll('[data-bulk]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        if(!hidden) return;
+        const t = btn.getAttribute('data-bulk');
+        if (t === 'clear'){
+          chips.forEach(c=> c.classList.remove('active'));
+          hidden.value = '';
+          refreshSummary();
+          return;
+        }
+        const qs = (t === 'upper-all') ? [1,2] : (t === 'lower-all' ? [3,4] : []);
+        if(!qs.length) return;
+        chips.forEach(c=>{
+          const q = parseInt(c.dataset.q,10);
+          if (qs.includes(q)) c.classList.add('active');
+        });
+        const arr = [];
+        chips.forEach(c=>{
+          if (c.classList.contains('active')){
+            const q = parseInt(c.dataset.q,10);
+            const n = parseInt(c.dataset.n,10);
+            arr.push(fdiCode(q,n));
+          }
+        });
+        arr.sort((a,b)=>parseInt(a,10)-parseInt(b,10));
+        hidden.value = arr.join(',');
+        refreshSummary();
+      });
+    });
+
+    // — پیش‌انتخاب: hidden → data-codes → data-fdi → notes
+    (function prefill(){
+      let current = hidden && hidden.value ? hidden.value.trim() : '';
+      if(!current && initEl){
+        current = (initEl.getAttribute('data-codes') || '').trim();
+      }
+      if(!current && toothCard){
+        current = (toothCard.getAttribute('data-fdi') || '').trim();
+      }
+      if(!current && notesEl){
+        current = extractFromNotes(notesEl.value);
+      }
+
+      if(current){
+        const selected = new Set(parseFDI(current));
+        document.querySelectorAll('.tooth-chip').forEach(c=>{
+          const q = parseInt(c.dataset.q,10);
+          const n = parseInt(c.dataset.n,10);
+          const code = fdiCode(q,n);
+          if (selected.has(code)) c.classList.add('active');
+        });
+        if (hidden){
+          hidden.value = Array.from(selected).sort((a,b)=>parseInt(a,10)-parseInt(b,10)).join(',');
+        }
+      }
+      refreshSummary();
+    })();
+
+    // — هنگام submit: خط «دندان‌ها: …» در notes را جایگزین کن
+    const form = hidden ? hidden.closest('form') : null;
+    if (form){
+      form.addEventListener('submit', ()=>{
+        if(!notesEl) return;
+        const codes = parseFDI(hidden ? hidden.value : '');
+        let txt = String(notesEl.value || '');
+        // حذف نسخه‌های قبلی همین خط
+        txt = txt.replace(/(^|\n)\s*دندان‌ها\s*:\s*[^\n]*\n?/g, '$1');
+        if(codes.length){
+          const pretty = codes.join(', ');
+          txt = (txt ? (txt.trim() + '\n') : '') + 'دندان‌ها: ' + pretty;
+        }
+        notesEl.value = txt;
+      });
+    }
+  });
 </script>
 {% endblock %}
+
+
+
+

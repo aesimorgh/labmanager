@@ -376,7 +376,7 @@ core/templates/core/home.html:
     <td>{{ order.shade }}</td>
     <td class="toothplus-cell">
       <div class="toothplus"
-           data-q="{{ order.teeth_quadrants|default:'' }}"
+           data-q="{% if order.teeth_fdi %}{% else %}{{ order.teeth_quadrants|default:'' }}{% endif %}"
            data-fdi="{{ order.teeth_fdi|default:'' }}"
            data-notes="{{ order.notes|default_if_none:''|striptags }}">
         <div class="tp tp-ul"></div>

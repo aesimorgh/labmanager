@@ -320,13 +320,25 @@ def order_edit(request, order_id):
     if request.method == "POST":
         form = OrderForm(request.POST, instance=order)
         if form.is_valid():
-            form.save()
+            obj = form.save(commit=False)
+
+            # 🔹 خواندن فیلد پنهان Tooth Picker و ذخیره روی مدل
+            t_fdi = (request.POST.get('order-teeth_fdi') or '').strip()
+            obj.teeth_fdi = t_fdi  # خالی = پاک کردن انتخاب‌ها
+
+            obj.save()
+            if hasattr(form, 'save_m2m'):
+                form.save_m2m()
+
             messages.success(request, "سفارش با موفقیت ویرایش شد.")
             next_url = request.GET.get("next") or (reverse("core:orders_home") + "#list-tab-pane")
             return redirect(next_url)
-        # ❗️ اگر فرم نامعتبر بود، همان صفحهٔ ویرایش را با خطاها render کن
-        return render(request, "core/order_edit.html", {"form": form})
+        else:
+            messages.error(request, "لطفاً خطاهای فرم را برطرف کنید.")
+    else:
+        form = OrderForm(instance=order)
 
+    return render(request, "core/order_edit.html", {"form": form})
     # GET: نمایش فرم ویرایش
     form = OrderForm(instance=order)
     return render(request, "core/order_edit.html", {"form": form})
