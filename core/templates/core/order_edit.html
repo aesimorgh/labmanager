@@ -1,0 +1,172 @@
+{% extends "base_user_panel.html" %}
+{% load crispy_forms_tags %}
+
+{% block title %}ویرایش سفارش{% endblock %}
+
+{% block head_extra %}
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
+<style>
+  .card { max-width: 920px; margin: 24px auto; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-header bg-warning text-dark fw-bold">
+    ✏️ ویرایش سفارش #{{ form.instance.id }}
+  </div>
+  <div class="card-body">
+    {% if messages %}
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }} mb-3">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+
+    <form method="post" action="">
+      {% csrf_token %}
+
+      <div class="row g-3">
+        <div class="col-12 col-md-6">
+          {{ form.patient_name|as_crispy_field }}
+          {{ form.doctor|as_crispy_field }}
+          {{ form.order_type|as_crispy_field }}
+          {{ form.unit_count|as_crispy_field }}
+          {{ form.shade|as_crispy_field }}
+        </div>
+        <div class="col-12 col-md-6">
+          {{ form.price|as_crispy_field }}
+          {{ form.serial_number|as_crispy_field }}
+          {{ form.status|as_crispy_field }}
+          {{ form.order_date|as_crispy_field }}
+          {{ form.due_date|as_crispy_field }}
+        </div>
+
+        <div class="col-12">
+          {{ form.notes|as_crispy_field }}
+        </div>
+      </div>
+
+      <div class="d-flex gap-2 mt-3">
+        <button type="submit" class="btn btn-primary">ذخیرهٔ تغییرات</button>
+        {% with back=request.GET.next|default:None %}
+          {% if back %}
+            <a href="{{ back }}" class="btn btn-outline-secondary">بازگشت</a>
+          {% else %}
+            <a href="{% url 'core:orders_home' %}#list-tab-pane" class="btn btn-outline-secondary">بازگشت</a>
+          {% endif %}
+        {% endwith %}
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block body_extra %}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+  // تبدیل ISO↔︎Jalali فقط برای نمایش/نرمال‌سازی
+  function isoToJalali(iso){
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((iso||'').trim());
+    if(!m) return null;
+    try{
+      var gy=+m[1], gm=+m[2], gd=+m[3];
+      return new persianDate([gy, gm, gd]).calendar('persian').format('YYYY/MM/DD');
+    }catch(e){ return null; }
+  }
+  function jalaliToISO(jal){
+    var s=(jal||'').trim().replace(/-/g,'/').replace(/[۰-۹]/g, d=>'۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/[٠-٩]/g, d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+    if(!/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(s)) return null;
+    try{
+      var p=s.split('/'); var jy=+p[0], jm=+p[1], jd=+p[2];
+      var pd=new persianDate([jy,jm,jd]);
+      if (typeof pd.toCalendar==='function') return pd.toCalendar('gregorian').format('YYYY-MM-DD');
+      if (typeof pd.calendar   ==='function') return pd.calendar('gregorian').format('YYYY-MM-DD');
+      if (typeof pd.toGregorian==='function'){
+        var g=pd.toGregorian(); if(g&&g.year){
+          var mm=('0'+g.month).slice(-2), dd=('0'+g.day).slice(-2);
+          return g.year+'-'+mm+'-'+dd;
+        }
+      }
+      return null;
+    }catch(e){ return null; }
+  }
+  // فقط برای «تاریخ ثبت»: جبرانِ عقب‌افتادگی یک‌روزه (بدون تایم‌زون)
+  function addOneDayISO(iso){
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((iso||'').trim());
+    if(!m) return iso;
+    var y=+m[1], mo=+m[2], d=+m[3];
+    var daysIn=[0,31,28,31,30,31,30,31,31,30,31,30,31];
+    var leap = (y%4===0 && y%100!==0) || (y%400===0);
+    if(leap) daysIn[2]=29;
+    d+=1;
+    if(d>daysIn[mo]){ d=1; mo+=1; if(mo>12){mo=1; y+=1;} }
+    return y+'-'+('0'+mo).slice(-2)+'-'+('0'+d).slice(-2);
+  }
+
+  $(function(){
+    const $dateInputs = $("input[name$='order_date'], input[name$='due_date']");
+
+    // 1) type=text + خاموشی autocomplete
+    $dateInputs.each(function(){
+      try { this.type = 'text'; } catch(e){}
+      $(this).attr('autocomplete','off');
+    });
+
+    // 2) برای هر فیلد یک hidden (alt) بسازیم که میلادی را نگه دارد
+    $dateInputs.each(function(idx){
+      const $vis = $(this);
+      const name = ($vis.attr('name') || '');
+      const isOrderDate = /order_date$/.test(name);
+
+      const altId = ($vis.attr('id') ? $vis.attr('id') : ('datefld_' + idx)) + '_alt';
+      if (!document.getElementById(altId)) {
+        $('<input>', {type:'hidden', id:altId}).insertAfter($vis);
+      }
+      const $alt = $('#'+altId);
+
+      // مقدار اولیه را تنظیم کنیم:
+      // اگر ISO بود -> همان را به hidden بده و نمای جلالی را در visible
+      // اگر جلالی بود -> ISO را محاسبه و در hidden بگذار
+      const v = ($vis.val() || '').trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+        $alt.val(v);
+        const j = isoToJalali(v);
+        if (j) $vis.val(j);
+      } else {
+        const iso = jalaliToISO(v);
+        if (iso) $alt.val(iso);
+      }
+
+      // 3) فعال‌سازی Persian Datepicker با altField (خروجی میلادی در hidden)
+      $vis.persianDatepicker({
+        format: 'YYYY/MM/DD',
+        autoClose: true,
+        initialValue: false,
+        calendar: { persian: { locale: 'fa' } },
+        altField: '#'+altId,
+        altFormat: 'YYYY-MM-DD',
+        altCalendar: 'gregorian'
+      });
+
+      // 4) قبل از submit: مقدار ارسال‌شونده باید میلادی باشد
+      //    برای due_date: همان alt کافی است
+      //    برای order_date: یک روز به alt اضافه می‌کنیم تا مشکل «دیروز» جبران شود
+      const $form = $('form[method="post"]');
+      if ($form.length){
+        $form.on('submit', function(){
+          let iso = $alt.val();
+          if (iso){
+            if (isOrderDate) iso = addOneDayISO(iso); // فقط برای تاریخ ثبت
+            $vis.val(iso); // ارسال به بک‌اند
+          }
+        });
+      }
+    });
+  });
+</script>
+{% endblock %}

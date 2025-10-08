@@ -357,99 +357,121 @@ core/templates/core/home.html:
                 </th>
 
                 <th>جزئیات</th>
+                <th>ویرایش</th>
                 <th>ارسال</th>
               </tr>
             </thead>
 
             <tbody id="ordersTable">
               {% for order in orders %}
-                <tr>
-                  <td>{{ order.id|int_fa }}</td>
-                  <td class="sticky-patient">{{ order.patient_name }}</td>
-                  <td>{{ order.doctor }}</td>
-                  <td>{{ order.get_order_type_display }}</td>
-                  <td>{{ order.unit_count|int_fa }}</td>
-                  <td>{{ order.serial_number }}</td>
-                  <td>{{ order.price|money_fa }}</td>
-                  <td>{{ order.total_price|money_fa }}</td>
-                  <td>{{ order.shade }}</td>
-                  <td class="toothplus-cell">
-                    <div class="toothplus"
-                         data-q="{{ order.teeth_quadrants|default:'' }}"
-                         data-fdi="{{ order.teeth_fdi|default:'' }}"
-                         data-notes="{{ order.notes|default_if_none:''|striptags }}">
-                      <div class="tp tp-ul"></div>
-                      <div class="tp tp-ur"></div>
-                      <div class="tp tp-ll"></div>
-                      <div class="tp tp-lr"></div>
-                    </div>
-                  </td>
-                  <td>
-                    {% if order.status == 'done' %}
-                      <span class="badge bg-success">{{ order.get_status_display }}</span>
-                    {% elif order.status == 'in_progress' %}
-                      <span class="badge bg-warning text-dark">{{ order.get_status_display }}</span>
-                    {% else %}
-                      <span class="badge bg-secondary">{{ order.get_status_display }}</span>
-                    {% endif %}
-                  </td>
-                  <td>{{ order.due_date|jalali_date }}</td>
-                  <td>{{ order.created_at|jalali_date }}</td>
-
-                  <td><a href="{% url 'core:order_detail' order.id %}" class="btn btn-sm btn-outline-primary btn-chip">جزئیات</a></td>
-
-                  <td>
-                    {% if not order.shipped_date %}
-                      <form method="post" action="{% url 'core:deliver_order' order.id %}?next={{ request.get_full_path|urlencode }}#list-tab-pane" class="d-inline-block">
-                        {% csrf_token %}
-                        <div class="input-group input-group-sm" style="width: 200px;">
-                          <input type="text" name="shipped_date" class="form-control jalali_date" placeholder="تاریخ ارسال">
-                          <button type="submit" class="btn btn-success">ارسال شد</button>
-                        </div>
-                      </form>
-                    {% else %}
-                      <div class="d-flex align-items-center gap-2">
-                        <span class="text-muted">{{ order.shipped_date|dash_to_slash|digits_fa }}</span>
-                        <form method="post" action="{% url 'core:deliver_order' order.id %}?next={{ request.get_full_path|urlencode }}#list-tab-pane" class="d-inline">
-                          {% csrf_token %}
-                          <input type="hidden" name="undo" value="1">
-                          <button type="submit" class="btn btn-outline-danger btn-sm">برگردان</button>
-                        </form>
-                      </div>
-                    {% endif %}
-                  </td>
-                </tr>
-              {% empty %}
-                <tr>
-                  <td colspan="15" class="text-center text-muted">هیچ سفارشی ثبت نشده است.</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-          </div> <!-- /.table-wrap -->
-
-          {% if page_obj.paginator.num_pages > 1 %}
-          <nav aria-label="pagination" class="mt-3">
-            <ul class="pagination pagination-sm justify-content-center">
-              {% if page_obj.has_previous %}
-                <li class="page-item"><a class="page-link" href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort={{ sort|urlencode }}&dir={{ dir|urlencode }}&page={{ page_obj.previous_page_number }}#list-tab-pane">قبلی</a></li>
-              {% else %}
-                <li class="page-item disabled"><span class="page-link">قبلی</span></li>
-              {% endif %}
-              <li class="page-item disabled"><span class="page-link">{{ page_obj.number|int_fa }} / {{ page_obj.paginator.num_pages|int_fa }}</span></li>
-              {% if page_obj.has_next %}
-                <li class="page-item"><a class="page-link" href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort={{ sort|urlencode }}&dir={{ dir|urlencode }}&page={{ page_obj.next_page_number }}#list-tab-pane">بعدی</a></li>
-              {% else %}
-                <li class="page-item disabled"><span class="page-link">بعدی</span></li>
-              {% endif %}
-            </ul>
-          </nav>
-          {% endif %}
-
-        </div>
+  <tr>
+    <td>{{ order.id|int_fa }}</td>
+    <td class="sticky-patient">{{ order.patient_name }}</td>
+    <td>{{ order.doctor }}</td>
+    <td>{{ order.get_order_type_display }}</td>
+    <td>{{ order.unit_count|int_fa }}</td>
+    <td>{{ order.serial_number }}</td>
+    <td>{{ order.price|money_fa }}</td>
+    <td>{{ order.total_price|money_fa }}</td>
+    <td>{{ order.shade }}</td>
+    <td class="toothplus-cell">
+      <div class="toothplus"
+           data-q="{{ order.teeth_quadrants|default:'' }}"
+           data-fdi="{{ order.teeth_fdi|default:'' }}"
+           data-notes="{{ order.notes|default_if_none:''|striptags }}">
+        <div class="tp tp-ul"></div>
+        <div class="tp tp-ur"></div>
+        <div class="tp tp-ll"></div>
+        <div class="tp tp-lr"></div>
       </div>
-    </div>
-  </div>
+    </td>
+    <td>
+      {% if order.status == 'done' %}
+        <span class="badge bg-success">{{ order.get_status_display }}</span>
+      {% elif order.status == 'in_progress' %}
+        <span class="badge bg-warning text-dark">{{ order.get_status_display }}</span>
+      {% else %}
+        <span class="badge bg-secondary">{{ order.get_status_display }}</span>
+      {% endif %}
+    </td>
+
+    {# ـــــ تاریخ‌ها: فقط سروری و پایدار ـــــ #}
+    <td>{{ order.due_date|jalali_date|digits_fa }}</td>
+    <td>{{ order.order_date|jalali_date|digits_fa }}</td>
+
+    <td>
+      <a href="{% url 'core:order_detail' order.id %}"
+         class="btn btn-sm btn-outline-primary btn-chip">جزئیات</a>
+    </td>
+    <td>
+      <a href="{% url 'core:order_edit' order.id %}?next={{ request.get_full_path|urlencode }}#list-tab-pane"
+         class="btn btn-sm btn-outline-warning btn-chip">ویرایش</a>
+    </td>
+
+    <td>
+      {% if not order.shipped_date %}
+        <form method="post"
+              action="{% url 'core:deliver_order' order.id %}?next={{ request.get_full_path|urlencode }}#list-tab-pane"
+              class="d-inline-block">
+          {% csrf_token %}
+          <div class="input-group input-group-sm" style="width: 200px;">
+            <input type="text" name="shipped_date" class="form-control jalali_date" placeholder="تاریخ ارسال">
+            <button type="submit" class="btn btn-success">ارسال شد</button>
+          </div>
+        </form>
+      {% else %}
+        <div class="d-flex align-items-center gap-2">
+          <span class="text-muted">{{ order.shipped_date|dash_to_slash|digits_fa }}</span>
+          <form method="post"
+                action="{% url 'core:deliver_order' order.id %}?next={{ request.get_full_path|urlencode }}#list-tab-pane"
+                class="d-inline">
+            {% csrf_token %}
+            <input type="hidden" name="undo" value="1">
+            <button type="submit" class="btn btn-outline-danger btn-sm">برگردان</button>
+          </form>
+        </div>
+      {% endif %}
+    </td>
+  </tr>
+{% empty %}
+  <tr>
+    <td colspan="16" class="text-center text-muted">هیچ سفارشی ثبت نشده است.</td>
+  </tr>
+{% endfor %}
+</tbody>
+</table>
+</div> <!-- /.table-wrap -->
+
+{% if page_obj.paginator.num_pages > 1 %}
+<nav aria-label="pagination" class="mt-3">
+  <ul class="pagination pagination-sm justify-content-center">
+    {% if page_obj.has_previous %}
+      <li class="page-item">
+        <a class="page-link"
+           href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort={{ sort|urlencode }}&dir={{ dir|urlencode }}&page={{ page_obj.previous_page_number }}#list-tab-pane">قبلی</a>
+      </li>
+    {% else %}
+      <li class="page-item disabled"><span class="page-link">قبلی</span></li>
+    {% endif %}
+    <li class="page-item disabled">
+      <span class="page-link">{{ page_obj.number|int_fa }} / {{ page_obj.paginator.num_pages|int_fa }}</span>
+    </li>
+    {% if page_obj.has_next %}
+      <li class="page-item">
+        <a class="page-link"
+           href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort={{ sort|urlencode }}&dir={{ dir|urlencode }}&page={{ page_obj.next_page_number }}#list-tab-pane">بعدی</a>
+      </li>
+    {% else %}
+      <li class="page-item disabled"><span class="page-link">بعدی</span></li>
+    {% endif %}
+  </ul>
+</nav>
+{% endif %}
+
+</div>
+</div>
+</div>
+</div>
 {% endblock %}
 
 {% block body_extra %}
@@ -460,7 +482,7 @@ core/templates/core/home.html:
 
   <script>
   $(function() {
-    // اگر کوئری‌استرینگ داشتیم یا هَش لیست بود، تب «لیست» را فعال کن
+    // تب لیست در صورت داشتن query/hash
     try {
       if (window.location.search || window.location.hash === '#list-tab-pane') {
         var triggerEl = document.querySelector('#list-tab');
@@ -468,18 +490,54 @@ core/templates/core/home.html:
       }
     } catch (e) {}
 
-    // ==== تاریخ (عین نسخهٔ سالم قدیمی) ====
-    const $dateInputs = $("#order-tab-pane input.jalali_date, #order-tab-pane input[name='order_date'], #order-tab-pane input[name='due_date'], #list-tab-pane input.jalali_date");
-    $dateInputs.each(function(){
-      try { if (this.type !== 'text') this.type = 'text'; } catch(e){}
-      $(this).attr('autocomplete', 'off');
+    // تاریخ Jalali برای «ارسال شد» (لیست)
+    const $listDates = $("#list-tab-pane input.jalali_date");
+    $listDates.each(function(){
+      try { this.type = 'text'; } catch(e){}
+      $(this).attr('autocomplete','off');
     });
-    $dateInputs.filter(function(){ return !$(this).data('pDatepicker'); })
+    $listDates.filter(function(){ return !$(this).data('pDatepicker'); })
       .persianDatepicker({
+        format:'YYYY/MM/DD',
+        autoClose:true,
+        calendar:{ persian:{ locale:'fa' } }
+      });
+
+    // تاریخ‌های فرم ثبت سفارش با altField (ارسال میلادی، نمایش جلالی)
+    const $createDates = $("#order-tab-pane input[name$='order_date'], #order-tab-pane input[name$='due_date']");
+    $createDates.each(function(idx){
+      const $vis = $(this);
+      try { this.type = 'text'; } catch(e){}
+      $vis.attr('autocomplete','off');
+      const altId = ($vis.attr('id') ? $vis.attr('id') : ('create_date_' + idx)) + '_alt';
+      if (!document.getElementById(altId)) {
+        $('<input>', {type:'hidden', id:altId}).insertAfter($vis);
+      }
+      $vis.persianDatepicker({
         format: 'YYYY/MM/DD',
         autoClose: true,
-        calendar: { persian: { locale: 'fa' } }
+        initialValue: false,
+        calendar: { persian: { locale: 'fa' } },
+        altField: '#'+altId,
+        altFormat: 'YYYY-MM-DD',
+        altCalendar: 'gregorian'
       });
+    });
+
+    // قبل از ارسال فرم، مقدار visible را با میلادی alt جایگزین کن
+    var $orderForm = $('#order-tab-pane form');
+    if($orderForm.length){
+      $orderForm.on('submit', function(){
+        $createDates.each(function(idx){
+          const $vis = $(this);
+          const altId = ($vis.attr('id') ? $vis.attr('id') : ('create_date_' + idx)) + '_alt';
+          const $alt = $('#'+altId);
+          if ($alt.length && $alt.val()) {
+            $vis.val($alt.val()); // ارسال: YYYY-MM-DD
+          }
+        });
+      });
+    }
 
     // جستجوی سریع داخل صفحه
     $("#searchInput").on("keyup", function() {
@@ -489,13 +547,12 @@ core/templates/core/home.html:
       });
     });
 
-    // ===== Tooth Picker logic (FDI) =====
+    // ===== Tooth Picker logic (بدون تغییر) =====
     const chips = document.querySelectorAll('.tooth-chip');
     const hidden = document.getElementById('teeth_fdi');
     const summary = document.getElementById('tooth-summary');
 
     function fdiCode(q, n){ return (q*10 + n).toString(); }
-
     function refreshSummary(){
       const codes = (hidden.value || '').split(',').filter(Boolean);
       if (!codes.length){
@@ -518,7 +575,6 @@ core/templates/core/home.html:
       if(groups[4].length) parts.push('پایین راست: ' + groups[4].join(', '));
       summary.textContent = parts.join('  |  ');
     }
-
     function toggleChip(el){
       el.classList.toggle('active');
       const q = parseInt(el.dataset.q,10);
@@ -531,9 +587,7 @@ core/templates/core/home.html:
       hidden.value = arr.join(',');
       refreshSummary();
     }
-
     chips.forEach(el=> el.addEventListener('click', ()=> toggleChip(el)));
-
     document.querySelectorAll('[data-bulk]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const t = btn.getAttribute('data-bulk');
@@ -565,14 +619,14 @@ core/templates/core/home.html:
       });
     });
 
-    // [جدید] چسباندن انتخاب‌ها به «notes» قبل از ارسال فرم (selector صحیح)
+    // چسباندن انتخاب‌ها به notes قبل از ارسال
     const _form = document.querySelector('#order-tab-pane form');
     if (_form){
       _form.addEventListener('submit', ()=>{
         const codes = (hidden && hidden.value || '').trim();
         if (!codes) return;
-         const notes = _form.querySelector('textarea[name$="notes"]');
-       if (notes){
+        const notes = _form.querySelector('textarea[name$="notes"]');
+        if (notes){
           const tag = '\nدندان‌ها: ' + codes.replaceAll(',', ', ');
           if (notes.value.indexOf('دندان‌ها:') === -1){
             notes.value = (notes.value || '') + tag;
@@ -581,7 +635,7 @@ core/templates/core/home.html:
       });
     }
 
-    // رندر نمای دندان‌ها در لیست (در صورت داشتن داده)
+    // رندر نمای دندان‌ها در لیست
     (function(){
       function parseQuadrants(qstr){
         const res = {UR:[], UL:[], LL:[], LR:[]};
@@ -606,10 +660,8 @@ core/templates/core/home.html:
         Object.keys(groups).forEach(k=> groups[k].sort((a,b)=>parseInt(a,10)-parseInt(b,10)));
         return groups;
       }
-      // [جدید] استخراج از notes در صورت نبودِ دادهٔ اختصاصی
       function fromNotes(notes){
         if(!notes) return null;
-        // تبدیل ارقام فارسی/عربی به لاتین
         const fa='۰۱۲۳۴۵۶۷۸۹', ar='٠١٢٣٤٥٦٧٨٩';
         function dnorm(s){
           return String(s)
@@ -628,7 +680,6 @@ core/templates/core/home.html:
           if(g[q] && n>=1 && n<=8) g[q].push(String(n));
         });
         Object.keys(g).forEach(k=> g[k].sort((a,b)=>parseInt(a,10)-parseInt(b,10)));
-        // نگاشت به ربع‌ها
         return { UL:g[2], UR:g[1], LL:g[3], LR:g[4] };
       }
       function fill(el){
@@ -662,65 +713,9 @@ core/templates/core/home.html:
       document.querySelectorAll('.toothplus').forEach(fill);
     })();
 
-    // ===== [جدید] نرمال‌سازی و تبدیل تاریخ‌ها به میلادی قبل از ارسال =====
-    function fa2enDigits(s){
-      if(!s) return '';
-      // ارقام فارسی و عربی -> لاتین
-      var fa = '۰۱۲۳۴۵۶۷۸۹', ar = '٠١٢٣٤٥٦٧٨٩';
-      return String(s)
-        .replace(/[۰-۹]/g, d => String(fa.indexOf(d)))
-        .replace(/[٠-٩]/g, d => String(ar.indexOf(d)));
-    }
-    function toGregorianISO(jalali){
-  // ورودی مثل 1404/07/13 یا ۱۴۰۴/۰۷/۱۳
-  var en = fa2enDigits((jalali || '').trim()).replace(/-/g,'/');
-  if(!/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(en)) return en; // اگر الگو درست نبود، همونو برگردون
-
-  try{
-    var p = en.split('/');
-    var y = parseInt(p[0], 10), m = parseInt(p[1], 10), d = parseInt(p[2], 10);
-    // persian-date باید آرایه بگیرد؛ سپس به میلادی تبدیل می‌کنیم
-    var pd = new persianDate([y, m, d]);
-    // بعضی نسخه‌ها toCalendar دارند، بعضی‌ها calendar
-    if (typeof pd.toCalendar === 'function') {
-      return pd.toCalendar('gregorian').format('YYYY-MM-DD');
-    } else if (typeof pd.calendar === 'function') {
-      return pd.calendar('gregorian').format('YYYY-MM-DD');
-    } else if (typeof pd.toGregorian === 'function') {
-      // در برخی فورک‌ها
-      var g = pd.toGregorian();
-      // g ممکن است آبجکت باشد: {year, month, day}
-      if (g && g.year) {
-        var mm = ('0' + g.month).slice(-2);
-        var dd = ('0' + g.day).slice(-2);
-        return g.year + '-' + mm + '-' + dd;
-      }
-    }
-    // اگر هیچکدام نبود، همان ورودی تمیزشده را برگردان
-    return en;
-  }catch(e){
-    return en;
-  }
-}
-
-    var $orderForm = $('#order-tab-pane form');
-    if($orderForm.length){
-      $orderForm.on('submit', function(){
-        ['order_date','due_date'].forEach(function(name){
-          // فیلدهای crispy ممکن است prefix داشته باشند؛ با ends-with می‌گیریم
-          var $inp = $orderForm.find('input[name$="'+name+'"]');
-          if(!$inp.length) return;
-          try { $inp[0].type = 'text'; } catch(e){}
-          var val = $inp.val();
-          $inp.val( toGregorianISO(val) );
-        });
-      });
-    }
-
-    // اگر از قبل داشتیش، بماند
-    refreshSummary();
+    // پایان ready
   });
-</script>
+  </script>
 {% endblock %}
 
 

@@ -19,7 +19,7 @@ urlpatterns = [
     path('orders/<int:order_id>/', views.order_detail, name='order_detail'),
     path('orders/<int:order_id>/add-event/', views.add_order_event, name='add_order_event'),
     path('orders/<int:order_id>/deliver/', views.deliver_order, name='deliver_order'),
-
+    path('orders/<int:order_id>/edit/', views.order_edit, name='order_edit'),
     # ✅ داشبورد برنامه (TemplateView ساده)
     path('dashboard/', views.dashboard, name='dashboard'),
 

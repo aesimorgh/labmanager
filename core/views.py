@@ -10,7 +10,8 @@ from django.core.paginator import Paginator
 from urllib.parse import urlencode
 from django.db.models import Q, F, Value, DecimalField, ExpressionWrapper
 from django.db.models.functions import Coalesce
-
+from django.shortcuts import get_object_or_404, redirect, render
+from django.contrib import messages
 import xlsxwriter
 from weasyprint import HTML
 
@@ -312,6 +313,23 @@ def deliver_order(request, order_id):
 
     next_url = request.GET.get("next") or request.META.get("HTTP_REFERER") or reverse("core:home")
     return redirect(next_url)
+
+def order_edit(request, order_id):
+    order = get_object_or_404(Order, id=order_id)
+
+    if request.method == "POST":
+        form = OrderForm(request.POST, instance=order)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "سفارش با موفقیت ویرایش شد.")
+            next_url = request.GET.get("next") or (reverse("core:orders_home") + "#list-tab-pane")
+            return redirect(next_url)
+        # ❗️ اگر فرم نامعتبر بود، همان صفحهٔ ویرایش را با خطاها render کن
+        return render(request, "core/order_edit.html", {"form": form})
+
+    # GET: نمایش فرم ویرایش
+    form = OrderForm(instance=order)
+    return render(request, "core/order_edit.html", {"form": form})
 
 
 from datetime import date
