@@ -1,5 +1,6 @@
 {% extends "base_user_panel.html" %}
 {% load crispy_forms_tags %}
+{% load static %}
 
 {% block title %}ویرایش سفارش{% endblock %}
 
@@ -166,6 +167,10 @@
 {% endblock %}
 
 {% block body_extra %}
+<script>
+  // پیش‌فرض: نسخهٔ جدید روشن است؛ با ?tp=0 خاموش می‌شود
+  window.__TP_FLAG__ = !/(?:^|[?&])tp=0(?:&|$)/.test(location.search);
+</script>
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
@@ -211,7 +216,8 @@
     return y+'-'+('0'+mo).slice(-2)+'-'+('0'+d).slice(-2);
   }
 
-  // === تاریخ‌ها (مثل قبل) ===
+  // === تاریخ‌ها (مثل قبل) — حالت عادی (قدیمی) ===
+if (!window.__DP_FLAG__) {
   $(function(){
     const $dateInputs = $("input[name$='order_date'], input[name$='due_date']");
 
@@ -242,6 +248,8 @@
         format: 'YYYY/MM/DD',
         autoClose: true,
         initialValue: false,
+        initialValueType: 'persian',   // ← مهم: مقدار اولیهٔ داخل input را جلالی تفسیر کن
+        persianDigit: true,            // ← نمایش اعداد فارسی
         calendar: { persian: { locale: 'fa' } },
         altField: '#'+altId,
         altFormat: 'YYYY-MM-DD',
@@ -259,8 +267,65 @@
       }
     });
   });
+}
+
+// === تاریخ‌ها (نسخهٔ آزمایشی با LMDateX) — فقط وقتی ?dp=1 ===
+if (window.__DP_FLAG__) {
+  $(function(){
+    const $dateInputs = $("input[name$='order_date'], input[name$='due_date']");
+
+    $dateInputs.each(function(){
+      try { this.type = 'text'; } catch(e){}
+      $(this).attr('autocomplete','off');
+    });
+
+    $dateInputs.each(function(idx){
+      const $vis = $(this);
+      const altId = ($vis.attr('id') ? $vis.attr('id') : ('datefld_' + idx)) + '_alt';
+      if (!document.getElementById(altId)) {
+        $('<input>', {type:'hidden', id:altId}).insertAfter($vis);
+      }
+      const $alt = $('#'+altId);
+
+      const X = window.LMDateX || {};
+      const v = ($vis.val() || '').trim();
+
+      if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+        $alt.val(v);
+        const j = (X.isoToJalali || isoToJalali)(v);
+        if (j) $vis.val(j);
+      } else {
+        const iso = (X.jalaliToISO || jalaliToISO)(v);
+        if (iso) $alt.val(iso);
+      }
+
+      $vis.persianDatepicker({
+        format: 'YYYY/MM/DD',
+        autoClose: true,
+        initialValue: false,
+        calendar: { persian: { locale: 'fa' } },
+        altField: '#'+altId,
+        altFormat: 'YYYY-MM-DD',
+        altCalendar: 'gregorian'
+      });
+
+      const $form = $('form[method="post"]');
+      if ($form.length){
+        // جلوگیری از وصل چندباره روی همین فرم
+        $form.off('submit.__dpflag');
+        $form.on('submit.__dpflag', function(){
+          let iso = $alt.val();
+          if (iso){
+            $vis.val(iso); // ارسال به بک‌اند
+          }
+        });
+      }
+    });
+  });
+}
 
   // === Tooth Picker (با پیش‌خواندن از notes و بروزرسانی notes روی ذخیره) ===
+  if (!window.__TP_FLAG__) {
   $(function(){
     const chips   = document.querySelectorAll('.tooth-chip');
     const hidden  = document.getElementById('teeth_fdi');
@@ -406,8 +471,57 @@
       });
     }
   });
+  }
+</script>
+<script src="{% static 'js/lm-tooth.js' %}"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function(){
+    if (window.LMTooth){
+      // از مقدار hidden فعلی (#teeth_fdi) برای آبی‌کردن چیپ‌ها استفاده می‌کنیم
+      LMTooth.prefillFromHidden('#teeth_fdi', '.tooth-chip', '#tooth-summary');
+      // اگر خواستی کلیک‌ها را هم بسپاریم به ما (لازم نیست چون خودت داری):
+      // LMTooth.attachInteractions('#teeth_fdi', '.tooth-chip', '#tooth-summary');
+    }
+  });
+</script>
+<!-- TP: experimental toggle & init (safe, one-block) -->
+<script>
+  // پیش‌فرض: نسخهٔ جدید روشن است؛ با ?tp=0 خاموش می‌شود
+  window.__TP_FLAG__ = !/(?:^|[?&])tp=0(?:&|$)/.test(location.search);
+</script>
+<script>
+  // پیش‌فرض: تاریخ جدید روشن است؛ با ?dp=0 خاموش می‌شود
+  window.__DP_FLAG__ = !/(?:^|[?&])dp=0(?:&|$)/.test(location.search);
+</script>
+<script src="{% static 'js/date-utils.experimental.v1.js' %}?v=20251009"></script>
+<script src="{% static 'js/toothpicker.experimental.v1.js' %}?v=20251009"></script>
+<script>
+  (function(){
+    // اگر tp=0 نباشد، نسخهٔ جدید را فعال کن
+    if (!window.__TP_FLAG__) return;
+
+    // برای جلوگیری از رویدادهای نسخهٔ قدیمی، روی چیپ‌ها و دکمه‌های گروهی ری‌کلون می‌زنیم
+    function stripHandlers(selector){
+      document.querySelectorAll(selector).forEach(function(el){
+        if (!el.parentNode) return;
+        var clone = el.cloneNode(true);   // کلاس‌ها و متن حفظ می‌شود؛ لیسنرها حذف می‌شوند
+        el.parentNode.replaceChild(clone, el);
+      });
+    }
+    stripHandlers('.tooth-chip');
+    stripHandlers('[data-bulk]');
+
+    // راه‌اندازی ماژول جدید
+    if (window.LMToothX && typeof LMToothX.init === 'function'){
+      LMToothX.init(); // کل صفحه را هدف می‌گیرد
+    } else {
+      console.warn('LMToothX not found');
+    }
+  })();
 </script>
 {% endblock %}
+
+
 
 
 
