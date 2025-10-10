@@ -62,6 +62,7 @@ class Order(models.Model):
     status        = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     due_date      = jmodels.jDateField(null=True, blank=True)
     notes         = models.TextField(blank=True, null=True)
+    teeth_fdi = models.CharField("کدهای FDI", max_length=128, blank=True, default="")
     created_at    = models.DateTimeField(auto_now_add=True)
     # داخل مدل Order:
     shipped_date = jmodels.jDateField(null=True, blank=True, verbose_name="تاریخ ارسال (واقعی)")

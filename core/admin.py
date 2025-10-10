@@ -9,6 +9,7 @@ from django.utils.html import format_html
 from django.template.response import TemplateResponse
 from jalali_date.admin import ModelAdminJalaliMixin
 from jalali_date import date2jalali, datetime2jalali
+import jdatetime
 from django.contrib import messages
 from django.utils import timezone
 from .models import Accounting
@@ -214,12 +215,13 @@ class OrderAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
         'order_type',
         'unit_count',
         'serial_number',
+        'teeth_fdi_display',   # ← دندان‌ها
         'total_price_fa',   # سورت‌شونده
         'paid_fa',          # سورت‌شونده
         'balance_badge',    # سورت‌شونده
         'status_badge',
         'due_date_fa',
-        'created_at_fa',
+        'order_date_fa',
         'edit_button',
         'settle_button',
         'undo_button',
@@ -306,24 +308,38 @@ class OrderAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
     # ---------- تاریخ‌ها: جلالی + ارقام فارسی + / ----------
     @admin.display(description='تاریخ تحویل', ordering='due_date')
     def due_date_fa(self, obj):
-        if not getattr(obj, 'due_date', None):
+        d = getattr(obj, 'due_date', None)
+        if not d:
             return '—'
         try:
-            s = date2jalali(obj.due_date).strftime('%Y/%m/%d')
+            # اگر فیلد از نوع jmodels.jDateField باشد، d از نوع jdatetime.date است و خودش جلالی است
+            if isinstance(d, jdatetime.date):
+                s = d.strftime('%Y/%m/%d')
+            else:
+                # در غیر اینصورت (date میلادی)، به جلالی تبدیل کن
+                s = date2jalali(d).strftime('%Y/%m/%d')
             return s.translate(FA_DIGITS)
         except Exception:
-            return str(obj.due_date)
+            return str(d)
 
-    @admin.display(description='تاریخ ثبت', ordering='created_at')
-    def created_at_fa(self, obj):
-        if not getattr(obj, 'created_at', None):
+    @admin.display(description='تاریخ ثبت', ordering='order_date')
+    def order_date_fa(self, obj):
+        d = getattr(obj, 'order_date', None)
+        if not d:
             return '—'
         try:
-            s = datetime2jalali(obj.created_at).strftime('%Y/%m/%d')
+            # اگر jDateField است، خودش جلالی است
+            import jdatetime
+            if isinstance(d, jdatetime.date):
+                s = d.strftime('%Y/%m/%d')
+            else:
+                from jalali_date import date2jalali
+                s = date2jalali(d).strftime('%Y/%m/%d')
             return s.translate(FA_DIGITS)
         except Exception:
-            return obj.created_at.strftime('%Y/%m/%d')
-        
+            return str(d)
+
+
     @admin.display(description='ویرایش')
     def edit_button(self, obj):
       url = reverse('admin:core_order_change', args=[obj.pk])
@@ -357,6 +373,21 @@ class OrderAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
         url
     )
 
+    @admin.display(description='دندان‌ها')
+    def teeth_fdi_display(self, obj):
+        val = (getattr(obj, 'teeth_fdi', '') or '').strip()
+        if not val:
+            # fallback از notes اگر خواستی حفظ شود
+            import re
+            notes = getattr(obj, 'notes', '') or ''
+            m = re.search(r'دندان‌ها\s*:\s*([0-9,\s،]+)', notes)
+            if m:
+                val = m.group(1).replace('،', ',')
+        if not val:
+            return '—'
+        # نرمال‌سازی کوچک و ارقام فارسی
+        val = ', '.join([p.strip() for p in val.split(',') if p.strip()])
+        return val.translate(FA_DIGITS)
 
 
     # ---------- ستون «عملیات» ----------

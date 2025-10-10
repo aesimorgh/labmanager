@@ -3,7 +3,7 @@ core/templates/core/home.html:
 {% load crispy_forms_tags %}
 {% load num_extras %}
 {% load jalali_tags %}
-
+{% load static %}
 {% block title %}سفارش‌ها{% endblock %}
 
 {% block head_extra %}
@@ -248,6 +248,7 @@ core/templates/core/home.html:
 
                   <!-- ورودی مخفی برای ارسال FDI Codes -->
                   <input type="hidden" name="order-teeth_fdi" id="teeth_fdi" value="">
+                  <input type="hidden" name="teeth_fdi" id="teeth_fdi_mf" value="">
                   <div class="tooth-help">راهنما: کدگذاری FDI (۱۱–۱۸ بالا راست، ۲۱–۲۸ بالا چپ، ۳۱–۳۸ پایین چپ، ۴۱–۴۸ پایین راست). انتخاب‌ها در «یادداشت» نیز ذخیره می‌شوند.</div>
                 </div>
                 <!-- ===== پایان انتخاب دندان‌ها ===== -->
@@ -479,10 +480,22 @@ core/templates/core/home.html:
   <script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-
+    <!-- Feature flags (خاموش پیش‌فرض؛ فقط با ?tp=1 / ?dp=1 روشن می‌شوند) -->
   <script>
+    window.__TP_FLAG__ = !/(?:^|[?&])tp=0(?:&|$)/.test(location.search);
+    window.__DP_FLAG__ = !/(?:^|[?&])dp=0(?:&|$)/.test(location.search);
+  </script>
+
+  <!-- ماژول‌های آزمایشی (فعلاً صرفاً لود می‌شوند؛ اجرا بعداً) -->
+  <script src="{% static 'js/toothpicker.experimental.v1.js' %}?v=20251009"></script>
+  <script src="{% static 'js/date-utils.experimental.v1.js' %}?v=20251009"></script>
+
+ <script>
   $(function() {
-    // تب لیست در صورت داشتن query/hash
+    const TP = !!window.__TP_FLAG__; // Tooth Picker آزمایشی؟
+    const DP = !!window.__DP_FLAG__; // تاریخ آزمایشی؟
+
+    // --- تب لیست در صورت داشتن query/hash
     try {
       if (window.location.search || window.location.hash === '#list-tab-pane') {
         var triggerEl = document.querySelector('#list-tab');
@@ -490,44 +503,95 @@ core/templates/core/home.html:
       }
     } catch (e) {}
 
-    // تاریخ Jalali برای «ارسال شد» (لیست)
-    const $listDates = $("#list-tab-pane input.jalali_date");
-    $listDates.each(function(){
-      try { this.type = 'text'; } catch(e){}
-      $(this).attr('autocomplete','off');
-    });
-    $listDates.filter(function(){ return !$(this).data('pDatepicker'); })
-      .persianDatepicker({
-        format:'YYYY/MM/DD',
-        autoClose:true,
-        calendar:{ persian:{ locale:'fa' } }
-      });
+   // تاریخ Jalali برای «ارسال شد» (لیست) — پایدار + نرمال‌سازی قبل از ارسال
+const $listDates = $("#list-tab-pane input.jalali_date");
 
-    // تاریخ‌های فرم ثبت سفارش با altField (ارسال میلادی، نمایش جلالی)
+// ورودی را متنی و تمیز کن
+$listDates.each(function(){
+  try { this.type = 'text'; } catch(e){}
+  $(this).attr('autocomplete','off')
+         .attr('inputmode','numeric')
+         .attr('dir','ltr');
+});
+
+// یک‌بار اینیشیال — با اعداد فارسی در UI
+$listDates.filter(function(){ return !$(this).data('pDatepicker'); })
+  .persianDatepicker({
+    format: 'YYYY/MM/DD',
+    autoClose: true,
+    initialValue: false,
+    initialValueType: 'persian',
+    calendar: { persian: { locale: 'fa' } },
+    persianDigit: true
+  });
+
+// قبل از submit هر فرم «ارسال شد»: مقدار را به YYYY/MM/DD با ارقام لاتین تبدیل کن
+$("#list-tab-pane form[action*='deliver_order']").on('submit', function(){
+  var $inp = $(this).find('input.jalali_date').first();
+  if (!$inp.length) return;
+  var v = ($inp.val() || '').trim();
+  if (!v) return;
+
+  // تبدیل ارقام فارسی/عربی به لاتین + «-» به «/»
+  var map = {'۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9',
+             '٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9','-':'/'};
+  v = v.replace(/[۰-۹٠-٩\-]/g, function(ch){ return map[ch] || ch; });
+  $inp.val(v); // نمونه: 1403/07/19
+});
+
+
+    // --- تاریخ‌های فرم ثبت سفارش (Create tab) با altField
     const $createDates = $("#order-tab-pane input[name$='order_date'], #order-tab-pane input[name$='due_date']");
-    $createDates.each(function(idx){
-      const $vis = $(this);
-      try { this.type = 'text'; } catch(e){}
-      $vis.attr('autocomplete','off');
-      const altId = ($vis.attr('id') ? $vis.attr('id') : ('create_date_' + idx)) + '_alt';
-      if (!document.getElementById(altId)) {
-        $('<input>', {type:'hidden', id:altId}).insertAfter($vis);
-      }
-      $vis.persianDatepicker({
-        format: 'YYYY/MM/DD',
-        autoClose: true,
-        initialValue: false,
-        calendar: { persian: { locale: 'fa' } },
-        altField: '#'+altId,
-        altFormat: 'YYYY-MM-DD',
-        altCalendar: 'gregorian'
+    if (!DP) {
+      // حالت قدیمی (پیش‌فرض خاموش بودن تاریخ جدید)
+      $createDates.each(function(idx){
+        const $vis = $(this);
+        try { this.type = 'text'; } catch(e){}
+        $vis.attr('autocomplete','off');
+        const altId = ($vis.attr('id') ? $vis.attr('id') : ('create_date_' + idx)) + '_alt';
+        if (!document.getElementById(altId)) {
+          $('<input>', {type:'hidden', id:altId}).insertAfter($vis);
+        }
+        $vis.persianDatepicker({
+          format: 'YYYY/MM/DD',
+          autoClose: true,
+          initialValue: false,
+          calendar: { persian: { locale: 'fa' } },
+          altField: '#'+altId,
+          altFormat: 'YYYY-MM-DD',
+          altCalendar: 'gregorian'
+        });
       });
-    });
+    } else {
+      // حالت آزمایشی تاریخ جدید با LMDateX
+      $createDates.each(function(idx){
+        const $vis = $(this);
+        try { this.type = 'text'; } catch(e){}
+        $vis.attr('autocomplete','off');
+        const altId = ($vis.attr('id') ? $vis.attr('id') : ('create_date_' + idx)) + '_alt';
+        if (!document.getElementById(altId)) {
+          $('<input>', {type:'hidden', id:altId}).insertAfter($vis);
+        }
+        $vis.persianDatepicker({
+          format: 'YYYY/MM/DD',
+          autoClose: true,
+          initialValue: false,
+          initialValueType: 'persian', // تفسیر مقدار اولیه به‌صورت جلالی
+          persianDigit: true,          // نمایش اعداد فارسی
+          calendar: { persian: { locale: 'fa' } },
+          altField: '#'+altId,
+          altFormat: 'YYYY-MM-DD',
+          altCalendar: 'gregorian'
+        });
+      });
+    }
 
-    // قبل از ارسال فرم، مقدار visible را با میلادی alt جایگزین کن
+    // --- قبل از ارسال فرم Create: مقدار visible را با میلادی alt جایگزین کن
     var $orderForm = $('#order-tab-pane form');
     if($orderForm.length){
-      $orderForm.on('submit', function(){
+      // نام‌فضا برای جلوگیری از چندبار وصل‌شدن
+      $orderForm.off('submit.__create_dates');
+      $orderForm.on('submit.__create_dates', function(){
         $createDates.each(function(idx){
           const $vis = $(this);
           const altId = ($vis.attr('id') ? $vis.attr('id') : ('create_date_' + idx)) + '_alt';
@@ -539,103 +603,115 @@ core/templates/core/home.html:
       });
     }
 
-    // جستجوی سریع داخل صفحه
-    $("#searchInput").on("keyup", function() {
-      let value = $(this).val().toLowerCase();
-      $("#ordersTable tr").filter(function() {
-        $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1)
-      });
-    });
+    // --- Tooth Picker (Create tab)
+    const chips = document.querySelectorAll('#order-tab-pane .tooth-chip');
+    const hidden = document.querySelector('#order-tab-pane #teeth_fdi');
+    const summary = document.querySelector('#order-tab-pane #tooth-summary');
 
-    // ===== Tooth Picker logic (بدون تغییر) =====
-    const chips = document.querySelectorAll('.tooth-chip');
-    const hidden = document.getElementById('teeth_fdi');
-    const summary = document.getElementById('tooth-summary');
-
-    function fdiCode(q, n){ return (q*10 + n).toString(); }
-    function refreshSummary(){
-      const codes = (hidden.value || '').split(',').filter(Boolean);
-      if (!codes.length){
-        summary.textContent = 'هنوز دندانی انتخاب نشده است.';
-        summary.classList.add('text-muted');
-        return;
-      }
-      summary.classList.remove('text-muted');
-      const groups = {1:[],2:[],3:[],4:[]};
-      codes.forEach(c=>{
-        const q = parseInt(c[0],10);
-        const n = parseInt(c.slice(1),10);
-        if(groups[q]) groups[q].push(n);
-      });
-      Object.keys(groups).forEach(k=> groups[k].sort((a,b)=>a-b));
-      const parts = [];
-      if(groups[1].length) parts.push('بالا راست: ' + groups[1].join(', '));
-      if(groups[2].length) parts.push('بالا چپ: '   + groups[2].join(', '));
-      if (groups[3].length) parts.push('پایین چپ: ' + groups[3].join(', '));
-      if(groups[4].length) parts.push('پایین راست: ' + groups[4].join(', '));
-      summary.textContent = parts.join('  |  ');
-    }
-    function toggleChip(el){
-      el.classList.toggle('active');
-      const q = parseInt(el.dataset.q,10);
-      const n = parseInt(el.dataset.n,10);
-      const code = fdiCode(q,n);
-      let arr = (hidden.value || '').split(',').filter(Boolean);
-      if (el.classList.contains('active')){ if (!arr.includes(code)) arr.push(code); }
-      else { arr = arr.filter(c => c !== code); }
-      arr.sort((a,b)=>parseInt(a,10)-parseInt(b,10));
-      hidden.value = arr.join(',');
-      refreshSummary();
-    }
-    chips.forEach(el=> el.addEventListener('click', ()=> toggleChip(el)));
-    document.querySelectorAll('[data-bulk]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const t = btn.getAttribute('data-bulk');
-        if (t === 'clear'){
-          chips.forEach(c=> c.classList.remove('active'));
-          hidden.value = '';
-          refreshSummary();
+    if (!TP) {
+      // حالت قدیمی (بدون تغییر)
+      function fdiCode(q, n){ return (q*10 + n).toString(); }
+      function refreshSummary(){
+        const codes = (hidden.value || '').split(',').filter(Boolean);
+        if (!codes.length){
+          summary.textContent = 'هنوز دندانی انتخاب نشده است.';
+          summary.classList.add('text-muted');
           return;
         }
-        const selectQuadrants = (qs)=>{
-          chips.forEach(c=>{
-            const q = parseInt(c.dataset.q,10);
-            if (qs.includes(q)){ if (!c.classList.contains('active')) c.classList.add('active'); }
-          });
-          const arr = [];
-          chips.forEach(c=>{
-            if (c.classList.contains('active')){
-              const q = parseInt(c.dataset.q,10);
-              const n = parseInt(c.dataset.n,10);
-              arr.push(fdiCode(q,n));
-            }
-          });
-          arr.sort((a,b)=>parseInt(a,10)-parseInt(b,10));
-          hidden.value = arr.join(',');
-          refreshSummary();
-        };
-        if (t === 'upper-all') selectQuadrants([1,2]);
-        if (t === 'lower-all') selectQuadrants([3,4]);
-      });
-    });
-
-    // چسباندن انتخاب‌ها به notes قبل از ارسال
-    const _form = document.querySelector('#order-tab-pane form');
-    if (_form){
-      _form.addEventListener('submit', ()=>{
-        const codes = (hidden && hidden.value || '').trim();
-        if (!codes) return;
-        const notes = _form.querySelector('textarea[name$="notes"]');
-        if (notes){
-          const tag = '\nدندان‌ها: ' + codes.replaceAll(',', ', ');
-          if (notes.value.indexOf('دندان‌ها:') === -1){
-            notes.value = (notes.value || '') + tag;
+        summary.classList.remove('text-muted');
+        const groups = {1:[],2:[],3:[],4:[]};
+        codes.forEach(c=>{
+          const q = parseInt(c[0],10);
+          const n = parseInt(c.slice(1),10);
+          if(groups[q]) groups[q].push(n);
+        });
+        Object.keys(groups).forEach(k=> groups[k].sort((a,b)=>a-b));
+        const parts = [];
+        if(groups[1].length) parts.push('بالا راست: ' + groups[1].join(', '));
+        if(groups[2].length) parts.push('بالا چپ: '   + groups[2].join(', '));
+        if (groups[3].length) parts.push('پایین چپ: ' + groups[3].join(', '));
+        if(groups[4].length) parts.push('پایین راست: ' + groups[4].join(', '));
+        summary.textContent = parts.join('  |  ');
+      }
+      function toggleChip(el){
+        el.classList.toggle('active');
+        const q = parseInt(el.dataset.q,10);
+        const n = parseInt(el.dataset.n,10);
+        const code = fdiCode(q,n);
+        let arr = (hidden.value || '').split(',').filter(Boolean);
+        if (el.classList.contains('active')){ if (!arr.includes(code)) arr.push(code); }
+        else { arr = arr.filter(c => c !== code); }
+        arr.sort((a,b)=>parseInt(a,10)-parseInt(b,10));
+        hidden.value = arr.join(',');
+        refreshSummary();
+      }
+      chips.forEach(el=> el.addEventListener('click', ()=> toggleChip(el)));
+      document.querySelectorAll('#order-tab-pane [data-bulk]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const t = btn.getAttribute('data-bulk');
+          if (t === 'clear'){
+            chips.forEach(c=> c.classList.remove('active'));
+            hidden.value = '';
+            refreshSummary();
+            return;
           }
-        }
+          const selectQuadrants = (qs)=>{
+            chips.forEach(c=>{
+              const q = parseInt(c.dataset.q,10);
+              if (qs.includes(q)){ if (!c.classList.contains('active')) c.classList.add('active'); }
+            });
+            const arr = [];
+            chips.forEach(c=>{
+              if (c.classList.contains('active')){
+                const q = parseInt(c.dataset.q,10);
+                const n = parseInt(c.dataset.n,10);
+                arr.push(fdiCode(q,n));
+              }
+            });
+            arr.sort((a,b)=>parseInt(a,10)-parseInt(b,10));
+            hidden.value = arr.join(',');
+            refreshSummary();
+          };
+          if (t === 'upper-all') selectQuadrants([1,2]);
+          if (t === 'lower-all') selectQuadrants([3,4]);
+        });
       });
+
+      // چسباندن انتخاب‌ها به notes قبل از ارسال (قدیمی)
+      const _form = document.querySelector('#order-tab-pane form');
+      if (_form){
+        _form.addEventListener('submit', ()=>{
+          const codes = (hidden && hidden.value || '').trim();
+          if (!codes) return;
+          const notes = _form.querySelector('textarea[name$="notes"]');
+          if (notes){
+            const tag = '\nدندان‌ها: ' + codes.replaceAll(',', ', ');
+            if (notes.value.indexOf('دندان‌ها:') === -1){
+              notes.value = (notes.value || '') + tag;
+            }
+          }
+          // کپی برای ModelForm تا در DB ذخیره شود
+       const mfHidden = document.getElementById('teeth_fdi_mf');
+       if (mfHidden) mfHidden.value = codes;
+        });
+      }
+    } else {
+      // حالت آزمایشی جدید با LMToothX (فقط تب Create)
+      if (window.LMToothX && typeof LMToothX.init === 'function') {
+        LMToothX.init({
+          root: '#order-tab-pane',         // فقط تب ثبت سفارش
+          hidden: '#teeth_fdi',
+          chips: '.tooth-chip',
+          summary: '#tooth-summary',
+          notes: '#id_notes'               // پیش‌فرض crispy معمولاً id_notes است
+        });
+
+      } else {
+        console.warn('LMToothX not found');
+      }
     }
 
-    // رندر نمای دندان‌ها در لیست
+    // --- رندر نمای دندان‌ها در لیست (بدون تغییر)
     (function(){
       function parseQuadrants(qstr){
         const res = {UR:[], UL:[], LL:[], LR:[]};
@@ -715,7 +791,53 @@ core/templates/core/home.html:
 
     // پایان ready
   });
-  </script>
+</script>
+<script>
+  // تضمین نهایی (نسخهٔ بهبود‌یافته):
+  // قبل از ارسال فرم Create، کُدهای دندان از hidden یا از چیپ‌های .active خوانده می‌شود
+  // سپس در notes و همچنین در هیدن مدل (teeth_fdi_mf) ست می‌گردد.
+  (function(){
+    var rootSel   = '#order-tab-pane';
+    var formSel   = rootSel + ' form';
+    var hiddenSel = rootSel + ' #teeth_fdi';      // هیدن UI
+    var mfSel     = rootSel + ' #teeth_fdi_mf';   // هیدن ModelForm (name="teeth_fdi")
+
+    function collectFromChips(){
+      var arr = [];
+      document.querySelectorAll(rootSel + ' .tooth-chip.active').forEach(function(c){
+        var q = parseInt(c.getAttribute('data-q'), 10);
+        var n = parseInt(c.getAttribute('data-n'), 10);
+        if (q && n) arr.push(String(q*10 + n));
+      });
+      // اگر hidden قبلی چیزی دارد، با چیپ‌ها ادغام شود
+      var hv = (document.querySelector(hiddenSel)?.value || '').split(',').map(function(s){return s.trim();}).filter(Boolean);
+      hv.forEach(function(code){ if (!arr.includes(code)) arr.push(code); });
+      arr.sort(function(a,b){ return parseInt(a,10) - parseInt(b,10); });
+      return arr.join(',');
+    }
+
+    $(document).off('submit.__tp_sync', formSel).on('submit.__tp_sync', formSel, function(){
+      // 1) کدها: اول از هیدن، اگر خالی بود از چیپ‌ها
+      var codes = (document.querySelector(hiddenSel)?.value || '').trim();
+      if (!codes) codes = collectFromChips();
+
+      // 2) در هر دو هیدن بنویسیم تا حتماً POST شود
+      var $ui = $(hiddenSel); if ($ui.length) $ui.val(codes);
+      var $mf = $(mfSel);     if ($mf.length) $mf.val(codes);
+
+      // 3) خط «دندان‌ها: …» را در notes جایگزین/افزوده کن (شناسه یا name هرچه باشد)
+      var $notes = $(rootSel + ' #id_notes, ' + rootSel + ' textarea[name$="notes"]');
+      if ($notes.length){
+        var txt = String($notes.val() || '');
+        txt = txt.replace(/(^|\n)\s*دندان‌ها\s*:\s*[^\n]*\n?/g, '$1'); // پاک نسخه‌های قبلی
+        if (codes){
+          txt = (txt ? txt.replace(/\s*$/,'') + '\n' : '') + 'دندان‌ها: ' + codes.replace(/,/g, ', ');
+        }
+        $notes.val(txt);
+      }
+    });
+  })();
+</script>
 {% endblock %}
 
 

@@ -30,95 +30,63 @@ class PatientForm(forms.ModelForm):
 # -----------------------------
 class OrderForm(forms.ModelForm):
     order_date = JalaliDateField(
-        label="تاریخ سفارش",
-        required=False,
+        label="تاریخ سفارش", required=False,
         widget=AdminJalaliDateWidget(attrs={'class': 'jalali_date'})
     )
     due_date = JalaliDateField(
-        label="تاریخ تحویل",
-        required=False,
+        label="تاریخ تحویل", required=False,
         widget=AdminJalaliDateWidget(attrs={'class': 'jalali_date'})
     )
 
-    # فیلدهای مورد استفاده در فرم ادمین (و home.html)
+    # فیلدهای نمایشی/ورودی
     patient_name = forms.CharField(
-        label="نام بیمار",
-        required=True,
+        label="نام بیمار", required=True,
         widget=forms.TextInput(attrs={'placeholder': 'مثال: علی رضایی'})
     )
     doctor = forms.CharField(
-        label="پزشک",
-        required=True,
+        label="پزشک", required=True,
         widget=forms.TextInput(attrs={'placeholder': 'مثال: دکتر محمدی'})
     )
-    order_type = forms.ChoiceField(
-        label="نوع سفارش",
-        choices=Order.ORDER_TYPES,
-        required=True
-    )
+    order_type = forms.ChoiceField(label="نوع سفارش", choices=Order.ORDER_TYPES, required=True)
     unit_count = forms.IntegerField(
-        label="تعداد واحد",
-        min_value=1,
-        initial=1,
-        required=True,
+        label="تعداد واحد", min_value=1, initial=1, required=True,
         widget=forms.NumberInput(attrs={'dir': 'ltr'})
     )
-    shade = forms.CharField(
-        label="رنگ",
-        required=False,
-        widget=forms.TextInput(attrs={'placeholder': 'مثال: A2'})
-    )
-
-    # تبدیل price به CharField در فرم تا بتوانیم ورودی‌های فارسی/با کاما را نرمال کنیم
-    price = forms.CharField(
-        label="قیمت به ازای هر واحد (تومان)",
-        required=True,
+    shade = forms.CharField(label="رنگ", required=False, widget=forms.TextInput(attrs={'placeholder': 'مثال: A2'}))
+    price = forms.CharField(  # به‌صورت رشته برای نرمال‌سازی ورودی فارسی/کاما
+        label="قیمت به ازای هر واحد (تومان)", required=True,
         widget=forms.TextInput(attrs={'dir': 'ltr', 'placeholder': 'مثال: 100000'})
     )
-
-    serial_number = forms.CharField(
-        label="شماره سریال",
-        required=False
-    )
-    status = forms.ChoiceField(
-        label="وضعیت",
-        choices=Order.STATUS_CHOICES,
-        required=True
-    )
-    notes = forms.CharField(
-        label="یادداشت",
-        required=False,
-        widget=forms.Textarea(attrs={'rows': 2})
-    )
+    serial_number = forms.CharField(label="شماره سریال", required=False)
+    status = forms.ChoiceField(label="وضعیت", choices=Order.STATUS_CHOICES, required=True)
+    notes = forms.CharField(label="یادداشت", required=False, widget=forms.Textarea(attrs={'rows': 2}))
 
     class Meta:
         model = Order
         fields = [
             'patient_name', 'doctor', 'order_type', 'unit_count',
             'shade', 'price', 'serial_number', 'status',
-            'order_date', 'due_date', 'notes'
+            'order_date', 'due_date', 'notes',
+            'teeth_fdi',  # ← حالا مدل‌بیس و رسمی
         ]
+        widgets = {
+            'teeth_fdi': forms.HiddenInput(),  # ← مخفی ولی متصل به مدل
+        }
 
     @staticmethod
     def _normalize_jalali_input(val: str) -> str:
-        """
-        ورودی تاریخ از Datepicker شمسی را برای JalaliDateField نرمال می‌کند:
-        - تبدیل ارقام فارسی/عربی به لاتین
-        - تبدیل '/' به '-'
-        """
         if val is None:
             return ''
         s = str(val).strip()
         if not s:
             return ''
         trans = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
-        s = s.translate(trans).replace('/', '-')
-        return s
+        return s.translate(trans).replace('/', '-')
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # ✅ نرمال‌سازی مقادیر خام تاریخ‌ها قبل از ولیدیشن فیلدها (بدون تغییر در UI تقویم)
+        # نرمال‌سازی ورودی تاریخ‌ها پیش از ولیدیشن
         if self.is_bound:
             data = self.data.copy()
             od_key = self.add_prefix('order_date')
@@ -127,78 +95,68 @@ class OrderForm(forms.ModelForm):
                 data[od_key] = self._normalize_jalali_input(data.get(od_key, ''))
             if dd_key in data:
                 data[dd_key] = self._normalize_jalali_input(data.get(dd_key, ''))
-            self.data = data  # مهم: قبل از clean فیلدها اعمال شود
 
-        # اگر در حالت ویرایش هستیم، مقدار اولیه patient_name را از instance.patient قرار بده
+            # اگر teeth_fdi خالی بود، از order-teeth_fdi (فرانت) پر کن و نرمال‌سازی ارقام/کاما انجام بده
+            tf_key = self.add_prefix('teeth_fdi')
+            if not str(data.get(tf_key, '')).strip():
+                alt = data.get('order-teeth_fdi', '')
+                if alt:
+                    s = str(alt).strip()
+                    trans = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+                    s = s.translate(trans).replace('،', ',').replace(' ', '')
+                    data[tf_key] = s
+
+            self.data = data
+
+        # مقدار اولیه نام بیمار در حالت ویرایش
         if getattr(self, 'instance', None) and getattr(self.instance, 'patient', None):
             self.fields['patient_name'].initial = self.instance.patient.name
 
     def clean_price(self):
-        """
-        نرمال‌سازی رشته ورودی قیمت:
-        - تبدیل ارقام فارسی/عربی به لاتین
-        - حذف کاما/حروف جداکننده هزار و فاصله‌ها
-        - تبدیل جداکننده ده‌دهی عربی '٫' به '.'
-        سپس تبدیل به Decimal و اعتبارسنجی.
-        """
         raw = self.cleaned_data.get('price', '')
         if raw in (None, ''):
             raise ValidationError("لطفاً مقدار قیمت را وارد کنید.")
-
         s = str(raw).strip()
-
-        # تبدیل ارقام فارسی و عربی به لاتین
         trans = str.maketrans('۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩', '01234567890123456789')
-        s = s.translate(trans)
-
-        # تبدیل جداکننده‌های اعشاری عربی به نقطه و حذف جداکننده‌های هزار و علائم فارسی/عربی
-        s = s.replace('٫', '.')
-        s = s.replace('٬', '')   # Arabic thousands separator
-        s = s.replace('،', '')   # Persian comma
-        s = s.replace(',', '')   # standard comma
-        s = s.replace(' ', '')
-
-        # حذف هر کاراکتر ناخواسته (بجز ارقام، نقطه و منفی)
+        s = s.translate(trans).replace('٫', '.').replace('٬', '').replace('،', '').replace(',', '').replace(' ', '')
         s = re.sub(r'[^0-9.\-]', '', s)
-
-        # اطمینان از اینکه حداکثر یک نقطه وجود دارد
         if s.count('.') > 1:
             raise ValidationError("لطفاً یک عدد معتبر وارد کنید.")
-
         try:
             value = Decimal(s)
         except (InvalidOperation, ValueError):
             raise ValidationError("لطفاً یک عدد معتبر وارد کنید.")
-
         if value < 0:
             raise ValidationError("قیمت نمی‌تواند منفی باشد.")
-
-        # برگرداندن Decimal؛ این مقدار به فیلد مدل اختصاص خواهد یافت
         return value
 
     def save(self, commit=True):
-        """
-        قبل از ذخیره:
-        - از patient_name یک Patient پیدا یا بساز و به instance.patient اختصاص بده
-        - مقدار price (که در clean_price به Decimal تبدیل شده) را به instance.price اختصاص بده
-        """
         instance = super().save(commit=False)
 
-        # ساخت یا یافتن Patient از روی نام
+        # patient از روی نام
         name = self.cleaned_data.get('patient_name', '')
         name = name.strip() if isinstance(name, str) else ''
         if name:
-            patient, created = Patient.objects.get_or_create(name=name)
+            patient, _ = Patient.objects.get_or_create(name=name)
             instance.patient = patient
 
-        # مقدار price (Decimal) را به نمونه اختصاص می‌دهیم
+        # price از clean_price آمده
         price_value = self.cleaned_data.get('price')
         if price_value is not None:
             instance.price = price_value
 
+        # گارد سروری: خط «دندان‌ها: …» را در notes جایگزین/اضافه کن
+        codes = (self.cleaned_data.get('teeth_fdi') or '').strip()
+        if codes:
+            codes_csv = ', '.join([c.strip() for c in codes.split(',') if c.strip()])
+            txt = instance.notes or ''
+            txt = re.sub(r'(^|\n)\s*دندان‌ها\s*:\s*[^\n]*\n?', r'\1', txt or '')
+            if txt and not txt.endswith('\n'):
+                txt += '\n'
+            instance.notes = (txt or '') + f'دندان‌ها: {codes_csv}'
+
         if commit:
             instance.save()
-            # ذخیره m2m اگر وجود دارد
             if hasattr(self, 'save_m2m'):
                 self.save_m2m()
         return instance
