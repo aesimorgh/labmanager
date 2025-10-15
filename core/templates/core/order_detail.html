@@ -14,6 +14,11 @@
     .timeline .meta { color:#6c757d; font-size:.9rem; }
     .badge-status{font-size:.85rem}
     .pwt-datepicker-container{z-index:2050!important}
+    /* وضعیت مرحله‌ها */
+    .stage-badge{border-radius:9999px; padding:.15rem .5rem; font-size:.8rem}
+    .stage-pending{background:#fff;border:1px solid #e5e7eb;color:#374151}
+    .stage-running{background:#fff3cd;border:1px solid #f59e0b;color:#7c5a00}
+    .stage-done{background:#dcfce7;border:1px solid #22c55e;color:#14532d}
   </style>
 </head>
 <body class="container">
@@ -23,9 +28,74 @@
     <span class="badge bg-secondary badge-status">{{ order.get_status_display }}</span>
   </h4>
 
+  <!-- خلاصهٔ سفارش -->
+  <div class="card shadow-sm">
+    <div class="card-header bg-light">خلاصهٔ سفارش</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3"><strong>بیمار:</strong> {{ order.patient_name }}</div>
+        <div class="col-md-3"><strong>پزشک:</strong> {{ order.doctor|default:"—" }}</div>
+        <div class="col-md-3"><strong>نوع سفارش:</strong> {{ order.order_type|default:"—" }}</div>
+        <div class="col-md-3"><strong>تعداد واحد:</strong> {{ order.unit_count|int_fa }}</div>
+
+        <div class="col-md-3"><strong>رنگ:</strong> {{ order.shade|default:"—" }}</div>
+        <div class="col-md-3"><strong>قیمت واحد:</strong> {{ order.price|money_fa }}</div>
+        <div class="col-md-3"><strong>قیمت کل:</strong> {{ order.total_price|money_fa }}</div>
+        <div class="col-md-3"><strong>دندان‌ها:</strong> {{ order.teeth_fdi|default:"—"|digits_fa }}</div>
+      </div>
+    </div>
+  </div>
+
   <div class="row g-3">
-    <!-- تایم‌لاین رویدادها -->
+    <!-- مراحل تولید (StageInstance) -->
     <div class="col-md-7">
+      <div class="card shadow-sm">
+        <div class="card-header bg-info text-white">مراحل تولید</div>
+        <div class="card-body">
+          {% with stages=order.stages.all %}
+            {% if stages %}
+              <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                  <thead>
+                    <tr>
+                      <th style="width:48px;">#</th>
+                      <th>مرحله</th>
+                      <th>برنامه</th>
+                      <th>وضعیت</th>
+                      <th>شروع</th>
+                      <th>پایان</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for s in stages %}
+                      <tr>
+                        <td>{{ s.order_index|int_fa }}</td>
+                        <td>{{ s.label|default:s.key }}</td>
+                        <td>{{ s.planned_date|default:"—"|dash_to_slash|digits_fa }}</td>
+                        <td>
+                          {% if s.done_date %}
+                            <span class="stage-badge stage-done">تمام</span>
+                          {% elif s.started_date %}
+                            <span class="stage-badge stage-running">در حال انجام</span>
+                          {% else %}
+                            <span class="stage-badge stage-pending">در صف</span>
+                          {% endif %}
+                        </td>
+                        <td>{{ s.started_date|default:"—"|dash_to_slash|digits_fa }}</td>
+                        <td>{{ s.done_date|default:"—"|dash_to_slash|digits_fa }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <div class="text-muted">هنوز مرحله‌ای برای این سفارش ثبت نشده است.</div>
+            {% endif %}
+          {% endwith %}
+        </div>
+      </div>
+
+      <!-- تایم‌لاین رویدادها -->
       <div class="card shadow-sm">
         <div class="card-header bg-secondary text-white">تایم‌لاین رویدادها</div>
         <div class="card-body">
@@ -73,16 +143,53 @@
               {{ event_form.happened_at }}
             </div>
 
+            <!-- علت (Select) -->
             <div class="col-12">
-              <label class="form-label">جهت</label>
-              {{ event_form.direction }}
+              <label class="form-label">علت</label>
+              <select name="cause_choice" id="cause_choice" class="form-select">
+                <option value="">— انتخاب کنید —</option>
+
+                {# مراحل مربوط به همین سفارش (ترجیحاً مراحل در صف یا در حال انجام) #}
+                {% with stqs=order.stages.all %}
+                  {% if stqs %}
+                    <optgroup label="مراحل سفارش">
+                      {% for s in stqs %}
+                        {% if s.status == "pending" or s.status == "in_progress" %}
+                          <option value="{{ s.label }}">{{ s.order_index|int_fa }} — {{ s.label }}</option>
+                        {% endif %}
+                      {% endfor %}
+                    </optgroup>
+                  {% endif %}
+                {% endwith %}
+
+                <optgroup label="علت‌های عمومی">
+                  <option value="components_announce">اعلام قطعات</option>
+                  <option value="components_received">دریافت قطعات</option>
+                  <option value="waxrim_record_bite">waxrim & record bite</option>
+                  <option value="dural_try_in">امتحان دورالی</option>
+                  <option value="frame_try_in">امتحان فریم</option>
+                  <option value="porcelain_try_in">امتحان پرسلن</option>
+                  <option value="framework_design">طراحی فریم</option>
+                  <option value="custom_abutment">کاستومایز اباتمنت</option>
+                  <option value="qc_check">بررسی کیفی</option>
+                </optgroup>
+
+                <option value="other">سایر (قابل تایپ)</option>
+              </select>
             </div>
 
-            <div class="col-12">
-              <label class="form-label">مرحله (اختیاری)</label>
-              {{ event_form.stage }}
+            <!-- متنِ علت وقتی «سایر» انتخاب شود -->
+            <div class="col-12" id="cause_text_wrap" style="display:none;">
+              <label class="form-label">علت (متن آزاد)</label>
+              <input type="text" name="cause_text" id="cause_text" class="form-control" placeholder="مثلاً: توضیح اختصاصی شما">
+              <div class="form-text">اگر «سایر» را انتخاب کردی، این بخش را پر کن.</div>
             </div>
-
+            <!-- مرحله مرتبط (اختیاری) -->
+            <div class="col-12">
+              <label class="form-label">مرحله مرتبط (اختیاری)</label>
+              {{ event_form.stage_instance }}
+            </div>
+            
             <div class="col-12">
               <label class="form-label">توضیحات</label>
               {{ event_form.notes }}
@@ -109,7 +216,8 @@
   <script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
   <script>
     (function(){
-      const $inputs = $("input.jalali_date");
+      // اگر فیلد کلاس نداشت، شناسهٔ پیش‌فرض را هم بگیر
+      const $inputs = $("input.jalali_date, #id_happened_at");
       $inputs.each(function(){
         try{ if(this.type!=='text') this.type='text'; }catch(e){}
         $(this).attr('autocomplete','off');
@@ -118,5 +226,16 @@
         .persianDatepicker({ format:'YYYY/MM/DD', autoClose:true, calendar:{ persian:{ locale:'fa' } } });
     })();
   </script>
+  <script>
+  (function(){
+    function toggleCause() {
+      var val = $('#cause_choice').val();
+      $('#cause_text_wrap').toggle(val === 'other');
+    }
+    $(document).on('change', '#cause_choice', toggleCause);
+    toggleCause(); // init on load
+  })();
+</script>
 </body>
 </html>
+

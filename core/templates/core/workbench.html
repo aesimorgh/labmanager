@@ -1,0 +1,195 @@
+{% load static %}
+{% load num_extras %}
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <title>Workbench مراحل</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body{font-family:Tahoma,sans-serif;background:#f8f9fa}
+    .card{margin-top:1rem}
+    .badge-status{font-size:.8rem;border-radius:9999px}
+    .st-pending{background:#fff;border:1px solid #e5e7eb;color:#374151}
+    .st-running{background:#fff3cd;border:1px solid #f59e0b;color:#7c5a00}
+    .st-done{background:#dcfce7;border:1px solid #22c55e;color:#14532d}
+    .st-blocked{background:#fee2e2;border:1px solid #ef4444;color:#7f1d1d}
+    .table th, .table td{vertical-align:middle}
+    .sticky-head{position:sticky;top:0;background:#fff;z-index:1}
+  </style>
+</head>
+<body class="container">
+
+  <h4 class="mt-3">Workbench مراحل (نسخهٔ اسکلت)</h4>
+  {% if messages %}
+  <div class="mt-3">
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+  <!-- فیلترها (فعلاً نمایشی؛ در گام بعد وصل می‌کنیم) -->
+  <div class="card shadow-sm">
+  <div class="card-header bg-light">فیلترها</div>
+  <div class="card-body">
+    <form id="wb-filter-form" class="row g-2" method="get">
+      <div class="col-md-4">
+        <label class="form-label">جستجو</label>
+        <input id="wb-q" name="q" type="text" class="form-control"
+               value="{{ q|default:'' }}" placeholder="بیمار / دکتر / مرحله / سریال / #شناسه">
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">وضعیت مرحله</label>
+        <select id="wb-status" class="form-select" name="status" onchange="this.form.submit()">
+          <option value="active" {% if status_filter == 'active' %}selected{% endif %}>فعال (در صف / در حال انجام)</option>
+          <option value="done"   {% if status_filter == 'done' %}selected{% endif %}>انجام‌شده</option>
+          <option value="all"    {% if status_filter == 'all' %}selected{% endif %}>همهٔ وضعیت‌ها</option>
+        </select>
+      </div>
+
+      <div class="col-md-2 d-flex align-items-end">
+        <button type="submit" class="btn btn-primary w-100">اعمال</button>
+      </div>
+
+      <div class="col-md-2 d-flex align-items-end">
+        <div class="form-text">
+          میان‌بُرها: <code>/</code> جستجو، <code>A</code> فعال، <code>D</code> انجام‌شده، <code>L</code> همه، <code>Esc</code> پاک‌کردن، <code>R</code> رفرش
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+  <!-- جدول مراحل -->
+  <div class="card shadow-sm">
+    <div class="card-header bg-info text-white">مراحل در صف / در حال انجام</div>
+    <div class="card-body">
+      {% if stages %}
+        <div class="table-responsive">
+          <table class="table table-sm align-middle">
+            <thead class="sticky-head">
+              <tr>
+                <th>#</th>
+                <th>سفارش</th>
+                <th>بیمار</th>
+                <th>دکتر</th>
+                <th>مرحله</th>
+                <th>برنامه</th>
+                <th>شروع</th>
+                <th>پایان</th>
+                <th>وضعیت</th>
+                <th style="width:180px;">اقدامات</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for s in stages %}
+                <tr>
+                  <td>{{ forloop.counter }}</td>
+                  <td>#{{ s.order_id }}</td>
+                  <td>{{ s.order.patient.name|default:"—" }}</td>
+                  <td>{{ s.order.doctor|default:"—" }}</td>
+                  <td>{{ s.label }}</td>
+                  <td>{{ s.planned_date|default:"—"|dash_to_slash|digits_fa }}</td>
+                  <td>{{ s.started_date|default:"—"|dash_to_slash|digits_fa }}</td>
+                  <td>{{ s.done_date|default:"—"|dash_to_slash|digits_fa }}</td>
+                  <td>
+                    {% if s.status == "in_progress" %}
+                      <span class="badge badge-status st-running">در حال انجام</span>
+                    {% elif s.status == "done" %}
+                      <span class="badge badge-status st-done">انجام شد</span>
+                    {% elif s.status == "blocked" %}
+                      <span class="badge badge-status st-blocked">متوقف</span>
+                    {% else %}
+                      <span class="badge badge-status st-pending">در صف</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-nowrap">
+  {# شروع امروز (POST) #}
+  <form method="post"
+        action="{% url 'core:stage_start_now' s.id %}?next={{ request.get_full_path|urlencode }}"
+        class="d-inline">
+    {% csrf_token %}
+    <button class="btn btn-outline-primary btn-sm me-1"
+            {% if s.status == "in_progress" or s.status == "done" %}disabled{% endif %}
+            title="شروع امروز">
+      شروع امروز
+    </button>
+  </form>
+
+  {# اتمام امروز (POST) #}
+  <form method="post"
+        action="{% url 'core:stage_done_today' s.id %}?next={{ request.get_full_path|urlencode }}"
+        class="d-inline">
+    {% csrf_token %}
+    <button class="btn btn-success btn-sm"
+            {% if s.status == "done" %}disabled{% endif %}
+            title="اتمام امروز">
+      اتمام امروز
+    </button>
+  </form>
+</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="text-muted">
+          هنوز به این صفحه وصل نشده‌ایم. در <strong>گام بعد</strong> آدرس و ویو می‌سازیم تا این جدول با مراحل
+          <em>pending/in_progress</em> پر شود.
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+(function(){
+  const form   = document.getElementById('wb-filter-form');
+  const qInput = document.getElementById('wb-q');
+  const statusSel = document.getElementById('wb-status');
+
+  function setParamAndGo(key, val){
+    const url = new URL(window.location.href);
+    if (val === null) url.searchParams.delete(key);
+    else url.searchParams.set(key, val);
+    window.location.href = url.toString();
+  }
+
+  // میان‌بُرها
+  document.addEventListener('keydown', function(e){
+    // اگر فوکِس داخل input/textarea است، اجازه بده تایپ کند
+    const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+    const inField = (tag === 'input' || tag === 'textarea');
+
+    if (e.key === '/') {
+      if (!inField) e.preventDefault();         // جلوی quick find مرورگر
+      qInput && qInput.focus();
+      qInput && qInput.select();
+      return;
+    }
+
+    if (inField) {
+      // داخل فیلد: Esc → پاک‌کردن و سابمیت
+      if (e.key === 'Escape') {
+        if (qInput) qInput.value = '';
+        form && form.submit();
+      }
+      return; // بقیه‌ی کلیدها مزاحم تایپ نشوند
+    }
+
+    const k = e.key.toLowerCase();
+    if (k === 'a') { setParamAndGo('status', 'active'); }
+    else if (k === 'd') { setParamAndGo('status', 'done'); }
+    else if (k === 'l') { setParamAndGo('status', 'all'); }
+    else if (k === 'r') { window.location.reload(); }
+  });
+})();
+</script>
+</body>
+</html>

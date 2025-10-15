@@ -1,0 +1,218 @@
+{% load static %}
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <title>ثبت ورود/خروج سریع</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
+  <style>
+    body{background:#f8fafc}
+    .card{max-width:960px;margin:24px auto}
+    .hint{font-size:.9rem;color:#6b7280}
+    .pick-list{max-height:220px;overflow:auto;border:1px solid #e5e7eb;border-radius:.5rem;padding:.25rem}
+    .pick-item{padding:.35rem .5rem;border-radius:.4rem;cursor:pointer}
+    .pick-item:hover{background:#f1f5f9}
+    .pick-item.active{background:#e0e7ff}
+  </style>
+</head>
+<body>
+<div class="card shadow-sm">
+  <div class="card-header bg-primary text-white fw-bold">ثبت ورود/خروج سریع</div>
+  <div class="card-body">
+    <div class="row g-3">
+      <!-- انتخاب دکتر با جستجو -->
+      <div class="col-md-6">
+        <label class="form-label">دکتر/مطب</label>
+        <input id="doctorSearch" class="form-control" type="text" placeholder="شروع به تایپ کنید…">
+        <div id="doctorList" class="pick-list mt-2"></div>
+        <div class="hint">با تایپ کردن، لیست دکترها از سرور فیلتر می‌شود؛ سپس روی نام کلیک کنید.</div>
+      </div>
+
+      <!-- انتخاب سفارش آن دکتر با جستجو -->
+      <div class="col-md-6">
+        <label class="form-label">سفارش</label>
+        <input id="orderSearch" class="form-control" type="text" placeholder="نام بیمار را تایپ کنید…" disabled>
+        <div id="orderList" class="pick-list mt-2"></div>
+        <div class="hint">بعد از انتخاب دکتر، سفارش‌های همان دکتر اینجا ظاهر می‌شود.</div>
+      </div>
+
+      <!-- فرم رویداد -->
+      <div class="col-12">
+        <form id="evtForm" method="post" enctype="multipart/form-data">
+          {% csrf_token %}
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">نوع رویداد</label>
+              <select name="event_type" class="form-select" id="eventType">
+                <option value="sent_to_clinic">ارسال به مطب</option>
+                <option value="returned_from_clinic">بازگشت از مطب</option>
+                <option value="received_in_lab">دریافت در لابراتوار</option>
+                <option value="final_shipment">ارسال نهایی</option>
+                <option value="note">یادداشت</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">تاریخ وقوع</label>
+              <input type="text" name="happened_at" id="happenedAt" class="form-control jalali_date" placeholder="YYYY/MM/DD">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">جهت</label>
+              <select name="direction" class="form-select" id="direction">
+                <option value="">— (اختیاری) —</option>
+                <option value="lab→clinic">لابراتوار → مطب</option>
+                <option value="clinic→lab">مطب → لابراتوار</option>
+                <option value="lab→digital">لابراتوار → دیجیتال</option>
+                <option value="digital→lab">دیجیتال → لابراتوار</option>
+                <option value="internal">داخلی</option>
+              </select>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">مرحله (اختیاری)</label>
+              <input type="text" name="stage" class="form-control" placeholder="مثلاً: Frame Try-in">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">پیوست (اختیاری)</label>
+              <input type="file" name="attachment" class="form-control">
+            </div>
+            <div class="col-12">
+              <label class="form-label">توضیحات</label>
+              <textarea name="notes" rows="2" class="form-control" placeholder="توضیح کوتاه…"></textarea>
+            </div>
+
+            <input type="hidden" id="selectedOrderId" value="">
+            <div class="col-12">
+              <button class="btn btn-success">ثبت رویداد برای سفارش انتخاب‌شده</button>
+              <span id="submitHint" class="hint ms-2">اول دکتر و سپس سفارش را انتخاب کنید.</span>
+            </div>
+          </div>
+        </form>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
+<script>
+(function(){
+  // تقویم جلالی
+  const $d = $("#happenedAt");
+  try{ $d.persianDatepicker({format:'YYYY/MM/DD', autoClose:true, calendar:{persian:{locale:'fa'}}}); }catch(e){}
+
+  // عناصر
+  const $docInput = $("#doctorSearch");
+  const $docList  = $("#doctorList");
+  const $ordInput = $("#orderSearch");
+  const $ordList  = $("#orderList");
+  const $form     = $("#evtForm");
+  const $selOrder = $("#selectedOrderId");
+
+  let doctors = []; // {id, name}
+  let orders  = []; // {id, label}
+
+  // جستجو دکتر از API
+  async function fetchDoctors(q){
+    const url = '/api/doctors' + (q ? ('?q=' + encodeURIComponent(q)) : '');
+    const res = await fetch(url, {headers:{'Accept':'application/json'}});
+    const data = await res.json();
+    doctors = data.results || [];
+    renderDoctors();
+  }
+  function renderDoctors(){
+    $docList.empty();
+    doctors.forEach(d=>{
+      const $it = $('<div class="pick-item"></div>').text(d.name).data('id', d.id);
+      $it.on('click', ()=>{
+        $docList.find('.pick-item').removeClass('active');
+        $it.addClass('active');
+        $docInput.val(d.name);
+        // وقتی دکتر انتخاب شد → سفارش‌ها را بگیر
+        fetchOrdersByDoctor(d.id, '');
+      });
+      $docList.append($it);
+    });
+  }
+
+  // جستجو سفارش‌های دکتر
+  async function fetchOrdersByDoctor(docId, q){
+    $ordInput.prop('disabled', false).val('');
+    $ordList.empty();
+    $selOrder.val('');
+
+    const url = '/api/orders-by-doctor?doctor_id=' + encodeURIComponent(docId) + (q ? ('&q=' + encodeURIComponent(q)) : '');
+    const res = await fetch(url, {headers:{'Accept':'application/json'}});
+    const data = await res.json();
+
+    // مهم: نتایج خام را نگه می‌داریم تا نام بیمار و ... در دسترس باشد
+    orders = data.results || [];
+    renderOrders();  // تابعی که در مرحلهٔ بعد می‌گذاریم
+  }
+
+  function renderOrders(){
+  // ظرف لیست: با همان آیدی که بالاتر گرفتی (#orderList)
+  $ordList.empty();
+
+  orders.forEach(o => {
+    // نام بیمار را از چند مسیر احتمالی امتحان کن
+    const name = (o.patient_name || (o.patient && o.patient.name) || '').toString().trim();
+
+    // فیلدهای درست API: due_date و serial_number
+    const due    = o.due_date      ? (' — تحویل: ' + o.due_date)       : '';
+    const serial = o.serial_number ? (' — سریال '  + o.serial_number)  : '';
+
+    const label = `سفارش #${o.id}${name ? ' — ' + name : ' — بدون نام'}${serial}${due}`;
+
+    // سازگار با استایل فعلی شما: .pick-item
+    const $it = $('<div class="pick-item"></div>').text(label).data('id', o.id);
+
+    $it.on('click', () => {
+      $ordList.find('.pick-item').removeClass('active');
+      $it.addClass('active');
+      $selOrder.val(o.id);       // hidden را پر کن
+      $ordInput.val(name);       // برای راحتی، توی باکس جستجو هم اسم را بگذار
+    });
+
+    $ordList.append($it);
+  });
+}
+
+  // تایپ دکتر → درخواست به API
+  let tDoc = null;
+  $docInput.on('input', function(){
+    const q = $(this).val().trim();
+    clearTimeout(tDoc);
+    tDoc = setTimeout(()=> fetchDoctors(q), 250);
+  });
+  fetchDoctors(''); // بار اول: چندتا را بیاور
+
+  // تایپ سفارش → فقط فیلتر کلاینتی (لیست همین دکتر)
+  $ordInput.on('input', function(){
+    const q = $(this).val().trim();
+    const norm = s => (s||'').toLowerCase();
+    $ordList.children().each(function(){
+      const ok = norm($(this).text()).indexOf(norm(q)) >= 0;
+      $(this).toggle(ok);
+    });
+  });
+
+  // ارسال فرم: اکشن را بر اساس order_id می‌سازیم
+  $form.on('submit', function(e){
+    const oid = $selOrder.val().trim();
+    if(!oid){
+      e.preventDefault();
+      alert('اول دکتر و سپس یک سفارش را انتخاب کنید.');
+      return;
+    }
+    // آدرس POST همان view موجود شماست:
+    this.action = '/orders/' + encodeURIComponent(oid) + '/add-event/?next=' + encodeURIComponent('/orders/#list-tab-pane');
+  });
+})();
+</script>
+</body>
+</html>

@@ -25,8 +25,10 @@ from django.utils.dateparse import parse_date
 from django.template.response import TemplateResponse
 from core.utils.normalizers import normalize_jalali_date_str
 from .models import Patient, Order, Material, Accounting
+from .models import StageInstance
 from .forms import PatientForm, OrderForm, MaterialForm, AccountingForm
 from .models import OrderEvent
+from .models import Product, StageTemplate
 
 # کمکی: تبدیل رقم‌های فارسی/عربی به انگلیسی + فرمت «فارسی با جداکننده»
 FA_DIGITS = str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹")
@@ -187,6 +189,71 @@ class AccountingInline(admin.TabularInline):
     fields = ['amount', 'date', 'method']
 
 
+# -----------------------------
+# Inline Form: تاریخ‌های جلالی برای StageInstance
+# -----------------------------
+class StageInstanceInlineForm(forms.ModelForm):
+    planned_date = JalaliDateField(
+        label='تاریخ برنامه',
+        widget=AdminJalaliDateWidget,
+        required=False
+    )
+    started_date = JalaliDateField(
+        label='تاریخ شروع',
+        widget=AdminJalaliDateWidget,
+        required=False
+    )
+    done_date = JalaliDateField(
+        label='تاریخ پایان',
+        widget=AdminJalaliDateWidget,
+        required=False
+    )
+
+    class Meta:
+        model = StageInstance
+        fields = ('order_index', 'label', 'status',
+                  'planned_date', 'started_date', 'done_date', 'notes')
+        widgets = {
+            'notes': forms.Textarea(attrs={'rows': 2}),
+        }
+
+# -----------------------------
+# Inline: مراحل سفارش (StageInstance)
+# -----------------------------
+class StageInstanceInline(admin.TabularInline):
+    model = StageInstance
+    form = StageInstanceInlineForm
+    extra = 0
+    fields = ('order_index', 'label', 'status', 'planned_date', 'started_date', 'done_date', 'notes')
+    ordering = ('order_index', 'id')
+    show_change_link = True
+
+# -----------------------------
+# Inline: رویدادهای سفارش (OrderEvent) با تاریخ جلالی
+# -----------------------------
+class OrderEventInlineForm(forms.ModelForm):
+    happened_at = JalaliDateField(
+        label='تاریخ رویداد',
+        widget=AdminJalaliDateWidget,
+        required=True
+    )
+
+    class Meta:
+        model = OrderEvent
+        fields = ['event_type', 'direction', 'happened_at', 'notes', 'attachment']
+        widgets = {
+            'happened_at': AdminJalaliDateWidget(attrs={'class': 'jalali-date-field'}),
+            'notes': forms.Textarea(attrs={'rows': 2}),
+        }
+
+
+class OrderEventInline(admin.TabularInline):
+    model = OrderEvent
+    form = OrderEventInlineForm
+    extra = 0
+    fields = ['event_type', 'direction', 'happened_at', 'notes', 'attachment']
+    ordering = ('happened_at', 'id')
+    show_change_link = True
 
 
 
@@ -196,8 +263,8 @@ class AccountingInline(admin.TabularInline):
 @admin.register(Order)
 class OrderAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
     form = OrderForm
-    inlines = [AccountingInline]
-    actions = ['settle_balance_action']
+    inlines = [AccountingInline, OrderEventInline, StageInstanceInline]
+    actions = ['settle_balance_action', 'init_stages_from_template_action']
 
     # ناوبری و نظم
     date_hierarchy = 'created_at'
@@ -234,6 +301,45 @@ class OrderAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
     # استایل (بعداً فایل CSS رو اضافه می‌کنی)
     class Media:
         css = {'all': ('core/admin_order.css',)}
+    
+    def init_stages_from_template_action(self, request, queryset):
+        created = skipped = missing = 0
+        for o in queryset:
+            code = (o.order_type or '').strip()
+            if not code:
+                missing += 1
+                continue
+            product = Product.objects.filter(code=code).first()
+            if not product:
+                # اگر کُد سفارش با کُد محصول یکی نیست، اینجا گیر می‌کند
+                missing += 1
+                continue
+
+            templates = StageTemplate.objects.filter(product=product, is_active=True).order_by('order_index', 'id')
+
+            for t in templates:
+                # کلید یکتا بر اساس (order, key)؛ اگر قبلاً ساخته شده باشد، skip
+                obj, was_created = StageInstance.objects.get_or_create(
+                    order=o, key=t.key,
+                    defaults=dict(
+                        template=t,
+                        label=t.label,
+                        order_index=t.order_index,
+                        # تاریخ‌های برنامه‌ریزی را فعلاً خالی می‌گذاریم؛ بعداً می‌تونیم auto-plan کنیم
+                    )
+                )
+                if was_created:
+                    created += 1
+                else:
+                    skipped += 1
+
+        level = messages.SUCCESS if created else (messages.WARNING if not missing else messages.ERROR)
+        self.message_user(
+            request,
+            f"مرحله‌ها: ایجاد {created}، موجود/رد شده {skipped}، سفارش‌های بی‌محصول/کُد نامعتبر {missing}",
+            level=level
+        )
+    init_stages_from_template_action.short_description = "ایجاد مراحل از قالب محصول"
 
     # ---------- get_queryset واحد و تمیز (لطفاً فقط همین یکی را نگه دار!) ----------
     def get_queryset(self, request):
@@ -799,9 +905,35 @@ if LabSettings:
                 return HttpResponseRedirect(reverse('admin:core_labsettings_change', args=[obj.pk]))
             return HttpResponseRedirect(reverse('admin:core_labsettings_add'))
 
+# --- Inline باید قبل از ProductAdmin باشد ---
+class StageTemplateInline(admin.TabularInline):
+    model = StageTemplate
+    fk_name = 'product'  # صراحتاً می‌گوییم FK کدام است
+    extra = 1
+    fields = ('order_index', 'key', 'label', 'default_duration_days', 'is_active', 'notes')
+    ordering = ('order_index',)
+    show_change_link = True
 
+@admin.register(Product)
+class ProductAdmin(admin.ModelAdmin):
+    list_display = ('name', 'code', 'category', 'default_unit_price', 'is_active', 'created_at')
+    list_filter = ('is_active', 'category')
+    search_fields = ('name', 'code', 'category')
+    ordering = ('name',)
+    readonly_fields = ('created_at', 'updated_at')
+    fieldsets = (
+        (None, {'fields': ('name', 'code', 'category', 'is_active')}),
+        ('قیمت و توضیحات', {'fields': ('default_unit_price', 'notes')}),
+        ('سیستمی', {'fields': ('created_at', 'updated_at'), 'classes': ('collapse',)}),
+    )
+    inlines = [StageTemplateInline]
 
-
+@admin.register(StageTemplate)
+class StageTemplateAdmin(admin.ModelAdmin):
+    list_display = ('product', 'order_index', 'label', 'key', 'default_duration_days', 'is_active')
+    list_filter = ('product', 'is_active')
+    search_fields = ('label', 'key', 'product__name', 'product__code')
+    ordering = ('product', 'order_index')
 
 
 

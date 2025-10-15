@@ -1,4 +1,3 @@
-core/templates/core/home.html:
 {% extends "base_user_panel.html" %}
 {% load crispy_forms_tags %}
 {% load num_extras %}
@@ -11,23 +10,22 @@ core/templates/core/home.html:
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
   <style>
-    /* استایل‌های مخصوص این صفحه */
     h1 { margin: 30px 0; text-align: center; }
     .tab-content { margin-top: 1rem; }
 
-    /* هدر جدول واضح و هم‌تراز */
     .table thead th{
       background-color:#0d6efd !important;
       color:#fff !important;
       vertical-align: middle; white-space: nowrap;
       padding-top:.6rem; padding-bottom:.6rem;
+      position: sticky; top: 0; z-index: 5;
     }
-    .table thead th .sort-link{ display:inline-block; color:inherit !important; text-decoration:none; }
-    .table thead th .sort-link:hover{ opacity:.9; text-decoration:none; }
-    .sort-arrow{ font-size:.9em; line-height:1; }
-
     .table tbody tr:nth-child(even) { background-color: #f1f3f5; }
     .table td, .table th { vertical-align: middle; }
+
+    .sort-link{ color:inherit !important; text-decoration:none; }
+    .sort-link:hover{ opacity:.9; text-decoration:none; }
+    .sort-arrow{ font-size:.9em; line-height:1; }
 
     .badge { font-size: 0.9em; }
     .card-header { font-weight: bold; }
@@ -37,97 +35,40 @@ core/templates/core/home.html:
     input[type="number"] { direction: ltr; text-align: left; }
     .en-num { direction: ltr; text-align: left; }
 
-    /* فیلتر */
     .btn-chip { border-radius: 9999px; padding-inline: 0.9rem; }
     .input-group-sm .form-control { min-width: 95px; }
     .filter-row .form-select, .filter-row .form-control { height: 36px; padding-top: 2px; padding-bottom: 2px; }
 
-    /* ===== Tooth Picker (چیپ‌های مینیمال) ===== */
-    .tooth-card{
-      width:100%;
-      background:#fff; border:1px solid #dee2e6; border-radius:.65rem;
-      padding:1rem; margin-top:.25rem; overflow:hidden; box-sizing:border-box;
-    }
-    .tooth-card .section-title{font-weight:700;margin-bottom:.5rem}
-    .tooth-row{ margin:0; }
-
-    .tooth-grid{
-      display:flex; flex-wrap:nowrap; align-items:center;
-      justify-content:space-between; width:100%;
-      gap:.4rem; padding:0 .25rem; box-sizing:border-box;
-    }
-    .tooth-group{
-      display:flex; align-items:center; gap:.35rem;
-      justify-content:space-between; flex:1 1 0; min-width:0;
-    }
-
-    /* خط عمودی نقطه‌چین بین دو «۱» (راست/چپ) */
-    .midline{
-      width:0; height:28px; position:relative; flex:0 0 0;
-      border-left:2px dashed #9ca3af;
-    }
-
-    /* خط افقی دقیقاً بین دو ردیف بالا/پایین */
-    .sep-h{
-      height:0; border-top:2px dashed #9ca3af;
-      margin:.5rem 0;
-      pointer-events:none;
-    }
-
+    /* Tooth Picker */
+    .tooth-card{background:#fff;border:1px solid #dee2e6;border-radius:.65rem;padding:1rem;margin-top:.25rem}
     .tooth-chip{
       border:1px solid #dee2e6;background:#fff;border-radius:9999px;
-      padding:.24rem .5rem; font-size:.9rem; line-height:1.1; cursor:pointer; user-select:none;
-      flex:0 0 auto;
+      padding:.24rem .5rem; font-size:.9rem; line-height:1.1; cursor:pointer; user-select:none; flex:0 0 auto;
     }
     .tooth-chip.active{background:#0d6efd;color:#fff;border-color:#0d6efd}
-
-    .tooth-help{color:#6b7280;font-size:.86rem;margin-top:.3rem}
-    .tooth-actions{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.45rem}
     .tooth-summary{margin-top:.4rem;color:#374151;font-size:.92rem}
+    .midline{width:0;height:28px;position:relative;flex:0 0 0;border-left:2px dashed #9ca3af}
+    .sep-h{height:0;border-top:2px dashed #9ca3af;margin:.5rem 0;pointer-events:none}
 
-    /* ===== لیست سفارش‌ها: اسکرول و استیکی ===== */
-    .table-wrap {
-      position: relative;
-      max-height: 65vh;
-      overflow: auto;
-      border: 1px solid #e5e7eb;
-      border-radius: .5rem;
-    }
-    .table thead th{
-      position: sticky; top: 0; z-index: 5;
-      background-color:#0d6efd !important; color:#fff !important;
-    }
-    .sticky-patient {
-      position: sticky; right: 0; z-index: 6;
-      background: #fff;
-      box-shadow: -4px 0 0 rgba(13,110,253,.08);
-      white-space: nowrap; text-overflow: ellipsis; overflow: hidden;
-      max-width: 220px;
-    }
+    .table-wrap { max-height: 65vh; overflow: auto; border: 1px solid #e5e7eb; border-radius: .5rem; }
+    .sticky-patient { position: sticky; right: 0; z-index: 6; background: #fff; box-shadow: -4px 0 0 rgba(13,110,253,.08); white-space: nowrap; text-overflow: ellipsis; overflow: hidden; max-width: 220px; }
 
-    /* نمای نمادین دندان‌ها داخل لیست (اگر بعداً استفاده شد) */
     .toothplus-cell{ min-width: 92px; }
     .toothplus{ position: relative; width: 80px; height: 80px; margin: 0 auto; font-size: 12px; line-height: 1.1; color:#111; user-select:none; }
     .toothplus::before, .toothplus::after{ content:""; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); background:#9ca3af; }
     .toothplus::before{ width:2px; height:86%; }
     .toothplus::after { height:2px; width:86%; }
-    .tp{ position:absolute; display:flex; gap:2px; flex-wrap:wrap; max-width:40px; }
+    .tp{ position:absolute; display:flex; gap:1px; max-width:34px; }
     .tp span{ padding:0 2px; border-radius:4px; }
-    /* اعداد را به مرکز + نزدیک‌تر می‌کنیم */
     .tp-ur{ top:12px; right:18px; justify-content:flex-end; text-align:right; }
     .tp-ul{ top:12px; left:18px;  text-align:left; }
     .tp-ll{ bottom:12px; left:18px; text-align:left; }
     .tp-lr{ bottom:12px; right:18px; justify-content:flex-end; text-align:right; }
-
-     /* کمی جمع‌وجورتر شدن چیدمان داخل هر ربع (اختیاریِ سبک) */
-    .tp{ max-width:34px; gap:1px; }
-
     .tp span.active{ background:#0d6efd; color:#fff; }
   </style>
 {% endblock %}
 
 {% block subtabs %}
-  <!-- ساب‌تب‌های داخلی سفارش‌ها -->
   <ul class="nav nav-tabs" id="tabMenu" role="tablist">
     <li class="nav-item" role="presentation">
       <button class="nav-link active" id="order-tab" data-bs-toggle="tab" data-bs-target="#order-tab-pane" type="button" role="tab" aria-controls="order-tab-pane" aria-selected="true">
@@ -139,6 +80,17 @@ core/templates/core/home.html:
         📋 لیست سفارش‌ها
       </button>
     </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="transfer-tab" data-bs-toggle="tab" data-bs-target="#transfer-tab-pane" type="button" role="tab" aria-controls="transfer-tab-pane" aria-selected="false">
+        ↔️ ورود/خروج
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+  <button class="nav-link" id="wb-tab" data-bs-toggle="tab" data-bs-target="#wb-tab-pane"
+          type="button" role="tab" aria-controls="wb-tab-pane" aria-selected="false">
+    🛠️ ورک‌بنچ مراحل
+  </button>
+</li>
   </ul>
 {% endblock %}
 
@@ -146,7 +98,7 @@ core/templates/core/home.html:
   <h1>مدیریت سفارش‌ها</h1>
 
   <div class="tab-content" id="tabContent">
-    <!-- تب: ثبت سفارش -->
+    <!-- ========== تب 1: ثبت سفارش ========== -->
     <div class="tab-pane fade show active" id="order-tab-pane" role="tabpanel" aria-labelledby="order-tab">
       <div class="card shadow-sm mt-3">
         <div class="card-header bg-primary text-white">ثبت سفارش جدید</div>
@@ -168,90 +120,55 @@ core/templates/core/home.html:
                 {{ order_form.order_type|as_crispy_field }}
                 {{ order_form.unit_count|as_crispy_field }}
 
-                <!-- ===== انتخاب دندان‌ها ===== -->
+                <!-- Tooth Picker -->
                 <div class="tooth-card">
                   <div class="section-title">شماره دندان‌ها</div>
-
-                  <!-- خلاصه -->
                   <div id="tooth-summary" class="tooth-summary text-muted">هنوز دندانی انتخاب نشده است.</div>
 
-                  <!-- ردیف بالا -->
                   <div class="tooth-row">
-                    <div class="tooth-grid">
-                      <!-- بالا راست (Q1: 18..11) -->
-                      <div class="tooth-group" aria-label="بالا راست">
-                        <span class="tooth-chip" data-q="1" data-n="8">8</span>
-                        <span class="tooth-chip" data-q="1" data-n="7">7</span>
-                        <span class="tooth-chip" data-q="1" data-n="6">6</span>
-                        <span class="tooth-chip" data-q="1" data-n="5">5</span>
-                        <span class="tooth-chip" data-q="1" data-n="4">4</span>
-                        <span class="tooth-chip" data-q="1" data-n="3">3</span>
-                        <span class="tooth-chip" data-q="1" data-n="2">2</span>
-                        <span class="tooth-chip" data-q="1" data-n="1">1</span>
+                    <div class="d-flex justify-content-between gap-2">
+                      <div class="d-flex gap-1 flex-wrap">
+                        {% for n in "87654321" %}
+                          <span class="tooth-chip" data-q="1" data-n="{{ n }}">{{ n }}</span>
+                        {% endfor %}
                       </div>
-
                       <span class="midline" aria-hidden="true"></span>
-
-                      <!-- بالا چپ (Q2: 21..28) -->
-                      <div class="tooth-group" aria-label="بالا چپ">
-                        <span class="tooth-chip" data-q="2" data-n="1">1</span>
-                        <span class="tooth-chip" data-q="2" data-n="2">2</span>
-                        <span class="tooth-chip" data-q="2" data-n="3">3</span>
-                        <span class="tooth-chip" data-q="2" data-n="4">4</span>
-                        <span class="tooth-chip" data-q="2" data-n="5">5</span>
-                        <span class="tooth-chip" data-q="2" data-n="6">6</span>
-                        <span class="tooth-chip" data-q="2" data-n="7">7</span>
-                        <span class="tooth-chip" data-q="2" data-n="8">8</span>
+                      <div class="d-flex gap-1 flex-wrap">
+                        {% for n in "12345678" %}
+                          <span class="tooth-chip" data-q="2" data-n="{{ n }}">{{ n }}</span>
+                        {% endfor %}
                       </div>
                     </div>
                   </div>
 
-                  <!-- خط افقی وسط -->
                   <div class="sep-h" aria-hidden="true"></div>
 
-                  <!-- ردیف پایین -->
                   <div class="tooth-row">
-                    <div class="tooth-grid">
-                      <!-- پایین چپ (Q3: 38..31) -->
-                      <div class="tooth-group" aria-label="پایین چپ">
-                        <span class="tooth-chip" data-q="3" data-n="8">8</span>
-                        <span class="tooth-chip" data-q="3" data-n="7">7</span>
-                        <span class="tooth-chip" data-q="3" data-n="6">6</span>
-                        <span class="tooth-chip" data-q="3" data-n="5">5</span>
-                        <span class="tooth-chip" data-q="3" data-n="4">4</span>
-                        <span class="tooth-chip" data-q="3" data-n="3">3</span>
-                        <span class="tooth-chip" data-q="3" data-n="2">2</span>
-                        <span class="tooth-chip" data-q="3" data-n="1">1</span>
+                    <div class="d-flex justify-content-between gap-2">
+                      <div class="d-flex gap-1 flex-wrap">
+                        {% for n in "87654321" %}
+                          <span class="tooth-chip" data-q="3" data-n="{{ n }}">{{ n }}</span>
+                        {% endfor %}
                       </div>
-
                       <span class="midline" aria-hidden="true"></span>
-
-                      <!-- پایین راست (Q4: 41..48) -->
-                      <div class="tooth-group" aria-label="پایین راست">
-                        <span class="tooth-chip" data-q="4" data-n="1">1</span>
-                        <span class="tooth-chip" data-q="4" data-n="2">2</span>
-                        <span class="tooth-chip" data-q="4" data-n="3">3</span>
-                        <span class="tooth-chip" data-q="4" data-n="4">4</span>
-                        <span class="tooth-chip" data-q="4" data-n="5">5</span>
-                        <span class="tooth-chip" data-q="4" data-n="6">6</span>
-                        <span class="tooth-chip" data-q="4" data-n="7">7</span>
-                        <span class="tooth-chip" data-q="4" data-n="8">8</span>
+                      <div class="d-flex gap-1 flex-wrap">
+                        {% for n in "12345678" %}
+                          <span class="tooth-chip" data-q="4" data-n="{{ n }}">{{ n }}</span>
+                        {% endfor %}
                       </div>
                     </div>
                   </div>
 
-                  <div class="tooth-actions">
+                  <div class="d-flex flex-wrap gap-2 mt-2">
                     <button type="button" class="btn btn-sm btn-outline-secondary" data-bulk="upper-all">انتخاب همهٔ فک بالا</button>
                     <button type="button" class="btn btn-sm btn-outline-secondary" data-bulk="lower-all">انتخاب همهٔ فک پایین</button>
                     <button type="button" class="btn btn-sm btn-outline-danger" data-bulk="clear">پاک‌کردن همه</button>
                   </div>
 
-                  <!-- ورودی مخفی برای ارسال FDI Codes -->
                   <input type="hidden" name="order-teeth_fdi" id="teeth_fdi" value="">
                   <input type="hidden" name="teeth_fdi" id="teeth_fdi_mf" value="">
-                  <div class="tooth-help">راهنما: کدگذاری FDI (۱۱–۱۸ بالا راست، ۲۱–۲۸ بالا چپ، ۳۱–۳۸ پایین چپ، ۴۱–۴۸ پایین راست). انتخاب‌ها در «یادداشت» نیز ذخیره می‌شوند.</div>
+                  <div class="text-muted mt-1">انتخاب‌ها در «یادداشت» هم ذخیره می‌شوند.</div>
                 </div>
-                <!-- ===== پایان انتخاب دندان‌ها ===== -->
               </div>
 
               <!-- ستون چپ -->
@@ -260,7 +177,6 @@ core/templates/core/home.html:
                 {{ order_form.price|as_crispy_field }}
                 {{ order_form.serial_number|as_crispy_field }}
                 <input type="hidden" name="order-status" value="in_progress">
-                {# {{ order_form.status|as_crispy_field }} #}
                 {{ order_form.order_date|as_crispy_field }}
                 {{ order_form.due_date|as_crispy_field }}
                 {{ order_form.notes|as_crispy_field }}
@@ -276,13 +192,13 @@ core/templates/core/home.html:
       </div>
     </div>
 
-    <!-- تب: لیست سفارش‌ها -->
+    <!-- ========== تب 2: لیست سفارش‌ها ========== -->
     <div class="tab-pane fade" id="list-tab-pane" role="tabpanel" aria-labelledby="list-tab">
       <div class="card shadow-sm mt-3">
         <div class="card-header bg-secondary text-white">لیست سفارش‌ها</div>
         <div class="card-body">
 
-          <!-- فیلتر سروری + جستجو -->
+          <!-- فیلتر سروری -->
           <form method="get" class="row g-2 mb-3 filter-row" action="#list-tab-pane">
             <input type="hidden" name="sort" value="{{ sort }}">
             <input type="hidden" name="dir" value="{{ dir }}">
@@ -311,168 +227,277 @@ core/templates/core/home.html:
             </div>
           </form>
 
-          <!-- جستجوی جلوی‌صفحه -->
+          <!-- جستجوی کلاینتی -->
           <input class="form-control mb-3" id="searchInput" type="text" placeholder="جستجوی سریع داخل صفحه...">
 
           <div class="table-wrap">
-          <table class="table table-striped table-hover align-middle">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th class="sticky-patient">بیمار</th>
-                <th>پزشک</th>
-                <th>نوع سفارش</th>
-                <th>تعداد واحد</th>
-                <th>شماره سریال</th>
-                <th>قیمت واحد</th>
+            <table class="table table-striped table-hover align-middle">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th class="sticky-patient">بیمار</th>
+                  <th>پزشک</th>
+                  <th>نوع سفارش</th>
+                  <th>تعداد واحد</th>
+                  <th>شماره سریال</th>
+                  <th>قیمت واحد</th>
 
-                <!-- قیمت کل (قابل سورت) -->
-                <th>
-                  <a class="sort-link"
-                     href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort=total_price&dir={% if sort == 'total_price' and dir == 'asc' %}desc{% else %}asc{% endif %}#list-tab-pane">
-                    قیمت کل
-                    <span class="sort-arrow">{% if sort == 'total_price' %}{% if dir == 'asc' %}▲{% else %}▼{% endif %}{% else %}↕{% endif %}</span>
-                  </a>
-                </th>
+                  <th>
+                    <a class="sort-link"
+                       href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort=total_price&dir={% if sort == 'total_price' and dir == 'asc' %}desc{% else %}asc{% endif %}#list-tab-pane">
+                      قیمت کل
+                      <span class="sort-arrow">{% if sort == 'total_price' %}{% if dir == 'asc' %}▲{% else %}▼{% endif %}{% else %}↕{% endif %}</span>
+                    </a>
+                  </th>
 
-                <th>رنگ</th>
-                <th>دندان‌ها</th>
-                <th>وضعیت</th>
+                  <th>رنگ</th>
+                  <th>دندان‌ها</th>
 
-                <!-- تاریخ تحویل (قابل سورت) -->
-                <th>
-                  <a class="sort-link"
-                     href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort=due_date&dir={% if sort == 'due_date' and dir == 'asc' %}desc{% else %}asc{% endif %}#list-tab-pane">
-                    تاریخ تحویل
-                    <span class="sort-arrow">{% if sort == 'due_date' %}{% if dir == 'asc' %}▲{% else %}▼{% endif %}{% else %}↕{% endif %}</span>
-                  </a>
-                </th>
+                  <th>وضعیت</th>
 
-                <!-- تاریخ ثبت (قابل سورت) -->
-                <th>
-                  <a class="sort-link"
-                     href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort=created_at&dir={% if sort == 'created_at' and dir == 'asc' %}desc{% else %}asc{% endif %}#list-tab-pane">
-                    تاریخ ثبت
-                    <span class="sort-arrow">{% if sort == 'created_at' %}{% if dir == 'asc' %}▲{% else %}▼{% endif %}{% else %}↕{% endif %}</span>
-                  </a>
-                </th>
+                  <th>
+                    <a class="sort-link"
+                       href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort=due_date&dir={% if sort == 'due_date' and dir == 'asc' %}desc{% else %}asc{% endif %}#list-tab-pane">
+                      تاریخ تحویل
+                      <span class="sort-arrow">{% if sort == 'due_date' %}{% if dir == 'asc' %}▲{% else %}▼{% endif %}{% else %}↕{% endif %}</span>
+                    </a>
+                  </th>
 
-                <th>جزئیات</th>
-                <th>ویرایش</th>
-                <th>ارسال</th>
-              </tr>
-            </thead>
+                  <th>
+                    <a class="sort-link"
+                       href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort=created_at&dir={% if sort == 'created_at' and dir == 'asc' %}desc{% else %}asc{% endif %}#list-tab-pane">
+                      تاریخ ثبت
+                      <span class="sort-arrow">{% if sort == 'created_at' %}{% if dir == 'asc' %}▲{% else %}▼{% endif %}{% else %}↕{% endif %}</span>
+                    </a>
+                  </th>
 
-            <tbody id="ordersTable">
+                  <th>جزئیات</th>
+                  <th>ویرایش</th>
+                  <th>ارسال</th>
+                </tr>
+              </thead>
+
+              <tbody id="ordersTable">
               {% for order in orders %}
-  <tr>
-    <td>{{ order.id|int_fa }}</td>
-    <td class="sticky-patient">{{ order.patient_name }}</td>
-    <td>{{ order.doctor }}</td>
-    <td>{{ order.get_order_type_display }}</td>
-    <td>{{ order.unit_count|int_fa }}</td>
-    <td>{{ order.serial_number }}</td>
-    <td>{{ order.price|money_fa }}</td>
-    <td>{{ order.total_price|money_fa }}</td>
-    <td>{{ order.shade }}</td>
-    <td class="toothplus-cell">
-      <div class="toothplus"
-           data-q="{% if order.teeth_fdi %}{% else %}{{ order.teeth_quadrants|default:'' }}{% endif %}"
-           data-fdi="{{ order.teeth_fdi|default:'' }}"
-           data-notes="{{ order.notes|default_if_none:''|striptags }}">
-        <div class="tp tp-ul"></div>
-        <div class="tp tp-ur"></div>
-        <div class="tp tp-ll"></div>
-        <div class="tp tp-lr"></div>
-      </div>
-    </td>
-    <td>
-      {% if order.status == 'done' %}
-        <span class="badge bg-success">{{ order.get_status_display }}</span>
-      {% elif order.status == 'in_progress' %}
-        <span class="badge bg-warning text-dark">{{ order.get_status_display }}</span>
-      {% else %}
-        <span class="badge bg-secondary">{{ order.get_status_display }}</span>
-      {% endif %}
-    </td>
+                <tr>
+                  <td>{{ order.id|int_fa }}</td>
+                  <td class="sticky-patient">
+                    <a href="{% url 'core:order_detail' order.id %}"
+                       class="js-order-detail text-decoration-none text-body"
+                       data-order-id="{{ order.id }}">{{ order.patient_name }}</a>
+                  </td>
+                  <td>{{ order.doctor }}</td>
+                  <td>{{ order.get_order_type_display }}</td>
+                  <td>{{ order.unit_count|int_fa }}</td>
+                  <td>{{ order.serial_number }}</td>
+                  <td>{{ order.price|money_fa }}</td>
+                  <td>{{ order.total_price|money_fa }}</td>
+                  <td>{{ order.shade }}</td>
+                  <td class="toothplus-cell">
+                    <div class="toothplus"
+                         data-q="{% if order.teeth_fdi %}{% else %}{{ order.teeth_quadrants|default:'' }}{% endif %}"
+                         data-fdi="{{ order.teeth_fdi|default:'' }}"
+                         data-notes="{{ order.notes|default_if_none:''|striptags }}">
+                      <div class="tp tp-ul"></div>
+                      <div class="tp tp-ur"></div>
+                      <div class="tp tp-ll"></div>
+                      <div class="tp tp-lr"></div>
+                    </div>
+                  </td>
+                  <td>
+                    {% if order.status == 'done' %}
+                      <span class="badge bg-success">{{ order.get_status_display }}</span>
+                    {% elif order.status == 'in_progress' %}
+                      <span class="badge bg-warning text-dark">{{ order.get_status_display }}</span>
+                    {% else %}
+                      <span class="badge bg-secondary">{{ order.get_status_display }}</span>
+                    {% endif %}
+                  </td>
+                  <td>{{ order.due_date|jalali_date|digits_fa }}</td>
+                  <td>{{ order.order_date|jalali_date|digits_fa }}</td>
+                  <td>
+                    <a href="{% url 'core:order_detail' order.id %}"
+                       class="btn btn-sm btn-outline-primary btn-chip js-order-detail"
+                       data-order-id="{{ order.id }}">جزئیات</a>
+                  </td>
+                  <td>
+                    <a href="{% url 'core:order_edit' order.id %}?next={{ request.get_full_path|urlencode }}#list-tab-pane"
+                       class="btn btn-sm btn-outline-warning btn-chip">ویرایش</a>
+                  </td>
+                  <td>
+                    {% if not order.shipped_date %}
+                      <form method="post"
+                            action="{% url 'core:deliver_order' order.id %}?next={{ request.get_full_path|urlencode }}#list-tab-pane"
+                            class="d-inline-block">
+                        {% csrf_token %}
+                        <div class="input-group input-group-sm" style="width: 200px;">
+                          <input type="text" name="shipped_date" class="form-control jalali_date" placeholder="تاریخ ارسال">
+                          <button type="submit" class="btn btn-success">ارسال شد</button>
+                        </div>
+                      </form>
+                    {% else %}
+                      <div class="d-flex align-items-center gap-2">
+                        <span class="text-muted">{{ order.shipped_date|dash_to_slash|digits_fa }}</span>
+                        <form method="post"
+                              action="{% url 'core:deliver_order' order.id %}?next={{ request.get_full_path|urlencode }}#list-tab-pane"
+                              class="d-inline">
+                          {% csrf_token %}
+                          <input type="hidden" name="undo" value="1">
+                          <button type="submit" class="btn btn-outline-danger btn-sm">برگردان</button>
+                        </form>
+                      </div>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="16" class="text-center text-muted">هیچ سفارشی ثبت نشده است.</td></tr>
+              {% endfor %}
+              </tbody>
+            </table>
 
-    {# ـــــ تاریخ‌ها: فقط سروری و پایدار ـــــ #}
-    <td>{{ order.due_date|jalali_date|digits_fa }}</td>
-    <td>{{ order.order_date|jalali_date|digits_fa }}</td>
+            <!-- Modal: Order Detail -->
+            <div class="modal fade" id="orderDetailModal" tabindex="-1" aria-hidden="true">
+              <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title">جزئیات سفارش</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="بستن"></button>
+                  </div>
+                  <div class="modal-body"><div class="text-muted">در حال بارگذاری…</div></div>
+                </div>
+              </div>
+            </div>
+          </div> <!-- /.table-wrap -->
 
-    <td>
-      <a href="{% url 'core:order_detail' order.id %}"
-         class="btn btn-sm btn-outline-primary btn-chip">جزئیات</a>
-    </td>
-    <td>
-      <a href="{% url 'core:order_edit' order.id %}?next={{ request.get_full_path|urlencode }}#list-tab-pane"
-         class="btn btn-sm btn-outline-warning btn-chip">ویرایش</a>
-    </td>
+          {% if page_obj.paginator.num_pages > 1 %}
+          <nav aria-label="pagination" class="mt-3">
+            <ul class="pagination pagination-sm justify-content-center">
+              {% if page_obj.has_previous %}
+                <li class="page-item">
+                  <a class="page-link"
+                     href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort={{ sort|urlencode }}&dir={{ dir|urlencode }}&page={{ page_obj.previous_page_number }}#list-tab-pane">قبلی</a>
+                </li>
+              {% else %}
+                <li class="page-item disabled"><span class="page-link">قبلی</span></li>
+              {% endif %}
+              <li class="page-item disabled">
+                <span class="page-link">{{ page_obj.number|int_fa }} / {{ page_obj.paginator.num_pages|int_fa }}</span>
+              </li>
+              {% if page_obj.has_next %}
+                <li class="page-item">
+                  <a class="page-link"
+                     href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort={{ sort|urlencode }}&dir={{ dir|urlencode }}&page={{ page_obj.next_page_number }}#list-tab-pane">بعدی</a>
+                </li>
+              {% else %}
+                <li class="page-item disabled"><span class="page-link">بعدی</span></li>
+              {% endif %}
+            </ul>
+          </nav>
+          {% endif %}
 
-    <td>
-      {% if not order.shipped_date %}
-        <form method="post"
-              action="{% url 'core:deliver_order' order.id %}?next={{ request.get_full_path|urlencode }}#list-tab-pane"
-              class="d-inline-block">
-          {% csrf_token %}
-          <div class="input-group input-group-sm" style="width: 200px;">
-            <input type="text" name="shipped_date" class="form-control jalali_date" placeholder="تاریخ ارسال">
-            <button type="submit" class="btn btn-success">ارسال شد</button>
-          </div>
-        </form>
-      {% else %}
-        <div class="d-flex align-items-center gap-2">
-          <span class="text-muted">{{ order.shipped_date|dash_to_slash|digits_fa }}</span>
-          <form method="post"
-                action="{% url 'core:deliver_order' order.id %}?next={{ request.get_full_path|urlencode }}#list-tab-pane"
-                class="d-inline">
-            {% csrf_token %}
-            <input type="hidden" name="undo" value="1">
-            <button type="submit" class="btn btn-outline-danger btn-sm">برگردان</button>
-          </form>
         </div>
-      {% endif %}
-    </td>
-  </tr>
-{% empty %}
-  <tr>
-    <td colspan="16" class="text-center text-muted">هیچ سفارشی ثبت نشده است.</td>
-  </tr>
-{% endfor %}
-</tbody>
-</table>
-</div> <!-- /.table-wrap -->
+      </div>
+    </div>
 
-{% if page_obj.paginator.num_pages > 1 %}
-<nav aria-label="pagination" class="mt-3">
-  <ul class="pagination pagination-sm justify-content-center">
-    {% if page_obj.has_previous %}
-      <li class="page-item">
-        <a class="page-link"
-           href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort={{ sort|urlencode }}&dir={{ dir|urlencode }}&page={{ page_obj.previous_page_number }}#list-tab-pane">قبلی</a>
-      </li>
-    {% else %}
-      <li class="page-item disabled"><span class="page-link">قبلی</span></li>
-    {% endif %}
-    <li class="page-item disabled">
-      <span class="page-link">{{ page_obj.number|int_fa }} / {{ page_obj.paginator.num_pages|int_fa }}</span>
-    </li>
-    {% if page_obj.has_next %}
-      <li class="page-item">
-        <a class="page-link"
-           href="?q={{ q|urlencode }}&doctor={{ doctor|urlencode }}&status={{ status|urlencode }}&sort={{ sort|urlencode }}&dir={{ dir|urlencode }}&page={{ page_obj.next_page_number }}#list-tab-pane">بعدی</a>
-      </li>
-    {% else %}
-      <li class="page-item disabled"><span class="page-link">بعدی</span></li>
-    {% endif %}
-  </ul>
-</nav>
-{% endif %}
+    <!-- ========== تب 3: ورود/خروج (سِیبـلینگِ لیست؛ نه داخل آن) ========== -->
+    <div class="tab-pane fade" id="transfer-tab-pane" role="tabpanel" aria-labelledby="transfer-tab">
+      <div class="card shadow-sm mt-3">
+        <div class="card-header bg-info text-white">ورود/خروج سریع سفارش</div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">انتخاب دکتر</label>
+              <input id="doctorSearch" type="text" class="form-control" placeholder="نام دکتر... (برای جستجو تایپ کنید)">
+              <div id="doctorList" class="list-group mt-2" style="max-height: 260px; overflow:auto;"></div>
+            </div>
 
-</div>
-</div>
-</div>
-</div>
+            <div class="col-md-5">
+              <label class="form-label">انتخاب سفارشِ آن دکتر</label>
+              <input id="orderSearch" type="text" class="form-control" placeholder="نام بیمار/سریال/تاریخ... برای فیلتر سریع">
+              <div id="orderList" class="list-group mt-2" style="max-height: 260px; overflow:auto;"></div>
+            </div>
+
+            <div class="col-md-3">
+              <form id="evtForm" method="post" class="vstack gap-2">
+                {% csrf_token %}
+                <input type="hidden" id="selectedOrderId" name="__selected_order_id">
+
+                <!-- نوع رویداد (فقط ۵ گزینه) -->
+                <label class="form-label">نوع رویداد</label>
+                <select id="eventType" name="event_type" class="form-select">
+                  <option value="">— انتخاب کنید —</option>
+                  <option value="sent_to_clinic">ارسال به مطب</option>
+                  <option value="received_in_lab">دریافت از مطب</option>
+                  <option value="sent_to_digital_lab">ارسال به لابراتوار دیجیتال</option>
+                  <option value="received_from_digital_lab">دریافت از لابراتوار دیجیتال</option>
+                  <option value="final_shipment">ارسال نهایی</option>
+                </select>
+
+                <!-- علت (Select) -->
+                <label class="form-label">علت</label>
+                <select name="cause_choice" id="cause_choice" class="form-select">
+                  <option value="">— انتخاب کنید —</option>
+                  <option value="components_announce">اعلام قطعات</option>
+                  <option value="components_received">دریافت قطعات</option>
+                  <option value="waxrim_record_bite">waxrim & record bite</option>
+                  <option value="dural_try_in">امتحان دورالی</option>
+                  <option value="frame_try_in">امتحان فریم</option>
+                  <option value="porcelain_try_in">امتحان پرسلن</option>
+                  <option value="framework_design">طراحی فریم</option>
+                  <option value="custom_abutment">کاستومایز اباتمنت</option>
+                  <option value="qc_check">بررسی کیفی</option>
+                  <option value="other">سایر (قابل تایپ)</option>
+                </select>
+
+                <!-- متنِ علت وقتی «سایر» انتخاب شود -->
+                <div id="cause_text_wrap" style="display:none;">
+                  <label class="form-label">علت (متن آزاد)</label>
+                  <input type="text" name="cause_text" id="cause_text" class="form-control" placeholder="مثلاً: توضیح اختصاصی شما">
+                  <div class="form-text">اگر «سایر» را انتخاب کردی، این بخش را پر کن.</div>
+                </div>
+                <!-- مرحله مرتبط (اختیاری) -->
+                <label class="form-label">مرحله مرتبط (اختیاری)</label>
+                <select id="stageInstance" name="stage_instance" class="form-select">
+                  <option value="">— انتخاب کنید —</option>
+                </select>
+
+                </select>
+                <label class="form-label">تاریخ وقوع</label>
+                <input id="happenedAt" name="happened_at" type="text" class="form-control jalali_date" placeholder="YYYY/MM/DD">
+
+                <label class="form-label">توضیحات (اختیاری)</label>
+                <textarea name="notes" class="form-control" rows="2" placeholder="مثلاً: تحویل شد به پیک / بازگشت برای تنظیم اکلوزال"></textarea>
+
+                <button class="btn btn-success w-100 mt-2">ثبت ورود/خروج</button>
+              </form>
+              <script>
+                (function(){
+                  function toggleCause() {
+                    var val = document.getElementById('cause_choice')?.value || '';
+                    document.getElementById('cause_text_wrap').style.display = (val === 'other') ? 'block' : 'none';
+                  }
+                  document.addEventListener('change', function(e){
+                    if (e.target && e.target.id === 'cause_choice') toggleCause();
+                  });
+                  toggleCause(); // init
+                })();
+              </script>
+              <div class="form-text mt-1">بعد از انتخاب دکتر، از لیست سفارش‌ها یکی را کلیک کنید تا هایلایت شود.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+      <!-- ========== تب 4: 🛠️ ورک‌بنچ مراحل ========== -->
+  <div class="tab-pane fade" id="wb-tab-pane" role="tabpanel" aria-labelledby="wb-tab">
+    <div class="mt-3">
+      <iframe id="wb-iframe"
+              src="/workbench/?status=active"
+              style="width:100%; height:80vh; border:0; background:#fff;"></iframe>
+    </div>
+  </div>
+
+  </div> <!-- /.tab-content -->
 {% endblock %}
 
 {% block body_extra %}
@@ -480,365 +505,331 @@ core/templates/core/home.html:
   <script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Feature flags (خاموش پیش‌فرض؛ فقط با ?tp=1 / ?dp=1 روشن می‌شوند) -->
+
   <script>
     window.__TP_FLAG__ = !/(?:^|[?&])tp=0(?:&|$)/.test(location.search);
     window.__DP_FLAG__ = !/(?:^|[?&])dp=0(?:&|$)/.test(location.search);
   </script>
-
-  <!-- ماژول‌های آزمایشی (فعلاً صرفاً لود می‌شوند؛ اجرا بعداً) -->
   <script src="{% static 'js/toothpicker.experimental.v1.js' %}?v=20251009"></script>
   <script src="{% static 'js/date-utils.experimental.v1.js' %}?v=20251009"></script>
 
- <script>
+  <script>
   $(function() {
-    const TP = !!window.__TP_FLAG__; // Tooth Picker آزمایشی؟
-    const DP = !!window.__DP_FLAG__; // تاریخ آزمایشی؟
+    const TP = !!window.__TP_FLAG__;
+    const DP = !!window.__DP_FLAG__;
 
-    // --- تب لیست در صورت داشتن query/hash
-    try {
-      if (window.location.search || window.location.hash === '#list-tab-pane') {
-        var triggerEl = document.querySelector('#list-tab');
-        if (triggerEl) new bootstrap.Tab(triggerEl).show();
+    /* انتخاب تب با hash یا query */
+    try{
+      const h = window.location.hash;
+      if (h === '#transfer-tab-pane') {
+        const el = document.querySelector('#transfer-tab');
+        if (el) new bootstrap.Tab(el).show();
+      } else if (h === '#list-tab-pane' || window.location.search) {
+        const el = document.querySelector('#list-tab');
+        if (el) new bootstrap.Tab(el).show();
       }
-    } catch (e) {}
+    }catch(e){}
 
-   // تاریخ Jalali برای «ارسال شد» (لیست) — پایدار + نرمال‌سازی قبل از ارسال
-const $listDates = $("#list-tab-pane input.jalali_date");
+    /* Datepicker تب لیست (ارسال شد) */
+    const $listDates = $("#list-tab-pane input.jalali_date");
+    $listDates.each(function(){ try { this.type='text'; }catch(e){} $(this).attr({autocomplete:'off', inputmode:'numeric', dir:'ltr'}); });
+    $listDates.filter(function(){ return !$(this).data('pDatepicker'); })
+      .persianDatepicker({ format:'YYYY/MM/DD', autoClose:true, initialValue:false, initialValueType:'persian', calendar:{persian:{locale:'fa'}}, persianDigit:true });
+    $("#list-tab-pane form[action*='deliver_order']").on('submit', function(){
+      var $inp = $(this).find('input.jalali_date').first();
+      if(!$inp.length) return;
+      var v = ($inp.val()||'').trim();
+      if(!v) return;
+      var map = {'۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9','٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9','-':'/'};
+      v = v.replace(/[۰-۹٠-٩\-]/g, ch => map[ch]||ch);
+      $inp.val(v);
+    });
 
-// ورودی را متنی و تمیز کن
-$listDates.each(function(){
-  try { this.type = 'text'; } catch(e){}
-  $(this).attr('autocomplete','off')
-         .attr('inputmode','numeric')
-         .attr('dir','ltr');
-});
-
-// یک‌بار اینیشیال — با اعداد فارسی در UI
-$listDates.filter(function(){ return !$(this).data('pDatepicker'); })
-  .persianDatepicker({
-    format: 'YYYY/MM/DD',
-    autoClose: true,
-    initialValue: false,
-    initialValueType: 'persian',
-    calendar: { persian: { locale: 'fa' } },
-    persianDigit: true
-  });
-
-// قبل از submit هر فرم «ارسال شد»: مقدار را به YYYY/MM/DD با ارقام لاتین تبدیل کن
-$("#list-tab-pane form[action*='deliver_order']").on('submit', function(){
-  var $inp = $(this).find('input.jalali_date').first();
-  if (!$inp.length) return;
-  var v = ($inp.val() || '').trim();
-  if (!v) return;
-
-  // تبدیل ارقام فارسی/عربی به لاتین + «-» به «/»
-  var map = {'۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9',
-             '٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9','-':'/'};
-  v = v.replace(/[۰-۹٠-٩\-]/g, function(ch){ return map[ch] || ch; });
-  $inp.val(v); // نمونه: 1403/07/19
-});
-
-
-    // --- تاریخ‌های فرم ثبت سفارش (Create tab) با altField
+    /* Datepicker تب ثبت سفارش */
     const $createDates = $("#order-tab-pane input[name$='order_date'], #order-tab-pane input[name$='due_date']");
-    if (!DP) {
-      // حالت قدیمی (پیش‌فرض خاموش بودن تاریخ جدید)
+    $createDates.each(function(idx){
+      const $vis = $(this); try{ this.type='text'; }catch(e){}
+      $vis.attr('autocomplete','off');
+      const altId = ($vis.attr('id')||('create_date_'+idx)) + '_alt';
+      if(!document.getElementById(altId)){
+        $('<input>', {type:'hidden', id:altId}).insertAfter($vis);
+      }
+      $vis.persianDatepicker({
+        format:'YYYY/MM/DD', autoClose:true, initialValue:false,
+        calendar:{persian:{locale:'fa'}},
+        altField:'#'+altId, altFormat:'YYYY-MM-DD', altCalendar:'gregorian'
+      });
+    });
+    $('#order-tab-pane form').off('submit.__create_dates').on('submit.__create_dates', function(){
       $createDates.each(function(idx){
-        const $vis = $(this);
-        try { this.type = 'text'; } catch(e){}
-        $vis.attr('autocomplete','off');
-        const altId = ($vis.attr('id') ? $vis.attr('id') : ('create_date_' + idx)) + '_alt';
-        if (!document.getElementById(altId)) {
-          $('<input>', {type:'hidden', id:altId}).insertAfter($vis);
-        }
-        $vis.persianDatepicker({
-          format: 'YYYY/MM/DD',
-          autoClose: true,
-          initialValue: false,
-          calendar: { persian: { locale: 'fa' } },
-          altField: '#'+altId,
-          altFormat: 'YYYY-MM-DD',
-          altCalendar: 'gregorian'
-        });
+        const $vis=$(this), altId = ($vis.attr('id')||('create_date_'+idx)) + '_alt', $alt = $('#'+altId);
+        if($alt.length && $alt.val()) $vis.val($alt.val());
       });
-    } else {
-      // حالت آزمایشی تاریخ جدید با LMDateX
-      $createDates.each(function(idx){
-        const $vis = $(this);
-        try { this.type = 'text'; } catch(e){}
-        $vis.attr('autocomplete','off');
-        const altId = ($vis.attr('id') ? $vis.attr('id') : ('create_date_' + idx)) + '_alt';
-        if (!document.getElementById(altId)) {
-          $('<input>', {type:'hidden', id:altId}).insertAfter($vis);
-        }
-        $vis.persianDatepicker({
-          format: 'YYYY/MM/DD',
-          autoClose: true,
-          initialValue: false,
-          initialValueType: 'persian', // تفسیر مقدار اولیه به‌صورت جلالی
-          persianDigit: true,          // نمایش اعداد فارسی
-          calendar: { persian: { locale: 'fa' } },
-          altField: '#'+altId,
-          altFormat: 'YYYY-MM-DD',
-          altCalendar: 'gregorian'
-        });
-      });
-    }
+    });
 
-    // --- قبل از ارسال فرم Create: مقدار visible را با میلادی alt جایگزین کن
-    var $orderForm = $('#order-tab-pane form');
-    if($orderForm.length){
-      // نام‌فضا برای جلوگیری از چندبار وصل‌شدن
-      $orderForm.off('submit.__create_dates');
-      $orderForm.on('submit.__create_dates', function(){
-        $createDates.each(function(idx){
-          const $vis = $(this);
-          const altId = ($vis.attr('id') ? $vis.attr('id') : ('create_date_' + idx)) + '_alt';
-          const $alt = $('#'+altId);
-          if ($alt.length && $alt.val()) {
-            $vis.val($alt.val()); // ارسال: YYYY-MM-DD
-          }
-        });
-      });
-    }
-
-    // --- Tooth Picker (Create tab)
-    const chips = document.querySelectorAll('#order-tab-pane .tooth-chip');
-    const hidden = document.querySelector('#order-tab-pane #teeth_fdi');
-    const summary = document.querySelector('#order-tab-pane #tooth-summary');
-
-    if (!TP) {
-      // حالت قدیمی (بدون تغییر)
-      function fdiCode(q, n){ return (q*10 + n).toString(); }
+    /* Tooth Picker (Create) */
+    (function(){
+      const chips = document.querySelectorAll('#order-tab-pane .tooth-chip');
+      const hidden = document.querySelector('#order-tab-pane #teeth_fdi');
+      const summary = document.querySelector('#order-tab-pane #tooth-summary');
+      function fdiCode(q,n){ return (q*10+n).toString(); }
       function refreshSummary(){
-        const codes = (hidden.value || '').split(',').filter(Boolean);
-        if (!codes.length){
-          summary.textContent = 'هنوز دندانی انتخاب نشده است.';
-          summary.classList.add('text-muted');
-          return;
-        }
+        const codes = (hidden.value||'').split(',').filter(Boolean);
+        if(!codes.length){ summary.textContent='هنوز دندانی انتخاب نشده است.'; summary.classList.add('text-muted'); return; }
         summary.classList.remove('text-muted');
-        const groups = {1:[],2:[],3:[],4:[]};
-        codes.forEach(c=>{
-          const q = parseInt(c[0],10);
-          const n = parseInt(c.slice(1),10);
-          if(groups[q]) groups[q].push(n);
-        });
-        Object.keys(groups).forEach(k=> groups[k].sort((a,b)=>a-b));
-        const parts = [];
-        if(groups[1].length) parts.push('بالا راست: ' + groups[1].join(', '));
-        if(groups[2].length) parts.push('بالا چپ: '   + groups[2].join(', '));
-        if (groups[3].length) parts.push('پایین چپ: ' + groups[3].join(', '));
-        if(groups[4].length) parts.push('پایین راست: ' + groups[4].join(', '));
-        summary.textContent = parts.join('  |  ');
+        const g={1:[],2:[],3:[],4:[]};
+        codes.forEach(c=>{ const q=parseInt(c[0],10), n=parseInt(c.slice(1),10); if(g[q]) g[q].push(n); });
+        Object.keys(g).forEach(k=>g[k].sort((a,b)=>a-b));
+        const parts=[];
+        if(g[1].length) parts.push('بالا راست: '+g[1].join(', '));
+        if(g[2].length) parts.push('بالا چپ: '+g[2].join(', '));
+        if(g[3].length) parts.push('پایین چپ: '+g[3].join(', '));
+        if(g[4].length) parts.push('پایین راست: '+g[4].join(', '));
+        summary.textContent=parts.join('  |  ');
       }
       function toggleChip(el){
         el.classList.toggle('active');
-        const q = parseInt(el.dataset.q,10);
-        const n = parseInt(el.dataset.n,10);
-        const code = fdiCode(q,n);
-        let arr = (hidden.value || '').split(',').filter(Boolean);
-        if (el.classList.contains('active')){ if (!arr.includes(code)) arr.push(code); }
-        else { arr = arr.filter(c => c !== code); }
+        const q=parseInt(el.dataset.q,10), n=parseInt(el.dataset.n,10), code=fdiCode(q,n);
+        let arr=(hidden.value||'').split(',').filter(Boolean);
+        if(el.classList.contains('active')){ if(!arr.includes(code)) arr.push(code); }
+        else { arr = arr.filter(c=>c!==code); }
         arr.sort((a,b)=>parseInt(a,10)-parseInt(b,10));
-        hidden.value = arr.join(',');
+        hidden.value=arr.join(',');
         refreshSummary();
       }
       chips.forEach(el=> el.addEventListener('click', ()=> toggleChip(el)));
       document.querySelectorAll('#order-tab-pane [data-bulk]').forEach(btn=>{
         btn.addEventListener('click', ()=>{
-          const t = btn.getAttribute('data-bulk');
-          if (t === 'clear'){
-            chips.forEach(c=> c.classList.remove('active'));
-            hidden.value = '';
-            refreshSummary();
-            return;
-          }
-          const selectQuadrants = (qs)=>{
-            chips.forEach(c=>{
-              const q = parseInt(c.dataset.q,10);
-              if (qs.includes(q)){ if (!c.classList.contains('active')) c.classList.add('active'); }
-            });
-            const arr = [];
-            chips.forEach(c=>{
-              if (c.classList.contains('active')){
-                const q = parseInt(c.dataset.q,10);
-                const n = parseInt(c.dataset.n,10);
-                arr.push(fdiCode(q,n));
-              }
-            });
-            arr.sort((a,b)=>parseInt(a,10)-parseInt(b,10));
-            hidden.value = arr.join(',');
-            refreshSummary();
-          };
-          if (t === 'upper-all') selectQuadrants([1,2]);
-          if (t === 'lower-all') selectQuadrants([3,4]);
+          const t=btn.getAttribute('data-bulk');
+          if(t==='clear'){ chips.forEach(c=>c.classList.remove('active')); hidden.value=''; refreshSummary(); return; }
+          const qs = (t==='upper-all')?[1,2]:(t==='lower-all')?[3,4]:[];
+          chips.forEach(c=>{ const q=parseInt(c.dataset.q,10); if(qs.includes(q)) c.classList.add('active'); });
+          let arr=[]; chips.forEach(c=>{ if(c.classList.contains('active')){ const q=parseInt(c.dataset.q,10), n=parseInt(c.dataset.n,10); arr.push(fdiCode(q,n)); } });
+          arr.sort((a,b)=>parseInt(a,10)-parseInt(b,10)); hidden.value=arr.join(','); refreshSummary();
         });
       });
-
-      // چسباندن انتخاب‌ها به notes قبل از ارسال (قدیمی)
       const _form = document.querySelector('#order-tab-pane form');
-      if (_form){
+      if(_form){
         _form.addEventListener('submit', ()=>{
-          const codes = (hidden && hidden.value || '').trim();
-          if (!codes) return;
-          const notes = _form.querySelector('textarea[name$="notes"]');
-          if (notes){
-            const tag = '\nدندان‌ها: ' + codes.replaceAll(',', ', ');
-            if (notes.value.indexOf('دندان‌ها:') === -1){
-              notes.value = (notes.value || '') + tag;
-            }
+          const codes=(hidden && hidden.value || '').trim(); if(!codes) return;
+          const notes=_form.querySelector('textarea[name$="notes"]');
+          if(notes){
+            const tag='\nدندان‌ها: '+codes.replaceAll(',', ', ');
+            if(notes.value.indexOf('دندان‌ها:')===-1){ notes.value=(notes.value||'')+tag; }
           }
-          // کپی برای ModelForm تا در DB ذخیره شود
-       const mfHidden = document.getElementById('teeth_fdi_mf');
-       if (mfHidden) mfHidden.value = codes;
+          const mfHidden=document.getElementById('teeth_fdi_mf'); if(mfHidden) mfHidden.value=codes;
         });
       }
-    } else {
-      // حالت آزمایشی جدید با LMToothX (فقط تب Create)
-      if (window.LMToothX && typeof LMToothX.init === 'function') {
-        LMToothX.init({
-          root: '#order-tab-pane',         // فقط تب ثبت سفارش
-          hidden: '#teeth_fdi',
-          chips: '.tooth-chip',
-          summary: '#tooth-summary',
-          notes: '#id_notes'               // پیش‌فرض crispy معمولاً id_notes است
-        });
+    })();
 
-      } else {
-        console.warn('LMToothX not found');
-      }
-    }
-
-    // --- رندر نمای دندان‌ها در لیست (بدون تغییر)
+    /* رندر نمای دندان‌ها در لیست */
     (function(){
-      function parseQuadrants(qstr){
-        const res = {UR:[], UL:[], LL:[], LR:[]};
-        if(!qstr) return res;
-        qstr.split('|').forEach(seg=>{
-          const [k,v=''] = seg.split('=');
-          const key = (k||'').trim().toUpperCase();
-          if(res[key] && v.trim()){
-            res[key] = v.split(',').map(s=>s.trim()).filter(Boolean);
-          }
-        });
-        return res;
-      }
       function parseFDI(fdi){
-        const groups = {1:[],2:[],3:[],4:[]};
-        if(!fdi) return groups;
+        const g={1:[],2:[],3:[],4:[]}; if(!fdi) return g;
         fdi.split(',').map(s=>s.trim()).filter(Boolean).forEach(code=>{
-          const q = parseInt(code[0],10);
-          const n = parseInt(code.slice(1),10);
-          if(groups[q] && n>=1 && n<=8) groups[q].push(String(n));
-        });
-        Object.keys(groups).forEach(k=> groups[k].sort((a,b)=>parseInt(a,10)-parseInt(b,10)));
-        return groups;
-      }
-      function fromNotes(notes){
-        if(!notes) return null;
-        const fa='۰۱۲۳۴۵۶۷۸۹', ar='٠١٢٣٤٥٦٧٨٩';
-        function dnorm(s){
-          return String(s)
-            .replace(/[۰-۹]/g, d => ''+fa.indexOf(d))
-            .replace(/[٠-٩]/g, d => ''+ar.indexOf(d));
-        }
-        const m = dnorm(notes).match(/دندان‌ها\s*:\s*([0-9,\s،]+)/);
-        if(!m) return null;
-        const csv = m[1].replace(/،/g, ',');
-        const codes = csv.split(',').map(s=>s.trim()).filter(Boolean);
-        if(!codes.length) return null;
-        const g = {1:[],2:[],3:[],4:[]};
-        codes.forEach(code=>{
-          const q = parseInt(code[0],10);
-          const n = parseInt(code.slice(1),10);
+          const q=parseInt(code[0],10), n=parseInt(code.slice(1),10);
           if(g[q] && n>=1 && n<=8) g[q].push(String(n));
         });
-        Object.keys(g).forEach(k=> g[k].sort((a,b)=>parseInt(a,10)-parseInt(b,10)));
-        return { UL:g[2], UR:g[1], LL:g[3], LR:g[4] };
+        Object.keys(g).forEach(k=>g[k].sort((a,b)=>parseInt(a,10)-parseInt(b,10)));
+        return g;
       }
       function fill(el){
-        const qstr  = el.getAttribute('data-q') || '';
-        const fdi   = el.getAttribute('data-fdi') || '';
-        const notes = el.getAttribute('data-notes') || '';
-        let UL=[], UR=[], LL=[], LR=[];
-        if(qstr){
-          const q = parseQuadrants(qstr);
-          UL=q.UL; UR=q.UR; LL=q.LL; LR=q.LR;
-        }else if(fdi){
-          const g = parseFDI(fdi);
-          UL = g[2]; UR = g[1]; LL = g[3]; LR = g[4];
-        }else{
-          const n = fromNotes(notes);
-          if(n){ UL=n.UL; UR=n.UR; LL=n.LL; LR=n.LR; }
-        }
-        const map = { 'tp-ul':UL, 'tp-ur':UR, 'tp-ll':LL, 'tp-lr':LR };
+        const fdi = el.getAttribute('data-fdi')||'';
+        const notes = el.getAttribute('data-notes')||'';
+        let UL=[],UR=[],LL=[],LR=[];
+        if(fdi){ const x=parseFDI(fdi); UL=x[2]; UR=x[1]; LL=x[3]; LR=x[4]; }
+        const map={'tp-ul':UL,'tp-ur':UR,'tp-ll':LL,'tp-lr':LR};
         Object.keys(map).forEach(cls=>{
-          const box = el.querySelector('.'+cls);
-          if(!box) return;
-          box.innerHTML = '';
-          map[cls].forEach(num=>{
-            const s = document.createElement('span');
-            s.textContent = num;
-            s.className = 'active';
-            box.appendChild(s);
-          });
+          const box=el.querySelector('.'+cls); if(!box) return; box.innerHTML='';
+          map[cls].forEach(num=>{ const s=document.createElement('span'); s.textContent=num; s.className='active'; box.appendChild(s); });
         });
       }
       document.querySelectorAll('.toothplus').forEach(fill);
     })();
 
-    // پایان ready
-  });
-</script>
-<script>
-  // تضمین نهایی (نسخهٔ بهبود‌یافته):
-  // قبل از ارسال فرم Create، کُدهای دندان از hidden یا از چیپ‌های .active خوانده می‌شود
-  // سپس در notes و همچنین در هیدن مدل (teeth_fdi_mf) ست می‌گردد.
-  (function(){
-    var rootSel   = '#order-tab-pane';
-    var formSel   = rootSel + ' form';
-    var hiddenSel = rootSel + ' #teeth_fdi';      // هیدن UI
-    var mfSel     = rootSel + ' #teeth_fdi_mf';   // هیدن ModelForm (name="teeth_fdi")
-
-    function collectFromChips(){
-      var arr = [];
-      document.querySelectorAll(rootSel + ' .tooth-chip.active').forEach(function(c){
-        var q = parseInt(c.getAttribute('data-q'), 10);
-        var n = parseInt(c.getAttribute('data-n'), 10);
-        if (q && n) arr.push(String(q*10 + n));
-      });
-      // اگر hidden قبلی چیزی دارد، با چیپ‌ها ادغام شود
-      var hv = (document.querySelector(hiddenSel)?.value || '').split(',').map(function(s){return s.trim();}).filter(Boolean);
-      hv.forEach(function(code){ if (!arr.includes(code)) arr.push(code); });
-      arr.sort(function(a,b){ return parseInt(a,10) - parseInt(b,10); });
-      return arr.join(',');
-    }
-
-    $(document).off('submit.__tp_sync', formSel).on('submit.__tp_sync', formSel, function(){
-      // 1) کدها: اول از هیدن، اگر خالی بود از چیپ‌ها
-      var codes = (document.querySelector(hiddenSel)?.value || '').trim();
-      if (!codes) codes = collectFromChips();
-
-      // 2) در هر دو هیدن بنویسیم تا حتماً POST شود
-      var $ui = $(hiddenSel); if ($ui.length) $ui.val(codes);
-      var $mf = $(mfSel);     if ($mf.length) $mf.val(codes);
-
-      // 3) خط «دندان‌ها: …» را در notes جایگزین/افزوده کن (شناسه یا name هرچه باشد)
-      var $notes = $(rootSel + ' #id_notes, ' + rootSel + ' textarea[name$="notes"]');
-      if ($notes.length){
-        var txt = String($notes.val() || '');
-        txt = txt.replace(/(^|\n)\s*دندان‌ها\s*:\s*[^\n]*\n?/g, '$1'); // پاک نسخه‌های قبلی
-        if (codes){
-          txt = (txt ? txt.replace(/\s*$/,'') + '\n' : '') + 'دندان‌ها: ' + codes.replace(/,/g, ', ');
-        }
-        $notes.val(txt);
-      }
+    /* نمایش جزئیات در مودال */
+    $(document).on('click', 'a.js-order-detail', function (e) {
+      if (e.ctrlKey || e.metaKey || e.shiftKey || e.which === 2) return;
+      e.preventDefault();
+      var href=this.href, $mod=$('#orderDetailModal'), $body=$mod.find('.modal-body');
+      $body.html('<div class="text-muted">در حال بارگذاری…</div>');
+      new bootstrap.Modal($mod[0]).show();
+      fetch(href, { credentials:'same-origin' })
+        .then(r=>r.text())
+        .then(html=>{
+          var m=html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+          $body.html(m?m[1]:html);
+          var $inputs=$body.find('input.jalali_date, #id_happened_at');
+          $inputs.each(function(){ try{ if(this.type!=='text') this.type='text'; }catch(e){} $(this).attr('autocomplete','off'); });
+          $inputs.filter(function(){ return !$(this).data('pDatepicker'); })
+            .persianDatepicker({ format:'YYYY/MM/DD', autoClose:true, calendar:{ persian:{ locale:'fa' } } });
+          var $form=$body.find('form[action*="add_order_event"]');
+          if($form.length){
+            var action=$form.attr('action')||'', sep=action.indexOf('?')===-1?'?':'&';
+            var nextUrl=window.location.pathname+window.location.search+'#list-tab-pane';
+            if(action.indexOf('next=')===-1) $form.attr('action', action+sep+'next='+encodeURIComponent(nextUrl));
+          }
+        })
+        .catch(()=> $body.html('<div class="text-danger">خطا در بارگذاری جزئیات.</div>'));
     });
-  })();
+
+    /* تب ورود/خروج: API دکترها و سفارش‌ها */
+    (function(){
+      const $docInput=$("#doctorSearch"), $docList=$("#doctorList");
+      const $ordInput=$("#orderSearch"), $ordList=$("#orderList");
+      const $form=$("#evtForm"), $selOrder=$("#selectedOrderId");
+      const $cause = $("#cause_choice");
+      const $causeTextWrap = $("#cause_text_wrap");
+      const $stage = $("#stageInstance");
+
+      let doctors=[], orders=[];
+
+      async function fetchDoctors(q){
+        const url='/api/doctors'+(q?('?q='+encodeURIComponent(q)):'');
+        const data=await fetch(url,{headers:{'Accept':'application/json'}}).then(r=>r.json());
+        doctors=data.results||[]; renderDoctors();
+      }
+      function renderDoctors(){
+        $docList.empty();
+        doctors.forEach(d=>{
+          const $it=$('<button type="button" class="list-group-item list-group-item-action"></button>');
+          $it.text(d.name).data('id', d.id).on('click', ()=>{
+            $docList.find('.active').removeClass('active'); $it.addClass('active');
+            $docInput.val(d.name); fetchOrdersByDoctor(d.id,'');
+          });
+          $docList.append($it);
+        });
+      }
+      async function fetchOrdersByDoctor(docId,q){
+        $ordInput.prop('disabled', false).val(''); $ordList.empty(); $selOrder.val('');
+        const url='/api/orders-by-doctor?doctor_id='+encodeURIComponent(docId)+(q?('&q='+encodeURIComponent(q)):'');
+        const data=await fetch(url,{headers:{'Accept':'application/json'}}).then(r=>r.json());
+        orders=(data.results||[]); renderOrders();
+      }
+      function populateCauseOptions(stages){
+        let html = '<option value="">— انتخاب کنید —</option>';
+
+      // مراحل سفارش (اگر بود)
+        if (stages && stages.length){
+          html += '<optgroup label="مراحل سفارش">';
+          stages.forEach(s => {
+            const lbl = (s.label || '').toString();
+            html += '<option value="'+ lbl.replace(/"/g,'&quot;') +'">'+ lbl +'</option>';
+          });
+          html += '</optgroup>';
+        }
+
+        // علت‌های عمومی
+        html += '<optgroup label="علت‌های عمومی">'
+              + '<option value="components_announce">اعلام قطعات</option>'
+              + '<option value="components_received">دریافت قطعات</option>'
+              + '<option value="waxrim_record_bite">waxrim & record bite</option>'
+              + '<option value="dural_try_in">امتحان دورالی</option>'
+              + '<option value="frame_try_in">امتحان فریم</option>'
+              + '<option value="porcelain_try_in">امتحان پرسلن</option>'
+              + '<option value="framework_design">طراحی فریم</option>'
+              + '<option value="custom_abutment">کاستومایز اباتمنت</option>'
+              + '<option value="qc_check">بررسی کیفی</option>'
+              + '</optgroup>';
+
+        // سایر
+        html += '<option value="other">سایر (قابل تایپ)</option>';
+
+        $cause.html(html);
+        // sync نمایش فیلد «سایر»
+        if ($cause.val() !== 'other') $causeTextWrap.hide();
+      }
+
+      async function fetchOrderStagesFor(orderId){
+        try{
+          const url = '/api/order-stages?order_id=' + encodeURIComponent(orderId);
+          const data = await fetch(url, {headers:{'Accept':'application/json'}}).then(r=>r.json());
+          populateCauseOptions(data.results || []);
+          populateStageSelect(data.results || []);
+        }catch(e){
+          populateCauseOptions([]); // اگر خطا شد، فقط علت‌های عمومی را بگذار
+        }
+      }
+
+      function labelFor(o){
+        const name=(o.patient_name||o.patient||(o.patient&&o.patient.name)||'').toString().trim();
+        const due = o.due_date ? (' — تحویل: '+o.due_date) : '';
+        const sn  = o.serial_number ? (' — سریال: '+o.serial_number) : '';
+        return 'سفارش #'+o.id+(name?(' — '+name):' — بدون نام')+sn+due;
+      }
+      function renderOrders(){
+        $ordList.empty();
+        orders.forEach(o=>{
+          const $it=$('<button type="button" class="list-group-item list-group-item-action"></button>');
+          $it.text(labelFor(o)).data('id',o.id).on('click', ()=>{
+            $ordList.find('.active').removeClass('active'); $it.addClass('active'); $selOrder.val(String(o.id));
+            fetchOrderStagesFor(o.id);
+          });
+          $ordList.append($it);
+        });
+      }
+      function populateStageSelect(stages){
+        let html = '<option value="">— انتخاب کنید —</option>';
+        if (stages && stages.length){
+          stages.forEach(s => {
+            const id = (s.id || '').toString();
+            const lbl = (s.label || '').toString();
+            html += '<option value="'+ id.replace(/"/g,'&quot;') +'">'+ lbl +'</option>';
+          });
+        }
+        $stage.html(html);
+      }
+      let tDoc=null;
+      $docInput.on('input', function(){ const q=$(this).val().trim(); clearTimeout(tDoc); tDoc=setTimeout(()=>fetchDoctors(q),250); });
+      fetchDoctors('');
+
+      $ordInput.on('input', function(){
+        const q=$(this).val().trim().toLowerCase();
+        $ordList.children().each(function(){ const ok=$(this).text().toLowerCase().indexOf(q)>=0; $(this).toggle(ok); });
+      });
+
+      // تاریخ جلالی این تب
+      try{ $('#transfer-tab-pane #happenedAt').persianDatepicker({ format:'YYYY/MM/DD', autoClose:true, calendar:{persian:{locale:'fa'}} }); }catch(e){}
+
+      $(document).on('change', '#cause_choice', function(){
+        $causeTextWrap.toggle(this.value === 'other');
+      });
+      $causeTextWrap.toggle($cause.val() === 'other'); // init on load
+
+      $form.on('submit', function(e){
+        const oid=($selOrder.val()||'').trim();
+        if(!oid){ e.preventDefault(); alert('اول دکتر و سپس یک سفارش را انتخاب کنید.'); return; }
+        const nextUrl='/orders/#list-tab-pane';
+        this.action='/orders/'+encodeURIComponent(oid)+'/add-event/?next='+encodeURIComponent(nextUrl);
+      });
+    })();
+
+  });
+  </script>
+  <script>
+(function(){
+  const iframe = document.getElementById('wb-iframe');
+  if (!iframe) return;
+
+  function resizeWB(){
+    // اگر ارتفاع زیاد/کم بود این عدد رو کمی کم‌وزیاد کن
+    iframe.style.height = Math.max(400, window.innerHeight - 180) + 'px';
+  }
+
+  // وقتی تب «ورک‌بنچ» فعال شد، ارتفاع رو فیت کن
+  document.addEventListener('shown.bs.tab', function(e){
+    if (e.target && e.target.id === 'wb-tab') resizeWB();
+  });
+
+  // تغییر اندازه‌ی پنجره
+  window.addEventListener('resize', resizeWB);
+
+  // اندازه اولیه (اگر کاربر مستقیماً وارد تب شد هم اوکی میشه)
+  resizeWB();
+})();
 </script>
 {% endblock %}
+
 
 
 
