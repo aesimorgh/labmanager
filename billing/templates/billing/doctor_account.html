@@ -119,9 +119,9 @@
                     {% endif %}
                   </td>
                   <td class="small">
-                    {% if inv.period_from %}{{ inv.period_from|to_jalali:"%Y/%m/%d" }}{% else %}—{% endif %}
-                    <span class="mx-1">تا</span>
-                    {% if inv.period_to %}{{ inv.period_to|to_jalali:"%Y/%m/%d" }}{% else %}—{% endif %}
+                    {% if inv.period_from %}{{ inv.period_from|date:"Y/m/d"|digits_fa }}{% else %}—{% endif %}
+                      <span class="mx-1">تا</span>
+                    {% if inv.period_to %}{{ inv.period_to|date:"Y/m/d"|digits_fa }}{% else %}—{% endif %}
                   </td>
                   <td class="num">{{ inv.total_amount|default:0|money_fa }}</td>
                   <td class="num">{{ inv.amount_due|default:0|money_fa }}</td>
@@ -198,7 +198,9 @@
                 <tr>
                   <td class="num">{{ forloop.counter|int_fa }}</td>
                   <!-- تاریخِ ذخیره‌شده را به صورت ISO می‌گذاریم؛ JS پایین تصمیم می‌گیرد چگونه نمایش دهد -->
-                  <td class="pdate" data-gdate="{{ p.date|date:'Y-m-d' }}"></td>
+                  <td class="pdate" data-gdate="{{ p.date|date:'Y-m-d' }}">
+                    {{ p.date|to_jalali:"%Y/%m/%d"|default_if_none:"—"|digits_fa }}
+                  </td>
                   <td class="num">{{ p.amount|default:0|money_fa }}</td>
                   <td>{% if p.method %}{{ p.method }}{% else %}—{% endif %}</td>
                   <td class="small">{{ p.note|default:"—" }}</td>
@@ -261,31 +263,58 @@
         return true;
       });
 
-      // --- نمایش تاریخ پرداخت‌ها به‌صورت شمسی درست
-      // اگر سالِ ذخیره‌شده >= 1700 باشد یعنی میلادیِ صحیح → به شمسی تبدیل کن.
-      // اگر سال < 1700 (مثل 1404) یعنی قبلاً شمسی را اشتباهی میلادی ذخیره کرده‌ایم → همان را نمایش بده (فقط ارقام فارسی).
-      function faDigits(s){ return (s+'').replace(/\d/g, d=>"۰۱۲۳۴۵۶۷۸۹"[d]); }
+            // --- نمایش تاریخ پرداخت‌ها به‌صورت شمسیِ پایدار با اولویت استفاده از DateUtils ---
+      (function formatPaymentDates(){
+        function faDigits(s){
+          if (window.DateUtils && typeof DateUtils.faDigits === 'function') {
+            return DateUtils.faDigits(s+'');
+          }
+          return (s+'').replace(/\d/g, d=>"۰۱۲۳۴۵۶۷۸۹"[d]);
+        }
 
-      document.querySelectorAll('td.pdate[data-gdate]').forEach(function(td){
-        var iso = td.getAttribute('data-gdate');   // مثل "1404-07-10" یا "2025-10-02"
-        if(!iso){ td.textContent='—'; return; }
-        var y = parseInt(iso.slice(0,4),10);
-        if (y >= 1700) {
-          // میلادی → شمسی
+        function toJalaliFromISO(iso){
+          // اگر DateUtils در پروژه هست، از همون استفاده کن
+          if (window.DateUtils) {
+            // API های متداول که ممکن است در فایل شما باشد:
+            if (typeof DateUtils.toJalaliStrFromISO === 'function') return DateUtils.toJalaliStrFromISO(iso);
+            if (typeof DateUtils.toJalaliString    === 'function') return DateUtils.toJalaliString(iso);
+            if (typeof DateUtils.gregorianToJalali === 'function') {
+              try{
+                var parts = (iso||'').split('-').map(Number);
+                var j = DateUtils.gregorianToJalali(parts[0], parts[1], parts[2]); // [jy,jm,jd]
+                var pad = n => (n<10?'0':'')+n;
+                return j ? (j[0]+'/'+pad(j[1])+'/'+pad(j[2])) : '';
+              }catch(e){}
+            }
+          }
+          // fallback قدیمی با persian-date
           try{
             var g = new Date(iso + 'T00:00:00');
-            var p = new persianDate(g).calendar('persian').format('YYYY/MM/DD');
-            td.textContent = p;
+            // اگر تاریخ نامعتبر بود:
+            if (isNaN(g.getTime())) return '';
+            /* global persianDate */
+            return new persianDate(g).calendar('persian').format('YYYY/MM/DD');
           }catch(e){
+            return '';
+          }
+        }
+
+        document.querySelectorAll('td.pdate[data-gdate]').forEach(function(td){
+          var iso = (td.getAttribute('data-gdate')||'').trim();   // مثل "1404-07-10" یا "2025-10-02"
+          if(!iso){ td.textContent='—'; return; }
+          var y = parseInt(iso.slice(0,4),10);
+
+          if (!isNaN(y) && y >= 1700) {
+            // میلادی معتبر → به شمسی تبدیل کن
+            var j = toJalaliFromISO(iso);
+            td.textContent = j || faDigits(iso.replace(/-/g,'/'));
+          } else {
+            // مقدارِ قدیمی/خراب که شمسی را به‌صورت "1404-07-10" ذخیره کرده → همان را فقط با ارقام فارسی نمایش بده
             td.textContent = faDigits(iso.replace(/-/g,'/'));
           }
-        } else {
-          // موردِ خرابِ قبلی (شمسی را میلادی ذخیره کرده بودیم) → همان را با ارقام فارسی نشان بده
-          td.textContent = faDigits(iso.replace(/-/g,'/'));
-        }
-        td.classList.add('muted');
-      });
-    })();
+          td.classList.add('muted');
+        });
+      })();
   </script>
 {% endblock %}
 

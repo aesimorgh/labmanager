@@ -79,11 +79,18 @@
           {% endwith %}
           {% if invoice.issued_at %}
             <span class="mx-2">|</span>
-            تاریخ صدور: {{ invoice.issued_at|to_jalali:"%Y/%m/%d" }}
+            تاریخ صدور: {{ invoice.issued_at|to_jalali:"%Y/%m/%d"|digits_fa }}
           {% endif %}
           {% if invoice.period_from or invoice.period_to %}
             <span class="mx-2">|</span>
-            بازه: {{ invoice.period_from|default:"-" }} تا {{ invoice.period_to|default:"-" }}
+            بازه:
+            {% if invoice.period_from %}
+              {{ invoice.period_from|date:"Y/m/d"|digits_fa }}
+            {% else %}—{% endif %}
+            تا
+            {% if invoice.period_to %}
+              {{ invoice.period_to|date:"Y/m/d"|digits_fa }}
+            {% else %}—{% endif %}
           {% endif %}
         </div>
       </div>
