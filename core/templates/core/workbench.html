@@ -7,6 +7,7 @@
   <title>Workbench مراحل</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
   <style>
     body{font-family:Tahoma,sans-serif;background:#f8f9fa}
     .card{margin-top:1rem}
@@ -17,78 +18,331 @@
     .st-blocked{background:#fee2e2;border:1px solid #ef4444;color:#7f1d1d}
     .table th, .table td{vertical-align:middle}
     .sticky-head{position:sticky;top:0;background:#fff;z-index:1}
+    .row-overdue { background:#fff1f2 !important; }
+    .row-overdue td { border-top-color:#fecaca !important; }
   </style>
 </head>
 <body class="container">
 
-  <h4 class="mt-3">Workbench مراحل (نسخهٔ اسکلت)</h4>
+  <h4 class="mt-3">Workbench مراحل</h4>
+
   {% if messages %}
-  <div class="mt-3">
-    {% for message in messages %}
-      <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
-        {{ message }}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-      </div>
-    {% endfor %}
-  </div>
-{% endif %}
-  <!-- فیلترها (فعلاً نمایشی؛ در گام بعد وصل می‌کنیم) -->
+    <div class="mt-3">
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+          {{ message }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <!-- فیلترها -->
   <div class="card shadow-sm">
-  <div class="card-header bg-light">فیلترها</div>
-  <div class="card-body">
-    <form id="wb-filter-form" class="row g-2" method="get">
-      <div class="col-md-4">
-        <label class="form-label">جستجو</label>
-        <input id="wb-q" name="q" type="text" class="form-control"
-               value="{{ q|default:'' }}" placeholder="بیمار / دکتر / مرحله / سریال / #شناسه">
-      </div>
+    <div class="card-header bg-light">فیلترها</div>
+    <div class="card-body">
+      <form id="wb-filter-form" class="row g-2" method="get">
+        <div class="col-md-4">
+          <label class="form-label">جستجو</label>
+          <input id="wb-q" name="q" type="text" class="form-control"
+                 value="{{ q|default:'' }}" placeholder="بیمار / دکتر / مرحله / سریال / #شناسه">
+        </div>
 
-      <div class="col-md-4">
-        <label class="form-label">وضعیت مرحله</label>
-        <select id="wb-status" class="form-select" name="status" onchange="this.form.submit()">
-          <option value="active" {% if status_filter == 'active' %}selected{% endif %}>فعال (در صف / در حال انجام)</option>
-          <option value="done"   {% if status_filter == 'done' %}selected{% endif %}>انجام‌شده</option>
-          <option value="all"    {% if status_filter == 'all' %}selected{% endif %}>همهٔ وضعیت‌ها</option>
-        </select>
-      </div>
+        <div class="col-md-4">
+          <label class="form-label">وضعیت مرحله</label>
+          <select id="wb-status" class="form-select" name="status" onchange="this.form.submit()">
+            <option value="active" {% if status_filter == 'active' %}selected{% endif %}>فعال (در صف / در حال انجام)</option>
+            <option value="done"   {% if status_filter == 'done' %}selected{% endif %}>انجام‌شده</option>
+            <option value="all"    {% if status_filter == 'all' %}selected{% endif %}>همهٔ وضعیت‌ها</option>
+          </select>
+        </div>
 
-      <div class="col-md-2 d-flex align-items-end">
-        <button type="submit" class="btn btn-primary w-100">اعمال</button>
-      </div>
+        <div class="col-md-2 d-flex align-items-end">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="wb-overdue" name="overdue" value="1"
+                   onchange="this.form.submit()" {% if overdue %}checked{% endif %}>
+            <label class="form-check-label" for="wb-overdue">فقط عقب‌افتاده‌ها</label>
+          </div>
+        </div>
 
-      <div class="col-md-2 d-flex align-items-end">
-        <div class="form-text">
-          میان‌بُرها: <code>/</code> جستجو، <code>A</code> فعال، <code>D</code> انجام‌شده، <code>L</code> همه، <code>Esc</code> پاک‌کردن، <code>R</code> رفرش
+        <div class="col-md-2 d-flex align-items-end">
+          <button type="submit" class="btn btn-primary w-100">اعمال</button>
+        </div>
+
+        <div class="col-md-2 d-flex align-items-end">
+          <div class="form-text">
+            میان‌بُرها: <code>/</code> جستجو، <code>A</code> فعال، <code>D</code> انجام‌شده،
+            <code>L</code> همه، <code>Esc</code> پاک‌کردن، <code>R</code> رفرش
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% if kpi %}
+<!-- ===== KPI: شمارش‌ها و واحدها ===== -->
+<div class="row g-3 mt-1">
+
+  <!-- فعال (در صف + درحال‌انجام) -->
+  <div class="col-6 col-md-2">
+    <div class="card text-center shadow-sm">
+      <div class="card-body py-2">
+        <div class="text-muted small">فعال</div>
+        <div class="fs-4">{{ kpi.count.active|default:0|int_fa }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- در حال انجام -->
+  <div class="col-6 col-md-2">
+    <div class="card text-center shadow-sm">
+      <div class="card-body py-2">
+        <div class="text-muted small">در حال انجام</div>
+        <div class="fs-4">{{ kpi.count.in_progress|default:0|int_fa }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- عقب‌افتاده -->
+  <div class="col-6 col-md-2">
+    <div class="card text-center shadow-sm">
+      <div class="card-body py-2">
+        <div class="text-muted small">عقب‌افتاده</div>
+        <div class="fs-4 text-danger">{{ kpi.count.overdue|default:0|int_fa }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- انجام‌شده -->
+  <div class="col-6 col-md-2">
+    <div class="card text-center shadow-sm">
+      <div class="card-body py-2">
+        <div class="text-muted small">انجام‌شده</div>
+        <div class="fs-4 text-success">{{ kpi.count.done|default:0|int_fa }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- متوقف -->
+  <div class="col-6 col-md-2">
+    <div class="card text-center shadow-sm">
+      <div class="card-body py-2">
+        <div class="text-muted small">متوقف</div>
+        <div class="fs-4">{{ kpi.count.blocked|default:0|int_fa }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- جمع واحدها (درحال‌انجام / عقب‌افتاده) -->
+  <div class="col-12 col-md-2">
+    <div class="card text-center shadow-sm">
+      <div class="card-body py-2">
+        <div class="text-muted small">واحدها</div>
+        <div class="small">
+          درحال‌انجام:
+          <strong>{{ kpi.units.in_progress_total|default:0|int_fa }}</strong>
+        </div>
+        <div class="small">
+          عقب‌افتاده:
+          <strong class="text-danger">{{ kpi.units.overdue_total|default:0|int_fa }}</strong>
         </div>
       </div>
-    </form>
+    </div>
   </div>
 </div>
 
-  <!-- جدول مراحل -->
-  <div class="card shadow-sm">
-    <div class="card-header bg-info text-white">مراحل در صف / در حال انجام</div>
-    <div class="card-body">
-      {% if stages %}
+<!-- ===== Top ها بر اساس واحد ===== -->
+<div class="row g-3 mt-1">
+  <!-- Top مراحلِ درحال‌انجام (برحسب واحد) -->
+  <div class="col-md-6">
+    <div class="card shadow-sm">
+      <div class="card-header bg-light">Top مراحلِ درحال‌انجام (برحسب واحد)</div>
+      <div class="card-body p-0">
         <div class="table-responsive">
-          <table class="table table-sm align-middle">
-            <thead class="sticky-head">
+          <table class="table table-sm mb-0">
+            <thead>
               <tr>
-                <th>#</th>
-                <th>سفارش</th>
-                <th>بیمار</th>
-                <th>دکتر</th>
+                <th style="width:48px;">#</th>
                 <th>مرحله</th>
-                <th>برنامه</th>
-                <th>شروع</th>
-                <th>پایان</th>
-                <th>وضعیت</th>
-                <th style="width:180px;">اقدامات</th>
+                <th class="text-end">واحد</th>
               </tr>
             </thead>
             <tbody>
-              {% for s in stages %}
+              {% for row in kpi.top_stages_in_progress %}
                 <tr>
+                  <td>{{ forloop.counter|int_fa }}</td>
+                  <td>{{ row.label|default:"—" }}</td>
+                  <td class="text-end">{{ row.units|default:0|int_fa }}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="3" class="text-muted text-center py-3">داده‌ای نیست.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top (محصول × مرحله) درحال‌انجام (برحسب واحد) -->
+  <div class="col-md-6">
+    <div class="card shadow-sm">
+      <div class="card-header bg-light">Top (محصول × مرحله) درحال‌انجام (واحد)</div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm mb-0">
+            <thead>
+              <tr>
+                <th style="width:48px;">#</th>
+                <th>محصول (کُد)</th>
+                <th>مرحله</th>
+                <th class="text-end">واحد</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in kpi.top_prod_stage_in_progress %}
+                <tr>
+                  <td>{{ forloop.counter|int_fa }}</td>
+                  <td>{{ row.order__order_type|default:"—" }}</td>
+                  <td>{{ row.label|default:"—" }}</td>
+                  <td class="text-end">{{ row.units|default:0|int_fa }}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="4" class="text-muted text-center py-3">داده‌ای نیست.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="p-2 text-muted small">
+          نکته: فعلاً نام محصول همان <em>کُد</em> سفارش است. اگر بخواهی، بعداً می‌توانیم نگاشتی برای نمایش نام فارسی محصول اضافه کنیم.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+  <!-- جدول مراحل -->
+  <div class="card shadow-sm">
+    <div class="card-header bg-info text-white">مراحل</div>
+    <div class="card-body">
+      <!-- فرم Bulk مستقل (بدون جدول) -->
+      <form id="wb-bulk-form" method="post" action="{% url 'core:stage_bulk_done_today' %}?next={{ request.get_full_path|urlencode }}">
+        {% csrf_token %}
+      </form>
+
+      {% if stages %}
+        <!-- نوار ابزار Bulk -->
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="small text-muted">انتخاب‌شده: <span id="wb-bulk-count">0</span></div>
+          <div class="btn-group">
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="wb-select-all">انتخاب همه</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="wb-select-none">لغو انتخاب</button>
+
+            <button type="button" class="btn btn-outline-primary btn-sm" id="wb-bulk-start"
+                    data-url="{% url 'core:stage_bulk_start_today' %}?next={{ request.get_full_path|urlencode }}"
+                    disabled>شروع امروز (گروهی)</button>
+
+            <button type="button" class="btn btn-success btn-sm" id="wb-bulk-done"
+                    data-url="{% url 'core:stage_bulk_done_today' %}?next={{ request.get_full_path|urlencode }}"
+                    disabled>اتمام امروز (گروهی)</button>
+
+            <button type="button" class="btn btn-dark btn-sm" id="wb-bulk-plan"
+                    data-bs-toggle="modal" data-bs-target="#wb-plan-modal"
+                    disabled>برنامه‌ریزی گروهی</button>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-sm align-middle">
+            <thead class="sticky-head">
+  <tr>
+    <th style="width:34px;">
+      <input type="checkbox" id="wb-check-all" title="انتخاب همه">
+    </th>
+    <th>#</th>
+
+    <!-- سفارش (order id) -->
+    <th>
+      <a class="text-decoration-none"
+         href="?status={{ status_filter }}{% if overdue %}&overdue=1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}&sort=order&dir={% if sort == 'order' and dir == 'asc' %}desc{% else %}asc{% endif %}">
+        سفارش
+        {% if sort == 'order' %}<span>{% if dir == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
+      </a>
+    </th>
+
+    <!-- بیمار -->
+    <th>
+      <a class="text-decoration-none"
+         href="?status={{ status_filter }}{% if overdue %}&overdue=1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}&sort=patient&dir={% if sort == 'patient' and dir == 'asc' %}desc{% else %}asc{% endif %}">
+        بیمار
+        {% if sort == 'patient' %}<span>{% if dir == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
+      </a>
+    </th>
+
+    <!-- دکتر -->
+    <th>
+      <a class="text-decoration-none"
+         href="?status={{ status_filter }}{% if overdue %}&overdue=1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}&sort=doctor&dir={% if sort == 'doctor' and dir == 'asc' %}desc{% else %}asc{% endif %}">
+        دکتر
+        {% if sort == 'doctor' %}<span>{% if dir == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
+      </a>
+    </th>
+
+    <!-- مرحله (label) -->
+    <th>
+      <a class="text-decoration-none"
+         href="?status={{ status_filter }}{% if overdue %}&overdue=1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}&sort=label&dir={% if sort == 'label' and dir == 'asc' %}desc{% else %}asc{% endif %}">
+        مرحله
+        {% if sort == 'label' %}<span>{% if dir == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
+      </a>
+    </th>
+
+    <!-- برنامه (planned_date) -->
+    <th>
+      <a class="text-decoration-none"
+         href="?status={{ status_filter }}{% if overdue %}&overdue=1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}&sort=planned&dir={% if sort == 'planned' and dir == 'asc' %}desc{% else %}asc{% endif %}">
+        برنامه
+        {% if sort == 'planned' %}<span>{% if dir == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
+      </a>
+    </th>
+
+    <!-- شروع (started_date) -->
+    <th>
+      <a class="text-decoration-none"
+         href="?status={{ status_filter }}{% if overdue %}&overdue=1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}&sort=started&dir={% if sort == 'started' and dir == 'asc' %}desc{% else %}asc{% endif %}">
+        شروع
+        {% if sort == 'started' %}<span>{% if dir == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
+      </a>
+    </th>
+
+    <!-- پایان (done_date) -->
+    <th>
+      <a class="text-decoration-none"
+         href="?status={{ status_filter }}{% if overdue %}&overdue=1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}&sort=done&dir={% if sort == 'done' and dir == 'asc' %}desc{% else %}asc{% endif %}">
+        پایان
+        {% if sort == 'done' %}<span>{% if dir == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
+      </a>
+    </th>
+
+    <!-- وضعیت -->
+    <th>
+      <a class="text-decoration-none"
+         href="?status={{ status_filter }}{% if overdue %}&overdue=1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}&sort=status&dir={% if sort == 'status' and dir == 'asc' %}desc{% else %}asc{% endif %}">
+        وضعیت
+        {% if sort == 'status' %}<span>{% if dir == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
+      </a>
+    </th>
+
+    <th style="width:180px;">اقدامات</th>
+  </tr>
+</thead>
+            <tbody>
+              {% for s in stages %}
+                <tr {% if s.is_overdue %}class="row-overdue"{% endif %}>
+                  <td>
+                    <input type="checkbox" class="wb-check" name="stage_id" value="{{ s.id }}" {% if s.status == "done" %}disabled{% endif %}>
+                  </td>
                   <td>{{ forloop.counter }}</td>
                   <td>#{{ s.order_id }}</td>
                   <td>{{ s.order.patient.name|default:"—" }}</td>
@@ -107,89 +361,292 @@
                     {% else %}
                       <span class="badge badge-status st-pending">در صف</span>
                     {% endif %}
+                    {% if s.is_overdue %}
+                      <span class="badge badge-status st-blocked ms-1">عقب‌افتاده</span>
+                    {% endif %}
                   </td>
                   <td class="text-nowrap">
-  {# شروع امروز (POST) #}
-  <form method="post"
-        action="{% url 'core:stage_start_now' s.id %}?next={{ request.get_full_path|urlencode }}"
-        class="d-inline">
-    {% csrf_token %}
-    <button class="btn btn-outline-primary btn-sm me-1"
-            {% if s.status == "in_progress" or s.status == "done" %}disabled{% endif %}
-            title="شروع امروز">
-      شروع امروز
-    </button>
-  </form>
+                    <!-- شروع امروز -->
+                    <form method="post"
+                          action="{% url 'core:stage_start_now' s.id %}?next={{ request.get_full_path|urlencode }}"
+                          class="d-inline">
+                      {% csrf_token %}
+                      <button class="btn btn-outline-primary btn-sm me-1"
+                              {% if s.status == "in_progress" or s.status == "done" %}disabled{% endif %}>
+                        شروع امروز
+                      </button>
+                    </form>
 
-  {# اتمام امروز (POST) #}
-  <form method="post"
-        action="{% url 'core:stage_done_today' s.id %}?next={{ request.get_full_path|urlencode }}"
-        class="d-inline">
-    {% csrf_token %}
-    <button class="btn btn-success btn-sm"
-            {% if s.status == "done" %}disabled{% endif %}
-            title="اتمام امروز">
-      اتمام امروز
-    </button>
-  </form>
-</td>
+                    <!-- اتمام امروز -->
+                    <form method="post"
+                          action="{% url 'core:stage_done_today' s.id %}?next={{ request.get_full_path|urlencode }}"
+                          class="d-inline">
+                      {% csrf_token %}
+                      <button class="btn btn-success btn-sm"
+                              {% if s.status == "done" %}disabled{% endif %}>
+                        اتمام امروز
+                      </button>
+                    </form>
+                  </td>
                 </tr>
               {% endfor %}
             </tbody>
           </table>
         </div>
+        {% if is_paginated %}
+<div class="d-flex justify-content-between align-items-center mt-3">
+  <!-- ناوبری صفحه‌ها -->
+  <nav>
+    <ul class="pagination pagination-sm mb-0">
+      {# اول / قبلی #}
+      {% if page_obj.has_previous %}
+        <li class="page-item">
+          <a class="page-link"
+             href="?status={{ status_filter }}{% if overdue %}&overdue=1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort %}&sort={{ sort }}&dir={{ dir }}{% endif %}&ps={{ ps }}&page=1">اول</a>
+        </li>
+        <li class="page-item">
+          <a class="page-link"
+             href="?status={{ status_filter }}{% if overdue %}&overdue=1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort %}&sort={{ sort }}&dir={{ dir }}{% endif %}&ps={{ ps }}&page={{ page_obj.previous_page_number }}">قبلی</a>
+        </li>
       {% else %}
-        <div class="text-muted">
-          هنوز به این صفحه وصل نشده‌ایم. در <strong>گام بعد</strong> آدرس و ویو می‌سازیم تا این جدول با مراحل
-          <em>pending/in_progress</em> پر شود.
-        </div>
+        <li class="page-item disabled"><span class="page-link">اول</span></li>
+        <li class="page-item disabled"><span class="page-link">قبلی</span></li>
+      {% endif %}
+
+      <!-- شماره صفحه فعلی -->
+      <li class="page-item disabled">
+        <span class="page-link">صفحه {{ page_obj.number|int_fa }} از {{ page_obj.paginator.num_pages|int_fa }}</span>
+      </li>
+
+      {# بعدی / آخر #}
+      {% if page_obj.has_next %}
+        <li class="page-item">
+          <a class="page-link"
+             href="?status={{ status_filter }}{% if overdue %}&overdue=1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort %}&sort={{ sort }}&dir={{ dir }}{% endif %}&ps={{ ps }}&page={{ page_obj.next_page_number }}">بعدی</a>
+        </li>
+        <li class="page-item">
+          <a class="page-link"
+             href="?status={{ status_filter }}{% if overdue %}&overdue=1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort %}&sort={{ sort }}&dir={{ dir }}{% endif %}&ps={{ ps }}&page={{ page_obj.paginator.num_pages }}">آخر</a>
+        </li>
+      {% else %}
+        <li class="page-item disabled"><span class="page-link">بعدی</span></li>
+        <li class="page-item disabled"><span class="page-link">آخر</span></li>
+      {% endif %}
+    </ul>
+  </nav>
+
+  <!-- تغییر سایز صفحه -->
+  <form method="get" class="d-flex align-items-center ms-2">
+    <input type="hidden" name="status"  value="{{ status_filter }}">
+    {% if overdue %}<input type="hidden" name="overdue" value="1">{% endif %}
+    {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+    {% if sort %}<input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="dir" value="{{ dir }}">{% endif %}
+
+    <label class="me-2">تعداد در صفحه</label>
+    <select name="ps" class="form-select form-select-sm me-2" onchange="this.form.submit()">
+      <option value="25"  {% if ps == 25  %}selected{% endif %}>{{ 25|int_fa }}</option>
+      <option value="50"  {% if ps == 50  %}selected{% endif %}>{{ 50|int_fa }}</option>
+      <option value="100" {% if ps == 100 %}selected{% endif %}>{{ 100|int_fa }}</option>
+      <option value="150" {% if ps == 150 %}selected{% endif %}>{{ 150|int_fa }}</option>
+      <option value="200" {% if ps == 200 %}selected{% endif %}>{{ 200|int_fa }}</option>
+    </select>
+  </form>
+</div>
+{% endif %}
+      {% else %}
+        <div class="text-muted">هیچ مرحله‌ای برای نمایش نیست.</div>
       {% endif %}
     </div>
   </div>
 
+  <!-- Modal: برنامه‌ریزی گروهی -->
+  <div class="modal fade" id="wb-plan-modal" tabindex="-1" aria-labelledby="wbPlanLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <form id="wb-plan-form" method="post"
+              action="{% url 'core:stage_bulk_plan_date' %}?next={{ request.get_full_path|urlencode }}">
+          {% csrf_token %}
+          <div class="modal-header">
+            <h5 class="modal-title" id="wbPlanLabel">برنامه‌ریزی گروهی مراحل</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="بستن"></button>
+          </div>
+          <div class="modal-body">
+            <label class="form-label">تاریخ برنامه</label>
+            <input type="text" class="form-control jalali_date" name="planned_date" id="wb-plan-date"
+                   placeholder="YYYY/MM/DD" required>
+            <div class="form-text">مثلاً ۱۴۰۴/۰۷/۳۰ — اگر تقویم جلالی فعال نشد، دستی تایپ کن.</div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">انصراف</button>
+            <button type="submit" class="btn btn-primary" id="wb-plan-submit" disabled>ثبت برنامه</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- اسکریپت‌ها -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
+
   <script>
-(function(){
-  const form   = document.getElementById('wb-filter-form');
-  const qInput = document.getElementById('wb-q');
-  const statusSel = document.getElementById('wb-status');
+  (function(){
+    // --- شورتکات‌های فیلتر ---
+    const form   = document.getElementById('wb-filter-form');
+    const qInput = document.getElementById('wb-q');
 
-  function setParamAndGo(key, val){
-    const url = new URL(window.location.href);
-    if (val === null) url.searchParams.delete(key);
-    else url.searchParams.set(key, val);
-    window.location.href = url.toString();
-  }
-
-  // میان‌بُرها
-  document.addEventListener('keydown', function(e){
-    // اگر فوکِس داخل input/textarea است، اجازه بده تایپ کند
-    const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
-    const inField = (tag === 'input' || tag === 'textarea');
-
-    if (e.key === '/') {
-      if (!inField) e.preventDefault();         // جلوی quick find مرورگر
-      qInput && qInput.focus();
-      qInput && qInput.select();
-      return;
+    function setParamAndGo(key, val){
+      const url = new URL(window.location.href);
+      if (val === null) url.searchParams.delete(key);
+      else url.searchParams.set(key, val);
+      window.location.href = url.toString();
     }
 
-    if (inField) {
-      // داخل فیلد: Esc → پاک‌کردن و سابمیت
-      if (e.key === 'Escape') {
-        if (qInput) qInput.value = '';
-        form && form.submit();
+    document.addEventListener('keydown', function(e){
+      const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+      const inField = (tag === 'input' || tag === 'textarea');
+
+      if (e.key === '/') {
+        if (!inField) e.preventDefault();
+        qInput && qInput.focus();
+        qInput && qInput.select();
+        return;
       }
-      return; // بقیه‌ی کلیدها مزاحم تایپ نشوند
+      if (inField) {
+        if (e.key === 'Escape') { if (qInput) qInput.value = ''; form && form.submit(); }
+        return;
+      }
+      const k = e.key.toLowerCase();
+      if (k === 'a') setParamAndGo('status', 'active');
+      else if (k === 'd') setParamAndGo('status', 'done');
+      else if (k === 'l') setParamAndGo('status', 'all');
+      else if (k === 'r') window.location.reload();
+    });
+  })();
+  </script>
+
+  <script>
+  (function(){
+    // --- انتخاب گروهی + Start/Done/Plan ---
+    const bulkForm     = document.getElementById('wb-bulk-form');
+    const checkAll     = document.getElementById('wb-check-all');
+    const bulkStartBtn = document.getElementById('wb-bulk-start');
+    const bulkDoneBtn  = document.getElementById('wb-bulk-done');
+    const bulkPlanBtn  = document.getElementById('wb-bulk-plan');
+    const countEl      = document.getElementById('wb-bulk-count');
+
+    const planModal  = document.getElementById('wb-plan-modal');
+    const planForm   = document.getElementById('wb-plan-form');
+    const planDate   = document.getElementById('wb-plan-date');
+    const planSubmit = document.getElementById('wb-plan-submit');
+
+    function getChecks(){ return Array.from(document.querySelectorAll('.wb-check')); }
+
+    function updateState(){
+      const enabled  = getChecks().filter(c => !c.disabled);
+      const selected = enabled.filter(c => c.checked);
+      const n = selected.length;
+
+      if (countEl) countEl.textContent = n;
+      if (bulkStartBtn) bulkStartBtn.disabled = (n === 0);
+      if (bulkDoneBtn)  bulkDoneBtn.disabled  = (n === 0);
+      if (bulkPlanBtn)  bulkPlanBtn.disabled  = (n === 0);
+
+      if (checkAll){
+        const allOn = enabled.length>0 && enabled.every(c => c.checked);
+        const anyOn = enabled.some(c => c.checked);
+        checkAll.checked = allOn;
+        checkAll.indeterminate = anyOn && !allOn;
+      }
     }
 
-    const k = e.key.toLowerCase();
-    if (k === 'a') { setParamAndGo('status', 'active'); }
-    else if (k === 'd') { setParamAndGo('status', 'done'); }
-    else if (k === 'l') { setParamAndGo('status', 'all'); }
-    else if (k === 'r') { window.location.reload(); }
-  });
-})();
-</script>
+    // master checkbox
+    if (checkAll){
+      checkAll.addEventListener('change', function(){
+        getChecks().forEach(c => { if(!c.disabled) c.checked = checkAll.checked; });
+        updateState();
+      });
+    }
+
+    // row checkboxes
+    document.addEventListener('change', function(e){
+      if (e.target && e.target.classList && e.target.classList.contains('wb-check')){
+        updateState();
+      }
+    });
+
+    // select all / none
+    const selAllBtn  = document.getElementById('wb-select-all');
+    const selNoneBtn = document.getElementById('wb-select-none');
+    selAllBtn && selAllBtn.addEventListener('click', function(){ getChecks().forEach(c=>{ if(!c.disabled) c.checked=true; }); updateState(); });
+    selNoneBtn && selNoneBtn.addEventListener('click', function(){ getChecks().forEach(c=>{ if(!c.disabled) c.checked=false; }); updateState(); });
+
+    // helper: submit bulk to URL
+    function submitBulk(toUrl){
+      if (!bulkForm) return;
+      const ids = getChecks().filter(c => c.checked && !c.disabled).map(c => c.value);
+      if (!ids.length) return;
+
+      Array.from(bulkForm.querySelectorAll('input[data-dyn="1"]')).forEach(el => el.remove());
+      ids.forEach(id => {
+        const inp = document.createElement('input');
+        inp.type = 'hidden';
+        inp.name = 'stage_id';
+        inp.value = id;
+        inp.setAttribute('data-dyn', '1');
+        bulkForm.appendChild(inp);
+      });
+
+      if (toUrl) bulkForm.action = toUrl;
+      bulkForm.submit();
+    }
+
+    // bind start/done (bulk)
+    bulkStartBtn && bulkStartBtn.addEventListener('click', function(){
+      submitBulk(bulkStartBtn.getAttribute('data-url'));
+    });
+    bulkDoneBtn && bulkDoneBtn.addEventListener('click', function(){
+      submitBulk(bulkDoneBtn.getAttribute('data-url'));
+    });
+
+    // modal: inject selected ids on open
+    planModal && planModal.addEventListener('show.bs.modal', function(){
+      if (!planForm) return;
+      Array.from(planForm.querySelectorAll('input[data-dyn="1"]')).forEach(el => el.remove());
+      const ids = getChecks().filter(c => c.checked && !c.disabled).map(c => c.value);
+      ids.forEach(id => {
+        const inp = document.createElement('input');
+        inp.type = 'hidden';
+        inp.name = 'stage_id';
+        inp.value = id;
+        inp.setAttribute('data-dyn', '1');
+        planForm.appendChild(inp);
+      });
+      planSubmit && (planSubmit.disabled = !planDate || !planDate.value.trim());
+    });
+
+    // init jalali datepicker (optional)
+    try{
+      if (window.jQuery && jQuery.fn && jQuery.fn.persianDatepicker){
+        jQuery('#wb-plan-date').persianDatepicker({
+          format: 'YYYY/MM/DD',
+          autoClose: true,
+          calendar: { persian: { locale: 'fa' } }
+        });
+      }
+    }catch(e){}
+
+    planDate && planDate.addEventListener('input', function(){
+      planSubmit && (planSubmit.disabled = !planDate.value.trim());
+    });
+
+    // init state
+    updateState();
+  })();
+  </script>
+
 </body>
 </html>
+

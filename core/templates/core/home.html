@@ -91,6 +91,15 @@
     🛠️ ورک‌بنچ مراحل
   </button>
 </li>
+<li class="nav-item" role="presentation">
+  <button class="nav-link" id="station-tab"
+          data-bs-toggle="tab"
+          data-bs-target="#station-tab-pane"
+          type="button" role="tab"
+          aria-controls="station-tab-pane" aria-selected="false">
+    👷‍♂️ پنل مسئول مرحله
+  </button>
+</li>
   </ul>
 {% endblock %}
 
@@ -412,10 +421,21 @@
             </div>
 
             <div class="col-md-5">
-              <label class="form-label">انتخاب سفارشِ آن دکتر</label>
-              <input id="orderSearch" type="text" class="form-control" placeholder="نام بیمار/سریال/تاریخ... برای فیلتر سریع">
-              <div id="orderList" class="list-group mt-2" style="max-height: 260px; overflow:auto;"></div>
-            </div>
+  <label class="form-label">انتخاب سفارشِ آن دکتر</label>
+  <input id="orderSearch" type="text" class="form-control" placeholder="نام بیمار/سریال... برای فیلتر سریع">
+  
+  <!-- نوار کنترل انتخاب‌ها -->
+  <div class="d-flex justify-content-between align-items-center mt-2">
+    <div class="small text-muted">انتخاب‌شده: <span id="ordSelectedCount">0</span></div>
+    <div class="btn-group btn-group-sm" role="group">
+      <button type="button" class="btn btn-outline-secondary" id="ordSelAll">انتخاب همه</button>
+      <button type="button" class="btn btn-outline-secondary" id="ordSelNone">لغو انتخاب</button>
+    </div>
+  </div>
+
+  <!-- لیست سفارش‌ها با چک‌باکس -->
+  <div id="orderList" class="list-group mt-2" style="max-height: 260px; overflow:auto;"></div>
+</div>
 
             <div class="col-md-3">
               <form id="evtForm" method="post" class="vstack gap-2">
@@ -469,6 +489,10 @@
                 <textarea name="notes" class="form-control" rows="2" placeholder="مثلاً: تحویل شد به پیک / بازگشت برای تنظیم اکلوزال"></textarea>
 
                 <button class="btn btn-success w-100 mt-2">ثبت ورود/خروج</button>
+              <div class="col-12">
+  <button type="button" class="btn btn-dark w-100" id="bulkSubmitBtn">ثبت رویداد گروهی</button>
+  <div class="form-text">برای ثبت گروهی، چند سفارش را در لیست وسط تیک بزن.</div>
+</div>
               </form>
               <script>
                 (function(){
@@ -497,7 +521,51 @@
     </div>
   </div>
 
-  </div> <!-- /.tab-content -->
+  </div>
+  <!-- ========== تب: پنل مسئول مرحله ========== -->
+<div class="tab-pane fade" id="station-tab-pane" role="tabpanel" aria-labelledby="station-tab">
+  <div class="card shadow-sm mt-3">
+    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+      <span>پنل مسئول مرحله</span>
+      <a class="btn btn-sm btn-outline-light" href="{% url 'core:station_panel' %}" target="_blank" rel="noopener">
+        باز کردن در صفحهٔ جدا
+      </a>
+    </div>
+    <div class="card-body">
+  <!-- نوار کنترل فیلتر برای iframe -->
+  <div class="row g-2 align-items-end mb-2 d-none">
+    <div class="col-md-4">
+      <label class="form-label">دکتر</label>
+      <select id="st-sync-doctor" class="form-select">
+        <option value="">— همه دکترها —</option>
+        <!-- با JS از /api/doctors پر می‌شود -->
+      </select>
+    </div>
+    <div class="col-md-4">
+  <label class="form-label">محصول</label>
+  <select id="st-sync-product" class="form-select">
+    <option value="">— همه محصولات —</option>
+    <!-- با JS از /api/products پر می‌شود -->
+  </select>
+  <div class="form-text">لیست محصولات فعال از سیستم بارگذاری می‌شود.</div>
+</div>
+    <div class="col-md-4 d-flex gap-2">
+      <button type="button" class="btn btn-primary" id="st-sync-apply">اعمال روی پنل</button>
+      <button type="button" class="btn btn-outline-secondary" id="st-sync-clear">پاک‌سازی</button>
+    </div>
+  </div>
+
+  <!-- خود iframe -->
+  <div class="border rounded">
+    <iframe id="station-frame" class="station-frame"
+            src="{% url 'core:station_panel' %}"
+            data-base="{% url 'core:station_panel' %}"
+            style="width:100%; min-height:75vh; border:0; display:block;"></iframe>
+  </div>
+</div>
+  </div>
+</div>
+ <!-- /.tab-content -->
 {% endblock %}
 
 {% block body_extra %}
@@ -513,300 +581,409 @@
   <script src="{% static 'js/toothpicker.experimental.v1.js' %}?v=20251009"></script>
   <script src="{% static 'js/date-utils.experimental.v1.js' %}?v=20251009"></script>
 
-  <script>
-  $(function() {
-    const TP = !!window.__TP_FLAG__;
-    const DP = !!window.__DP_FLAG__;
+<script>
+$(function() {
+  const TP = !!window.__TP_FLAG__;
+  const DP = !!window.__DP_FLAG__;
 
-    /* انتخاب تب با hash یا query */
-    try{
-      const h = window.location.hash;
-      if (h === '#transfer-tab-pane') {
-        const el = document.querySelector('#transfer-tab');
-        if (el) new bootstrap.Tab(el).show();
-      } else if (h === '#list-tab-pane' || window.location.search) {
-        const el = document.querySelector('#list-tab');
-        if (el) new bootstrap.Tab(el).show();
-      }
-    }catch(e){}
+  /* انتخاب تب با hash یا query */
+  try{
+    const h = window.location.hash;
+    if (h === '#transfer-tab-pane') {
+      const el = document.querySelector('#transfer-tab');
+      if (el) new bootstrap.Tab(el).show();
+    } else if (h === '#list-tab-pane' || window.location.search) {
+      const el = document.querySelector('#list-tab');
+      if (el) new bootstrap.Tab(el).show();
+    }
+  }catch(e){}
 
-    /* Datepicker تب لیست (ارسال شد) */
-    const $listDates = $("#list-tab-pane input.jalali_date");
-    $listDates.each(function(){ try { this.type='text'; }catch(e){} $(this).attr({autocomplete:'off', inputmode:'numeric', dir:'ltr'}); });
-    $listDates.filter(function(){ return !$(this).data('pDatepicker'); })
-      .persianDatepicker({ format:'YYYY/MM/DD', autoClose:true, initialValue:false, initialValueType:'persian', calendar:{persian:{locale:'fa'}}, persianDigit:true });
-    $("#list-tab-pane form[action*='deliver_order']").on('submit', function(){
-      var $inp = $(this).find('input.jalali_date').first();
-      if(!$inp.length) return;
-      var v = ($inp.val()||'').trim();
-      if(!v) return;
-      var map = {'۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9','٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9','-':'/'};
-      v = v.replace(/[۰-۹٠-٩\-]/g, ch => map[ch]||ch);
-      $inp.val(v);
+  /* Datepicker تب لیست (ارسال شد) */
+  const $listDates = $("#list-tab-pane input.jalali_date");
+  $listDates.each(function(){ try { this.type='text'; }catch(e){} $(this).attr({autocomplete:'off', inputmode:'numeric', dir:'ltr'}); });
+  $listDates.filter(function(){ return !$(this).data('pDatepicker'); })
+    .persianDatepicker({ format:'YYYY/MM/DD', autoClose:true, initialValue:false, initialValueType:'persian', calendar:{persian:{locale:'fa'}}, persianDigit:true });
+  $("#list-tab-pane form[action*='deliver_order']").on('submit', function(){
+    var $inp = $(this).find('input.jalali_date').first();
+    if(!$inp.length) return;
+    var v = ($inp.val()||'').trim();
+    if(!v) return;
+    var map = {'۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9','٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9','-':'/'};
+    v = v.replace(/[۰-۹٠-٩\-]/g, ch => map[ch]||ch);
+    $inp.val(v);
+  });
+
+  /* Datepicker تب ثبت سفارش */
+  const $createDates = $("#order-tab-pane input[name$='order_date'], #order-tab-pane input[name$='due_date']");
+  $createDates.each(function(idx){
+    const $vis = $(this); try{ this.type='text'; }catch(e){}
+    $vis.attr('autocomplete','off');
+    const altId = ($vis.attr('id')||('create_date_'+idx)) + '_alt';
+    if(!document.getElementById(altId)){
+      $('<input>', {type:'hidden', id:altId}).insertAfter($vis);
+    }
+    $vis.persianDatepicker({
+      format:'YYYY/MM/DD', autoClose:true, initialValue:false,
+      calendar:{persian:{locale:'fa'}},
+      altField:'#'+altId, altFormat:'YYYY-MM-DD', altCalendar:'gregorian'
     });
-
-    /* Datepicker تب ثبت سفارش */
-    const $createDates = $("#order-tab-pane input[name$='order_date'], #order-tab-pane input[name$='due_date']");
+  });
+  $('#order-tab-pane form').off('submit.__create_dates').on('submit.__create_dates', function(){
     $createDates.each(function(idx){
-      const $vis = $(this); try{ this.type='text'; }catch(e){}
-      $vis.attr('autocomplete','off');
-      const altId = ($vis.attr('id')||('create_date_'+idx)) + '_alt';
-      if(!document.getElementById(altId)){
-        $('<input>', {type:'hidden', id:altId}).insertAfter($vis);
-      }
-      $vis.persianDatepicker({
-        format:'YYYY/MM/DD', autoClose:true, initialValue:false,
-        calendar:{persian:{locale:'fa'}},
-        altField:'#'+altId, altFormat:'YYYY-MM-DD', altCalendar:'gregorian'
+      const $vis=$(this), altId = ($vis.attr('id')||('create_date_'+idx)) + '_alt', $alt = $('#'+altId);
+      if($alt.length && $alt.val()) $vis.val($alt.val());
+    });
+  });
+
+  /* Tooth Picker (Create) */
+  (function(){
+    const chips = document.querySelectorAll('#order-tab-pane .tooth-chip');
+    const hidden = document.querySelector('#order-tab-pane #teeth_fdi');
+    const summary = document.querySelector('#order-tab-pane #tooth-summary');
+    function fdiCode(q,n){ return (q*10+n).toString(); }
+    function refreshSummary(){
+      const codes = (hidden.value||'').split(',').filter(Boolean);
+      if(!codes.length){ summary.textContent='هنوز دندانی انتخاب نشده است.'; summary.classList.add('text-muted'); return; }
+      summary.classList.remove('text-muted');
+      const g={1:[],2:[],3:[],4:[]};
+      codes.forEach(c=>{ const q=parseInt(c[0],10), n=parseInt(c.slice(1),10); if(g[q]) g[q].push(n); });
+      Object.keys(g).forEach(k=>g[k].sort((a,b)=>a-b));
+      const parts=[];
+      if(g[1].length) parts.push('بالا راست: '+g[1].join(', '));
+      if(g[2].length) parts.push('بالا چپ: '+g[2].join(', '));
+      if(g[3].length) parts.push('پایین چپ: '+g[3].join(', '));
+      if(g[4].length) parts.push('پایین راست: '+g[4].join(', '));
+      summary.textContent=parts.join('  |  ');
+    }
+    function toggleChip(el){
+      el.classList.toggle('active');
+      const q=parseInt(el.dataset.q,10), n=parseInt(el.dataset.n,10), code=fdiCode(q,n);
+      let arr=(hidden.value||'').split(',').filter(Boolean);
+      if(el.classList.contains('active')){ if(!arr.includes(code)) arr.push(code); }
+      else { arr = arr.filter(c=>c!==code); }
+      arr.sort((a,b)=>parseInt(a,10)-parseInt(b,10));
+      hidden.value=arr.join(',');
+      refreshSummary();
+    }
+    chips.forEach(el=> el.addEventListener('click', ()=> toggleChip(el)));
+    document.querySelectorAll('#order-tab-pane [data-bulk]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const t=btn.getAttribute('data-bulk');
+        if(t==='clear'){ chips.forEach(c=>c.classList.remove('active')); hidden.value=''; refreshSummary(); return; }
+        const qs = (t==='upper-all')?[1,2]:(t==='lower-all')?[3,4]:[];
+        chips.forEach(c=>{ const q=parseInt(c.dataset.q,10); if(qs.includes(q)) c.classList.add('active'); });
+        let arr=[]; chips.forEach(c=>{ if(c.classList.contains('active')){ const q=parseInt(c.dataset.q,10), n=parseInt(c.dataset.n,10); arr.push(String(q*10+n)); } });
+        arr.sort((a,b)=>parseInt(a,10)-parseInt(b,10)); hidden.value=arr.join(','); refreshSummary();
       });
     });
-    $('#order-tab-pane form').off('submit.__create_dates').on('submit.__create_dates', function(){
-      $createDates.each(function(idx){
-        const $vis=$(this), altId = ($vis.attr('id')||('create_date_'+idx)) + '_alt', $alt = $('#'+altId);
-        if($alt.length && $alt.val()) $vis.val($alt.val());
-      });
-    });
-
-    /* Tooth Picker (Create) */
-    (function(){
-      const chips = document.querySelectorAll('#order-tab-pane .tooth-chip');
-      const hidden = document.querySelector('#order-tab-pane #teeth_fdi');
-      const summary = document.querySelector('#order-tab-pane #tooth-summary');
-      function fdiCode(q,n){ return (q*10+n).toString(); }
-      function refreshSummary(){
-        const codes = (hidden.value||'').split(',').filter(Boolean);
-        if(!codes.length){ summary.textContent='هنوز دندانی انتخاب نشده است.'; summary.classList.add('text-muted'); return; }
-        summary.classList.remove('text-muted');
-        const g={1:[],2:[],3:[],4:[]};
-        codes.forEach(c=>{ const q=parseInt(c[0],10), n=parseInt(c.slice(1),10); if(g[q]) g[q].push(n); });
-        Object.keys(g).forEach(k=>g[k].sort((a,b)=>a-b));
-        const parts=[];
-        if(g[1].length) parts.push('بالا راست: '+g[1].join(', '));
-        if(g[2].length) parts.push('بالا چپ: '+g[2].join(', '));
-        if(g[3].length) parts.push('پایین چپ: '+g[3].join(', '));
-        if(g[4].length) parts.push('پایین راست: '+g[4].join(', '));
-        summary.textContent=parts.join('  |  ');
-      }
-      function toggleChip(el){
-        el.classList.toggle('active');
-        const q=parseInt(el.dataset.q,10), n=parseInt(el.dataset.n,10), code=fdiCode(q,n);
-        let arr=(hidden.value||'').split(',').filter(Boolean);
-        if(el.classList.contains('active')){ if(!arr.includes(code)) arr.push(code); }
-        else { arr = arr.filter(c=>c!==code); }
-        arr.sort((a,b)=>parseInt(a,10)-parseInt(b,10));
-        hidden.value=arr.join(',');
-        refreshSummary();
-      }
-      chips.forEach(el=> el.addEventListener('click', ()=> toggleChip(el)));
-      document.querySelectorAll('#order-tab-pane [data-bulk]').forEach(btn=>{
-        btn.addEventListener('click', ()=>{
-          const t=btn.getAttribute('data-bulk');
-          if(t==='clear'){ chips.forEach(c=>c.classList.remove('active')); hidden.value=''; refreshSummary(); return; }
-          const qs = (t==='upper-all')?[1,2]:(t==='lower-all')?[3,4]:[];
-          chips.forEach(c=>{ const q=parseInt(c.dataset.q,10); if(qs.includes(q)) c.classList.add('active'); });
-          let arr=[]; chips.forEach(c=>{ if(c.classList.contains('active')){ const q=parseInt(c.dataset.q,10), n=parseInt(c.dataset.n,10); arr.push(fdiCode(q,n)); } });
-          arr.sort((a,b)=>parseInt(a,10)-parseInt(b,10)); hidden.value=arr.join(','); refreshSummary();
-        });
-      });
-      const _form = document.querySelector('#order-tab-pane form');
-      if(_form){
-        _form.addEventListener('submit', ()=>{
-          const codes=(hidden && hidden.value || '').trim(); if(!codes) return;
-          const notes=_form.querySelector('textarea[name$="notes"]');
-          if(notes){
-            const tag='\nدندان‌ها: '+codes.replaceAll(',', ', ');
-            if(notes.value.indexOf('دندان‌ها:')===-1){ notes.value=(notes.value||'')+tag; }
-          }
-          const mfHidden=document.getElementById('teeth_fdi_mf'); if(mfHidden) mfHidden.value=codes;
-        });
-      }
-    })();
-
-    /* رندر نمای دندان‌ها در لیست */
-    (function(){
-      function parseFDI(fdi){
-        const g={1:[],2:[],3:[],4:[]}; if(!fdi) return g;
-        fdi.split(',').map(s=>s.trim()).filter(Boolean).forEach(code=>{
-          const q=parseInt(code[0],10), n=parseInt(code.slice(1),10);
-          if(g[q] && n>=1 && n<=8) g[q].push(String(n));
-        });
-        Object.keys(g).forEach(k=>g[k].sort((a,b)=>parseInt(a,10)-parseInt(b,10)));
-        return g;
-      }
-      function fill(el){
-        const fdi = el.getAttribute('data-fdi')||'';
-        const notes = el.getAttribute('data-notes')||'';
-        let UL=[],UR=[],LL=[],LR=[];
-        if(fdi){ const x=parseFDI(fdi); UL=x[2]; UR=x[1]; LL=x[3]; LR=x[4]; }
-        const map={'tp-ul':UL,'tp-ur':UR,'tp-ll':LL,'tp-lr':LR};
-        Object.keys(map).forEach(cls=>{
-          const box=el.querySelector('.'+cls); if(!box) return; box.innerHTML='';
-          map[cls].forEach(num=>{ const s=document.createElement('span'); s.textContent=num; s.className='active'; box.appendChild(s); });
-        });
-      }
-      document.querySelectorAll('.toothplus').forEach(fill);
-    })();
-
-    /* نمایش جزئیات در مودال */
-    $(document).on('click', 'a.js-order-detail', function (e) {
-      if (e.ctrlKey || e.metaKey || e.shiftKey || e.which === 2) return;
-      e.preventDefault();
-      var href=this.href, $mod=$('#orderDetailModal'), $body=$mod.find('.modal-body');
-      $body.html('<div class="text-muted">در حال بارگذاری…</div>');
-      new bootstrap.Modal($mod[0]).show();
-      fetch(href, { credentials:'same-origin' })
-        .then(r=>r.text())
-        .then(html=>{
-          var m=html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-          $body.html(m?m[1]:html);
-          var $inputs=$body.find('input.jalali_date, #id_happened_at');
-          $inputs.each(function(){ try{ if(this.type!=='text') this.type='text'; }catch(e){} $(this).attr('autocomplete','off'); });
-          $inputs.filter(function(){ return !$(this).data('pDatepicker'); })
-            .persianDatepicker({ format:'YYYY/MM/DD', autoClose:true, calendar:{ persian:{ locale:'fa' } } });
-          var $form=$body.find('form[action*="add_order_event"]');
-          if($form.length){
-            var action=$form.attr('action')||'', sep=action.indexOf('?')===-1?'?':'&';
-            var nextUrl=window.location.pathname+window.location.search+'#list-tab-pane';
-            if(action.indexOf('next=')===-1) $form.attr('action', action+sep+'next='+encodeURIComponent(nextUrl));
-          }
-        })
-        .catch(()=> $body.html('<div class="text-danger">خطا در بارگذاری جزئیات.</div>'));
-    });
-
-    /* تب ورود/خروج: API دکترها و سفارش‌ها */
-    (function(){
-      const $docInput=$("#doctorSearch"), $docList=$("#doctorList");
-      const $ordInput=$("#orderSearch"), $ordList=$("#orderList");
-      const $form=$("#evtForm"), $selOrder=$("#selectedOrderId");
-      const $cause = $("#cause_choice");
-      const $causeTextWrap = $("#cause_text_wrap");
-      const $stage = $("#stageInstance");
-
-      let doctors=[], orders=[];
-
-      async function fetchDoctors(q){
-        const url='/api/doctors'+(q?('?q='+encodeURIComponent(q)):'');
-        const data=await fetch(url,{headers:{'Accept':'application/json'}}).then(r=>r.json());
-        doctors=data.results||[]; renderDoctors();
-      }
-      function renderDoctors(){
-        $docList.empty();
-        doctors.forEach(d=>{
-          const $it=$('<button type="button" class="list-group-item list-group-item-action"></button>');
-          $it.text(d.name).data('id', d.id).on('click', ()=>{
-            $docList.find('.active').removeClass('active'); $it.addClass('active');
-            $docInput.val(d.name); fetchOrdersByDoctor(d.id,'');
-          });
-          $docList.append($it);
-        });
-      }
-      async function fetchOrdersByDoctor(docId,q){
-        $ordInput.prop('disabled', false).val(''); $ordList.empty(); $selOrder.val('');
-        const url='/api/orders-by-doctor?doctor_id='+encodeURIComponent(docId)+(q?('&q='+encodeURIComponent(q)):'');
-        const data=await fetch(url,{headers:{'Accept':'application/json'}}).then(r=>r.json());
-        orders=(data.results||[]); renderOrders();
-      }
-      function populateCauseOptions(stages){
-        let html = '<option value="">— انتخاب کنید —</option>';
-
-      // مراحل سفارش (اگر بود)
-        if (stages && stages.length){
-          html += '<optgroup label="مراحل سفارش">';
-          stages.forEach(s => {
-            const lbl = (s.label || '').toString();
-            html += '<option value="'+ lbl.replace(/"/g,'&quot;') +'">'+ lbl +'</option>';
-          });
-          html += '</optgroup>';
+    const _form = document.querySelector('#order-tab-pane form');
+    if(_form){
+      _form.addEventListener('submit', ()=>{
+        const codes=(hidden && hidden.value || '').trim(); if(!codes) return;
+        const notes=_form.querySelector('textarea[name$="notes"]');
+        if(notes){
+          const tag='\nدندان‌ها: '+codes.replaceAll(',', ', ');
+          if(notes.value.indexOf('دندان‌ها:')===-1){ notes.value=(notes.value||'')+tag; }
         }
+        const mfHidden=document.getElementById('teeth_fdi_mf'); if(mfHidden) mfHidden.value=codes;
+      });
+    }
+  })();
 
-        // علت‌های عمومی
-        html += '<optgroup label="علت‌های عمومی">'
-              + '<option value="components_announce">اعلام قطعات</option>'
-              + '<option value="components_received">دریافت قطعات</option>'
-              + '<option value="waxrim_record_bite">waxrim & record bite</option>'
-              + '<option value="dural_try_in">امتحان دورالی</option>'
-              + '<option value="frame_try_in">امتحان فریم</option>'
-              + '<option value="porcelain_try_in">امتحان پرسلن</option>'
-              + '<option value="framework_design">طراحی فریم</option>'
-              + '<option value="custom_abutment">کاستومایز اباتمنت</option>'
-              + '<option value="qc_check">بررسی کیفی</option>'
-              + '</optgroup>';
+  /* رندر نمای دندان‌ها در لیست */
+  (function(){
+    function parseFDI(fdi){
+      const g={1:[],2:[],3:[],4:[]}; if(!fdi) return g;
+      fdi.split(',').map(s=>s.trim()).filter(Boolean).forEach(code=>{
+        const q=parseInt(code[0],10), n=parseInt(code.slice(1),10);
+        if(g[q] && n>=1 && n<=8) g[q].push(String(n));
+      });
+      Object.keys(g).forEach(k=>g[k].sort((a,b)=>parseInt(a,10)-parseInt(b,10)));
+      return g;
+    }
+    function fill(el){
+      const fdi = el.getAttribute('data-fdi')||'';
+      let UL=[],UR=[],LL=[],LR=[];
+      if(fdi){ const x=parseFDI(fdi); UL=x[2]; UR=x[1]; LL=x[3]; LR=x[4]; }
+      const map={'tp-ul':UL,'tp-ur':UR,'tp-ll':LL,'tp-lr':LR};
+      Object.keys(map).forEach(cls=>{
+        const box=el.querySelector('.'+cls); if(!box) return; box.innerHTML='';
+        map[cls].forEach(num=>{ const s=document.createElement('span'); s.textContent=num; s.className='active'; box.appendChild(s); });
+      });
+    }
+    document.querySelectorAll('.toothplus').forEach(fill);
+  })();
 
-        // سایر
-        html += '<option value="other">سایر (قابل تایپ)</option>';
-
-        $cause.html(html);
-        // sync نمایش فیلد «سایر»
-        if ($cause.val() !== 'other') $causeTextWrap.hide();
-      }
-
-      async function fetchOrderStagesFor(orderId){
-        try{
-          const url = '/api/order-stages?order_id=' + encodeURIComponent(orderId);
-          const data = await fetch(url, {headers:{'Accept':'application/json'}}).then(r=>r.json());
-          populateCauseOptions(data.results || []);
-          populateStageSelect(data.results || []);
-        }catch(e){
-          populateCauseOptions([]); // اگر خطا شد، فقط علت‌های عمومی را بگذار
+  /* نمایش جزئیات در مودال */
+  $(document).on('click', 'a.js-order-detail', function (e) {
+    if (e.ctrlKey || e.metaKey || e.shiftKey || e.which === 2) return;
+    e.preventDefault();
+    var href=this.href, $mod=$('#orderDetailModal'), $body=$mod.find('.modal-body');
+    $body.html('<div class="text-muted">در حال بارگذاری…</div>');
+    new bootstrap.Modal($mod[0]).show();
+    fetch(href, { credentials:'same-origin' })
+      .then(r=>r.text())
+      .then(html=>{
+        var m=html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+        $body.html(m?m[1]:html);
+        var $inputs=$body.find('input.jalali_date, #id_happened_at');
+        $inputs.each(function(){ try{ if(this.type!=='text') this.type='text'; }catch(e){} $(this).attr('autocomplete','off'); });
+        $inputs.filter(function(){ return !$(this).data('pDatepicker'); })
+          .persianDatepicker({ format:'YYYY/MM/DD', autoClose:true, calendar:{ persian:{ locale:'fa' } } });
+        var $form=$body.find('form[action*="add_order_event"]');
+        if($form.length){
+          var action=$form.attr('action')||'', sep=action.indexOf('?')===-1?'?':'&';
+          var nextUrl=window.location.pathname+window.location.search+'#list-tab-pane';
+          if(action.indexOf('next=')===-1) $form.attr('action', action+sep+'next='+encodeURIComponent(nextUrl));
         }
-      }
+      })
+      .catch(()=> $body.html('<div class="text-danger">خطا در بارگذاری جزئیات.</div>'));
+  });
 
-      function labelFor(o){
-        const name=(o.patient_name||o.patient||(o.patient&&o.patient.name)||'').toString().trim();
-        const due = o.due_date ? (' — تحویل: '+o.due_date) : '';
-        const sn  = o.serial_number ? (' — سریال: '+o.serial_number) : '';
-        return 'سفارش #'+o.id+(name?(' — '+name):' — بدون نام')+sn+due;
-      }
-      function renderOrders(){
-        $ordList.empty();
-        orders.forEach(o=>{
-          const $it=$('<button type="button" class="list-group-item list-group-item-action"></button>');
-          $it.text(labelFor(o)).data('id',o.id).on('click', ()=>{
-            $ordList.find('.active').removeClass('active'); $it.addClass('active'); $selOrder.val(String(o.id));
-            fetchOrderStagesFor(o.id);
-          });
-          $ordList.append($it);
+  /* تب ورود/خروج: API دکترها و سفارش‌ها (نسخه‌ی یکپارچه با ثبت گروهی) */
+  (function(){
+    const $docInput = $("#doctorSearch"), $docList = $("#doctorList");
+    const $ordInput = $("#orderSearch"), $ordList = $("#orderList");
+
+    const $form     = $("#evtForm"), $selOrder = $("#selectedOrderId");
+    const $bulkBtn  = $("#bulkSubmitBtn");
+    const $selAll   = $("#ordSelAll"), $selNone = $("#ordSelNone"), $selCount = $("#ordSelectedCount");
+
+    const $cause = $("#cause_choice");
+    const $causeTextWrap = $("#cause_text_wrap");
+    const $stage = $("#stageInstance"); // ممکنه وجود نداشته باشه
+
+    let doctors = [], orders = [];
+
+    // علت‌های عمومی
+    const GENERIC_CAUSES_HTML =
+        '<optgroup label="علت‌های عمومی">'
+      +   '<option value="components_announce">اعلام قطعات</option>'
+      +   '<option value="components_received">دریافت قطعات</option>'
+      +   '<option value="waxrim_record_bite">waxrim & record bite</option>'
+      +   '<option value="dural_try_in">امتحان دورالی</option>'
+      +   '<option value="frame_try_in">امتحان فریم</option>'
+      +   '<option value="porcelain_try_in">امتحان پرسلن</option>'
+      +   '<option value="framework_design">طراحی فریم</option>'
+      +   '<option value="custom_abutment">کاستومایز اباتمنت</option>'
+      +   '<option value="qc_check">بررسی کیفی</option>'
+      + '</optgroup>'
+      + '<option value="other">سایر (قابل تایپ)</option>';
+
+    function populateCauseOptionsWithStages(stages){
+      if (!$cause.length) return;
+      let html = '<option value="">— انتخاب کنید —</option>';
+      if (stages && stages.length){
+        html += '<optgroup label="مراحل سفارش">';
+        stages.forEach(s=>{
+          const lbl = (s.label || '').toString();
+          html += '<option value="'+ lbl.replace(/"/g,'&quot;') +'">'+ lbl +'</option>';
         });
+        html += '</optgroup>';
       }
-      function populateStageSelect(stages){
-        let html = '<option value="">— انتخاب کنید —</option>';
-        if (stages && stages.length){
-          stages.forEach(s => {
+      html += GENERIC_CAUSES_HTML;
+      $cause.html(html);
+      if ($cause.val() !== 'other') $causeTextWrap.hide();
+    }
+    function populateCauseOptionsGeneric(){
+      if (!$cause.length) return;
+      const html = '<option value="">— انتخاب کنید —</option>' + GENERIC_CAUSES_HTML;
+      $cause.html(html);
+      if ($cause.val() !== 'other') $causeTextWrap.hide();
+    }
+
+    async function fetchDoctors(q){
+      const url = '/api/doctors' + (q?('?q='+encodeURIComponent(q)):'');
+      const data = await fetch(url,{headers:{'Accept':'application/json'}}).then(r=>r.json());
+      doctors = data.results || [];
+      renderDoctors();
+    }
+    function renderDoctors(){
+      $docList.empty();
+      doctors.forEach(d=>{
+        const $it=$('<button type="button" class="list-group-item list-group-item-action"></button>');
+        $it.text(d.name).data('id', d.id).on('click', ()=>{
+          $docList.find('.active').removeClass('active'); $it.addClass('active');
+          $docInput.val(d.name);
+          fetchOrdersByDoctor(d.id, '');
+        });
+        $docList.append($it);
+      });
+    }
+
+    async function fetchOrdersByDoctor(docId, q){
+      $ordInput.prop('disabled', false).val('');
+      $ordList.empty(); $selOrder.val('');
+      const url = '/api/orders-by-doctor?doctor_id='+encodeURIComponent(docId)+(q?('&q='+encodeURIComponent(q)):'');
+      const data = await fetch(url,{headers:{'Accept':'application/json'}}).then(r=>r.json());
+      orders = data.results || [];
+      renderOrders();
+      updateSelectionUI();
+      populateCauseOptionsGeneric();
+    }
+
+    function labelFor(o){
+      const name = (o.patient_name || '').toString().trim();
+      const due  = o.due_date ? (' — تحویل: ' + o.due_date) : '';
+      const sn   = o.serial_number ? (' — سریال: ' + o.serial_number) : '';
+      return 'سفارش #'+o.id + (name?(' — '+name):' — بدون نام') + sn + due;
+    }
+
+    function renderOrders(){
+      $ordList.empty();
+      orders.forEach(o=>{
+        const $row = $('<label class="list-group-item d-flex align-items-center gap-2"></label>');
+        const $cb  = $('<input type="checkbox" class="form-check-input me-2 ord-check">').val(String(o.id));
+        const $txt = $('<span></span>').text(labelFor(o));
+
+        // کلیک روی ردیف → toggle
+        $row.on('click', function(e){
+          if ($(e.target).is('.ord-check')) return;
+          $cb.prop('checked', !$cb.prop('checked')).trigger('change');
+        });
+
+        $row.append($cb).append($txt);
+        $ordList.append($row);
+      });
+    }
+
+    function getSelectedIds(){
+      const ids=[];
+      $ordList.find('.ord-check:checked').each(function(){ ids.push(this.value); });
+      return ids;
+    }
+
+    function updateSelectionUI(){
+      const ids = getSelectedIds();
+      if ($('#ordSelectedCount').length) $('#ordSelectedCount').text(ids.length);
+
+      if (ids.length === 1){
+        $selOrder.val(ids[0]);
+        $ordList.find('.list-group-item').removeClass('active');
+        $ordList.find('.ord-check:checked').closest('.list-group-item').addClass('active');
+        fetchOrderStagesFor(ids[0]);
+      } else {
+        $selOrder.val('');
+        $ordList.find('.list-group-item').removeClass('active');
+        populateCauseOptionsGeneric();
+        if ($stage && $stage.length) $stage.html('<option value="">— انتخاب کنید —</option>');
+      }
+    }
+
+    async function fetchOrderStagesFor(orderId){
+      try{
+        const url = '/api/order-stages?order_id=' + encodeURIComponent(orderId);
+        const data = await fetch(url, {headers:{'Accept':'application/json'}}).then(r=>r.json());
+        const stages = data.results || [];
+        populateCauseOptionsWithStages(stages);
+        if ($stage && $stage.length){
+          let html = '<option value="">— انتخاب کنید —</option>';
+          stages.forEach(s=>{
             const id = (s.id || '').toString();
             const lbl = (s.label || '').toString();
-            html += '<option value="'+ id.replace(/"/g,'&quot;') +'">'+ lbl +'</option>';
+            html += '<option value="'+id.replace(/"/g,'&quot;')+'">'+lbl+'</option>';
           });
+          $stage.html(html);
         }
-        $stage.html(html);
+      }catch(e){
+        populateCauseOptionsGeneric();
+        if ($stage && $stage.length) $stage.html('<option value="">— انتخاب کنید —</option>');
       }
-      let tDoc=null;
-      $docInput.on('input', function(){ const q=$(this).val().trim(); clearTimeout(tDoc); tDoc=setTimeout(()=>fetchDoctors(q),250); });
-      fetchDoctors('');
+    }
 
-      $ordInput.on('input', function(){
-        const q=$(this).val().trim().toLowerCase();
-        $ordList.children().each(function(){ const ok=$(this).text().toLowerCase().indexOf(q)>=0; $(this).toggle(ok); });
+    // فیلتر سریع سفارش‌ها
+    $ordInput.on('input', function(){
+      const q=$(this).val().trim().toLowerCase();
+      $ordList.children().each(function(){
+        const ok = $(this).text().toLowerCase().indexOf(q) >= 0;
+        $(this).toggle(ok);
+      });
+    });
+
+    // انتخاب همه / لغو انتخاب
+    $('#ordSelAll').on('click', function(){
+      $ordList.find('.ord-check').prop('checked', true).trigger('change');
+    });
+    $('#ordSelNone').on('click', function(){
+      $ordList.find('.ord-check').prop('checked', false).trigger('change');
+    });
+
+    // تغییر انتخاب هر ردیف
+    $ordList.on('change', '.ord-check', updateSelectionUI);
+
+    // Datepicker جلالی تب
+    try{
+      $('#transfer-tab-pane #happenedAt').persianDatepicker({
+        format:'YYYY/MM/DD', autoClose:true, calendar:{persian:{locale:'fa'}}
+      });
+    }catch(e){}
+
+    // نمایش/مخفی «سایر»
+    $(document).on('change', '#cause_choice', function(){
+      $('#cause_text_wrap').toggle(this.value === 'other');
+    });
+    $('#cause_text_wrap').toggle($('#cause_choice').val() === 'other'); // init
+
+    // ثبت تکی
+    $form.on('submit', function(e){
+  const action = (this.getAttribute('action') || '');
+  const ids = getSelectedIds();
+
+  // --- حالت گروهی: اجازه بده با چند انتخاب ارسال شود ---
+  if (action.indexOf('/orders/bulk-add-event/') !== -1) {
+    if (ids.length === 0) {
+      e.preventDefault();
+      alert('هیچ سفارشی انتخاب نشده است.');
+    }
+    return; // اجازه بده POST انجام شود
+  }
+
+  // --- حالت تکی: دقیقاً باید ۱ سفارش انتخاب باشد ---
+  if (ids.length !== 1){
+    e.preventDefault();
+    alert('برای «ثبت تکی»، باید دقیقاً یک سفارش را انتخاب کنید. برای چندتایی از دکمهٔ «ثبت رویداد گروهی» استفاده کنید.');
+    return;
+  }
+  const nextUrl = '/orders/#list-tab-pane';
+  this.action = '/orders/' + encodeURIComponent(ids[0]) + '/add-event/?next=' + encodeURIComponent(nextUrl);
+});
+
+    // ثبت گروهی
+    $('#bulkSubmitBtn').on('click', function(){
+      const ids = getSelectedIds();
+      if (ids.length === 0){
+        alert('هیچ سفارشی انتخاب نشده است.');
+        return;
+      }
+      const nextUrl='/orders/#list-tab-pane';
+      $form.attr('action', '/orders/bulk-add-event/?next='+encodeURIComponent(nextUrl));
+
+      // hiddenهای قبلی
+      $form.find('input[data-dyn="1"]').remove();
+
+      // افزودن IDها
+      ids.forEach(id=>{
+        $('<input type="hidden" data-dyn="1" name="order_id">').val(id).appendTo($form);
       });
 
-      // تاریخ جلالی این تب
-      try{ $('#transfer-tab-pane #happenedAt').persianDatepicker({ format:'YYYY/MM/DD', autoClose:true, calendar:{persian:{locale:'fa'}} }); }catch(e){}
+      $form.trigger('submit');
+    });
 
-      $(document).on('change', '#cause_choice', function(){
-        $causeTextWrap.toggle(this.value === 'other');
-      });
-      $causeTextWrap.toggle($cause.val() === 'other'); // init on load
+    // دکتر با debounce
+    let tDoc=null;
+    $docInput.on('input', function(){
+      const q=$(this).val().trim();
+      clearTimeout(tDoc);
+      tDoc=setTimeout(()=>fetchDoctors(q),250);
+    });
 
-      $form.on('submit', function(e){
-        const oid=($selOrder.val()||'').trim();
-        if(!oid){ e.preventDefault(); alert('اول دکتر و سپس یک سفارش را انتخاب کنید.'); return; }
-        const nextUrl='/orders/#list-tab-pane';
-        this.action='/orders/'+encodeURIComponent(oid)+'/add-event/?next='+encodeURIComponent(nextUrl);
-      });
-    })();
+    // شروع: لیست دکترها
+    fetchDoctors('');
+  })();
 
-  });
-  </script>
-  <script>
+}); // ← خیلی مهم: بستنِ document-ready
+</script>
+ <script>
 (function(){
   const iframe = document.getElementById('wb-iframe');
   if (!iframe) return;
@@ -827,6 +1004,21 @@
   // اندازه اولیه (اگر کاربر مستقیماً وارد تب شد هم اوکی میشه)
   resizeWB();
 })();
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  var tabEl = document.getElementById('station-tab');
+  var frame = document.getElementById('station-frame');
+  if (tabEl && frame){
+    tabEl.addEventListener('shown.bs.tab', function(){
+      try {
+        // فقط یک رفرش سبک؛ اگر لازم نیست، این 3 خط را حذف کن
+        var src = frame.getAttribute('src');
+        frame.setAttribute('src', src);
+      } catch(e){}
+    });
+  }
+});
 </script>
 {% endblock %}
 

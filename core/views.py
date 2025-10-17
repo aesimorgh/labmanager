@@ -27,6 +27,7 @@ from django.views.decorators.http import require_GET
 from django.db import transaction
 import datetime
 from .models import Product, StageTemplate, StageInstance
+from django.db.models import Q, Sum
 
 # --- Helpers for seeding stages ---------------------------------------------
 def _jalali_add_days(jdate, days: int):
@@ -488,6 +489,135 @@ def add_order_event(request, order_id):
 
     return redirect(next_url)
 
+from django.views.decorators.http import require_POST
+
+@require_POST
+def add_order_event_bulk(request):
+    """
+    ثبت رویداد گروهی برای چند سفارش.
+    ورودی:
+      - order_id: می‌تواند چندبار تکرار شود (checkboxها) یا یک رشته‌ی comma-separated
+      - event_type, happened_at, direction (اختیاری؛ اگر خالی بود auto-fill می‌کنیم)
+      - cause_choice (+ cause_text برای «other») → نگاشت به فیلد متنی 'stage'
+      - notes, attachment
+    خروجی: پیام موفقیت/خطا + redirect به next
+    """
+    next_url = request.GET.get("next") or request.META.get("HTTP_REFERER") or (reverse("core:home") + "#transfer-tab-pane")
+
+    # ---- گردآوری IDها
+    ids = request.POST.getlist('order_id') or request.POST.getlist('order_ids') or []
+    if not ids:
+        raw = (request.POST.get('order_ids') or '').strip()
+        if raw:
+            ids = [x.strip() for x in raw.split(',') if x.strip()]
+    # تبدیل به int و حذف موارد نامعتبر
+    order_ids = []
+    for x in ids:
+        try:
+            order_ids.append(int(x))
+        except Exception:
+            pass
+    if not order_ids:
+        messages.error(request, "هیچ سفارشی انتخاب نشده است.")
+        return redirect(next_url)
+
+    # ---- آماده‌سازی داده‌ی مشترک فرم
+    data = request.POST.copy()
+
+    # ۱) نرمال‌سازی تاریخ جلالی
+    raw_date = (data.get("happened_at") or "").strip()
+    data["happened_at"] = _normalize_for_jalali_field(raw_date)
+
+    # ۲) نگاشت علت → stage (متن)
+    CAUSE_LABELS = {
+        "components_announce": "اعلام قطعات",
+        "components_received": "دریافت قطعات",
+        "waxrim_record_bite": "waxrim & record bite",
+        "dural_try_in": "امتحان دورالی",
+        "frame_try_in": "امتحان فریم",
+        "porcelain_try_in": "امتحان پرسلن",
+        "framework_design": "طراحی فریم",
+        "custom_abutment": "کاستومایز اباتمنت",
+        "qc_check": "بررسی کیفی",
+        "other": "سایر",
+    }
+    cause_choice = (data.get("cause_choice") or "").strip()
+    cause_text   = (data.get("cause_text") or "").strip()
+    if cause_choice:
+        data["stage"] = cause_text if cause_choice == "other" else CAUSE_LABELS.get(cause_choice, cause_choice)
+
+    # ۳) سازگاری: بازگشت از مطب → دریافت در لابراتوار
+    if data.get("event_type") == OrderEvent.EventType.RETURNED_FROM_CLINIC:
+        data["event_type"] = OrderEvent.EventType.RECEIVED_IN_LAB
+
+    # ۴) پر کردن خودکار direction اگر خالی بود
+    ev_type = (data.get("event_type") or "").strip()
+    if not data.get("direction"):
+        dir_map = {
+            OrderEvent.EventType.SENT_TO_CLINIC:        OrderEvent.Direction.LAB_TO_CLINIC,
+            OrderEvent.EventType.RECEIVED_IN_LAB:       OrderEvent.Direction.CLINIC_TO_LAB,
+            OrderEvent.EventType.SENT_TO_DIGITAL:       OrderEvent.Direction.LAB_TO_DIGITAL,
+            OrderEvent.EventType.RECEIVED_FROM_DIGITAL: OrderEvent.Direction.DIGITAL_TO_LAB,
+            OrderEvent.EventType.FINAL_SHIPMENT:        OrderEvent.Direction.LAB_TO_CLINIC,
+            OrderEvent.EventType.DELIVERED:             OrderEvent.Direction.LAB_TO_CLINIC,
+        }
+        data["direction"] = dir_map.get(ev_type, OrderEvent.Direction.INTERNAL)
+
+    # ---- اجرا برای هر سفارش
+    orders = Order.objects.filter(id__in=order_ids).select_related('patient')
+    ok, fail = 0, 0
+
+    # فایل پیوست را (اگر هست) یکسان برای همه استفاده می‌کنیم
+    files = request.FILES
+
+    for order in orders:
+        try:
+            # برای هر سفارش، فرم مستقل می‌سازیم تا ولیدیشن جدا انجام شود
+            form = OrderEventForm(data, files, order=order)
+            if form.is_valid():
+                ev = form.save(commit=False)
+                ev.order = order
+
+                # اگر stage خالی است ولی علت از مراحل سفارش انتخاب شده بود (در آینده)، اینجا می‌شد پر کرد.
+                # فعلاً همان stage متنی استفاده می‌شود.
+
+                ev.save()
+
+                # --- همگام‌سازی وضعیت سفارش برای رویدادهای کلیدی (مثل روالش در add_order_event) ---
+                try:
+                    if ev.event_type == OrderEvent.EventType.FINAL_SHIPMENT:
+                        order.shipped_date = ev.happened_at
+                        order.status = 'delivered'
+                        order.save(update_fields=['shipped_date', 'status'])
+                    elif ev.event_type in (
+                        OrderEvent.EventType.RECEIVED_IN_LAB,
+                        OrderEvent.EventType.RECEIVED_FROM_DIGITAL,
+                        OrderEvent.EventType.ADJUSTMENT,
+                    ):
+                        if order.status == 'delivered' and order.shipped_date and ev.happened_at and ev.happened_at >= order.shipped_date:
+                            order.status = 'in_progress'
+                            order.save(update_fields=['status'])
+                            if not (ev.notes or '').strip():
+                                ev.notes = "بازگشت پس از ارسال نهایی (اصلاح)"
+                                ev.save(update_fields=['notes'])
+                except Exception:
+                    pass
+                # -----------------------------------------------------------------------
+
+                ok += 1
+            else:
+                fail += 1
+        except Exception:
+            fail += 1
+
+    if ok and not fail:
+        messages.success(request, f"رویداد برای {ok} سفارش ثبت شد.")
+    elif ok and fail:
+        messages.warning(request, f"رویداد برای {ok} سفارش ثبت شد؛ {fail} مورد ناموفق بود.")
+    else:
+        messages.error(request, "ثبت گروهی ناموفق بود. ورودی‌ها را بررسی کنید.")
+
+    return redirect(next_url)
 
 @require_POST
 def deliver_order(request, order_id):
@@ -762,10 +892,10 @@ def api_orders_by_doctor(request):
     except Doctor.DoesNotExist:
         return JsonResponse({'results': []})
 
-    # Order.doctor یک رشته (نام دکتر) است؛ پس با name فیلتر می‌کنیم
+    # فقط سفارش‌های جاری: pending / in_progress
     qs = (Order._base_manager
           .select_related('patient')
-          .filter(doctor=doctor.name)
+          .filter(doctor=doctor.name, status__in=['pending', 'in_progress'])
           .order_by('-id'))
 
     if q:
@@ -775,13 +905,26 @@ def api_orders_by_doctor(request):
     for o in qs[:300]:
         results.append({
             'id': o.id,
-            'patient_name': (o.patient.name if o.patient_id else ''),   # ← نام بیمار
+            'patient_name': (o.patient.name if o.patient_id else ''),
             'serial_number': o.serial_number or '',
             'due_date': (str(o.due_date).replace('-', '/') if o.due_date else ''),
         })
-
     return JsonResponse({'results': results})
 
+
+@require_GET
+def api_products(request):
+    """
+    لیست محصولات فعال برای Dropdown/Javascript
+    GET /api/products?q=
+    پاسخ: {"results": [{"code": "...", "name": "..."}]}
+    """
+    q = (request.GET.get('q') or '').strip()
+    qs = Product.objects.filter(is_active=True)
+    if q:
+        qs = qs.filter(Q(name__icontains=q) | Q(code__icontains=q))
+    data = [{"code": p.code, "name": p.name} for p in qs.order_by("name")[:200]]
+    return JsonResponse({"results": data})
 
 # ============================
 # API: stages for a specific order
@@ -835,31 +978,42 @@ def transfer_gate(request):
 
 
 from django.shortcuts import render  # احتمالاً بالای فایل داری
+from django.db.models import Q
 
 def workbench(request):
     """
-    نمایش Workbench مراحل با فیلترها:
-      status:
-        - active (پیش‌فرض) → pending + in_progress
-        - done
-        - all
-      q: جستجوی ساده روی بیمار/دکتر/مرحله/سریال/شناسه سفارش
+    Workbench مراحل با:
+      - status: active(پیش‌فرض) | done | all
+      - q: جستجو روی بیمار/دکتر/مرحله/سریال/ID سفارش
+      - overdue=1: فقط مراحل عقب‌افتاده (planned_date < today & done_date IS NULL)
+      - sort & dir: مرتب‌سازی ستونی
+      - صفحه‌بندی: page, ps
+      + KPI: شمارش مرحله‌ها و جمع واحدها (unit_count) + Top stages/products
     """
     from .models import StageInstance
 
-    # فیلتر وضعیت
+    # ---- فیلتر وضعیت + overdue (برای جدول) ----
     status_filter = (request.GET.get('status') or 'active').strip().lower()
-    if status_filter == 'done':
-        statuses = [StageInstance.Status.DONE]
-    elif status_filter == 'all':
+    overdue_flag = (request.GET.get('overdue') or '').strip().lower() in ('1', 'true', 'yes', 'on')
+
+    if overdue_flag:
         statuses = [
             StageInstance.Status.PENDING,
             StageInstance.Status.IN_PROGRESS,
-            StageInstance.Status.DONE,
             StageInstance.Status.BLOCKED,
         ]
     else:
-        statuses = [StageInstance.Status.PENDING, StageInstance.Status.IN_PROGRESS]
+        if status_filter == 'done':
+            statuses = [StageInstance.Status.DONE]
+        elif status_filter == 'all':
+            statuses = [
+                StageInstance.Status.PENDING,
+                StageInstance.Status.IN_PROGRESS,
+                StageInstance.Status.DONE,
+                StageInstance.Status.BLOCKED,
+            ]
+        else:
+            statuses = [StageInstance.Status.PENDING, StageInstance.Status.IN_PROGRESS]
 
     qs = (
         StageInstance.objects
@@ -867,32 +1021,152 @@ def workbench(request):
         .filter(status__in=statuses)
     )
 
-    # جستجو
+    # ---- جستجو (search_q را نگه می‌داریم تا برای KPI هم استفاده کنیم) ----
     q = (request.GET.get('q') or '').strip()
+    search_q = Q()
     if q:
-        # نرمال‌سازی ارقام فارسی/عربی برای جستجوی شناسه یا سریال
         trans = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
         q_norm = q.translate(trans)
 
-        # اگر همه‌اش عدد بود، روی شناسه سفارش هم بگرد
         oid_filter = Q()
         if q_norm.isdigit():
-            oid_filter = Q(order__id=int(q_norm)) | Q(order__serial_number__icontains=q_norm)
+            try:
+                oid_filter = Q(order__id=int(q_norm)) | Q(order__serial_number__icontains=q_norm)
+            except Exception:
+                oid_filter = Q(order__serial_number__icontains=q_norm)
 
-        qs = qs.filter(
+        search_q = (
             oid_filter |
             Q(order__patient__name__icontains=q) |
             Q(order__doctor__icontains=q) |
             Q(label__icontains=q) |
             Q(order__serial_number__icontains=q_norm)
         )
+        qs = qs.filter(search_q)
 
-    qs = qs.order_by('planned_date', 'order__id', 'order_index', 'id')
+    # ---- مرتب‌سازی جدول ----
+    sort = (request.GET.get('sort') or '').strip().lower()
+    direction = (request.GET.get('dir') or 'asc').strip().lower()
+    desc = (direction == 'desc')
+
+    sort_map = {
+        'order':   ('order__id',),
+        'patient': ('order__patient__name', 'order__id'),
+        'doctor':  ('order__doctor', 'order__id'),
+        'label':   ('label', 'order__id'),
+        'planned': ('planned_date', 'order__id'),
+        'started': ('started_date', 'order__id'),
+        'done':    ('done_date', 'order__id'),
+        'status':  ('status', 'order_index', 'order__id'),
+    }
+    if sort in sort_map:
+        order_fields = [('-' + f) if desc else f for f in sort_map[sort]]
+        qs = qs.order_by(*order_fields)
+    else:
+        qs = qs.order_by('planned_date', 'order__id', 'order_index', 'id')
+
+    # ---- صفحه‌بندی جدول ----
+    try:
+        ps = int((request.GET.get('ps') or 50))
+        if ps < 10: ps = 10
+        if ps > 200: ps = 200
+    except Exception:
+        ps = 50
+
+    paginator = Paginator(qs, ps)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    # ---- برچسب عقب‌افتادگی روی آیتم‌های همین صفحه ----
+    today = _today_jdate()
+
+    def _ymd_int(d):
+        try:
+            return (d.year * 10000) + (d.month * 100) + d.day
+        except Exception:
+            return None
+
+    today_i = _ymd_int(today)
+
+    stages = list(page_obj.object_list)
+    for s in stages:
+        pd_i = _ymd_int(s.planned_date)
+        dd_i = _ymd_int(s.done_date)
+        s.is_overdue = bool(pd_i and not dd_i and today_i and (today_i > pd_i))
+
+    if overdue_flag:
+        # اگر فقط عقب‌افتاده‌ها برای جدول می‌خواهم
+        stages = [s for s in stages if getattr(s, 'is_overdue', False)]
+
+    # =========================
+    # KPI (روی دیتاستِ جستجو شده، اما بدون محدودیت status/overdue)
+    # =========================
+    kpi_base = (
+        StageInstance.objects
+        .select_related('order', 'order__patient')
+        .filter(search_q)  # فقط q اعمال می‌شود تا همهٔ وضعیت‌ها را بشماریم
+    )
+
+    # شمارش هر وضعیت
+    kpi_count_in_progress = kpi_base.filter(status=StageInstance.Status.IN_PROGRESS).count()
+    kpi_count_pending     = kpi_base.filter(status=StageInstance.Status.PENDING).count()
+    kpi_count_blocked     = kpi_base.filter(status=StageInstance.Status.BLOCKED).count()
+    kpi_count_done        = kpi_base.filter(status=StageInstance.Status.DONE).count()
+    kpi_count_active      = kpi_count_pending + kpi_count_in_progress
+
+    # عقب‌افتاده (planned < today و done_date تهی، صرف‌نظر از status=done)
+    kpi_overdue_qs        = kpi_base.filter(planned_date__lt=today, done_date__isnull=True).exclude(status=StageInstance.Status.DONE)
+    kpi_count_overdue     = kpi_overdue_qs.count()
+
+    # جمع «واحد»ها
+    kpi_units_in_progress = kpi_base.filter(status=StageInstance.Status.IN_PROGRESS).aggregate(u=Sum('order__unit_count'))['u'] or 0
+    kpi_units_overdue     = kpi_overdue_qs.aggregate(u=Sum('order__unit_count'))['u'] or 0
+
+    # Top stages by units (in progress)
+    kpi_units_by_stage_in_progress = list(
+        kpi_base
+        .filter(status=StageInstance.Status.IN_PROGRESS)
+        .values('label')
+        .annotate(units=Sum('order__unit_count'))
+        .order_by('-units', 'label')[:8]
+    )
+
+    # Top (product × stage) by units (in progress)
+    kpi_units_by_prod_stage_in_progress = list(
+        kpi_base
+        .filter(status=StageInstance.Status.IN_PROGRESS)
+        .values('order__order_type', 'label')
+        .annotate(units=Sum('order__unit_count'))
+        .order_by('-units', 'order__order_type', 'label')[:8]
+    )
 
     context = {
-        'stages': qs,
+        'stages': stages,
+        'page_obj': page_obj,
+        'is_paginated': page_obj.has_other_pages(),
         'status_filter': status_filter,
-        'q': q,  # برای پر کردن مقدار ورودی جستجو در قالب (گام بعد)
+        'q': q,
+        'overdue': overdue_flag,
+        'sort': sort,
+        'dir': ('desc' if desc else 'asc'),
+        'ps': ps,
+
+        # --- KPI payload ---
+        'kpi': {
+            'count': {
+                'active':      kpi_count_active,
+                'in_progress': kpi_count_in_progress,
+                'blocked':     kpi_count_blocked,
+                'done':        kpi_count_done,
+                'overdue':     kpi_count_overdue,
+            },
+            'units': {
+                'in_progress_total': kpi_units_in_progress,
+                'overdue_total':     kpi_units_overdue,
+            },
+            'top_stages_in_progress': kpi_units_by_stage_in_progress,           # [{label, units}, ...]
+            'top_prod_stage_in_progress': kpi_units_by_prod_stage_in_progress,  # [{order__order_type, label, units}, ...]
+        }
     }
     return render(request, 'core/workbench.html', context)
 
@@ -964,10 +1238,357 @@ def stage_done_today(request, stage_id):
     messages.success(request, f"مرحله «{si.label}» تمام شد.")
     return redirect(next_url)
 
+from django.views.decorators.http import require_POST
+
+@require_POST
+def stage_bulk_done_today(request):
+    """
+    اتمام گروهی مراحل (امروز) + ثبت OrderEvent داخلی برای هر مورد.
+    انتظار ورودی:
+      - stage_id (تکرارشونده): stage_id=12&stage_id=15&...
+      - یا stage_ids (تکرارشونده): stage_ids=12&stage_ids=15&...
+      - یا stage_ids (CSV): stage_ids=12,15,20
+    """
+    from .models import StageInstance  # import محلی
+    today = _today_jdate()
+
+    # --- جمع‌آوری IDها از POST (با نرمال‌سازی ارقام فارسی/عربی) ---
+    raw_ids = []
+    # 1) name=stage_id (multi)
+    raw_ids += request.POST.getlist("stage_id")
+    # 2) name=stage_ids (multi)
+    raw_ids += request.POST.getlist("stage_ids")
+    # 3) name=stage_ids (CSV)
+    csv_blob = (request.POST.get("stage_ids") or "").strip()
+    if csv_blob:
+        raw_ids += [p.strip() for p in csv_blob.split(",") if p.strip()]
+
+    # نرمال‌سازی به عدد صحیح
+    trans = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+    ids = []
+    for r in raw_ids:
+        if not r:
+            continue
+        s = str(r).translate(trans)
+        s = "".join(ch for ch in s if ch.isdigit())
+        if s:
+            try:
+                ids.append(int(s))
+            except ValueError:
+                pass
+    ids = list(dict.fromkeys(ids))  # یکتا
+
+    if not ids:
+        messages.error(request, "هیچ مرحله‌ای برای اتمام گروهی انتخاب نشده است.")
+        next_url = request.GET.get("next") or request.META.get("HTTP_REFERER") or reverse("core:workbench")
+        return redirect(next_url)
+
+    # --- اعمال تغییرات ---
+    qs = StageInstance.objects.filter(pk__in=ids)
+    updated = 0
+    for si in qs:
+        changed_fields = []
+        if not si.done_date:
+            si.done_date = today
+            changed_fields.append('done_date')
+        if si.status != StageInstance.Status.DONE:
+            si.status = StageInstance.Status.DONE
+            changed_fields.append('status')
+        if changed_fields:
+            si.save(update_fields=changed_fields)
+            updated += 1
+
+        # OrderEvent داخلی برای ثبت پایان مرحله
+        OrderEvent.objects.create(
+            order=si.order,
+            event_type=OrderEvent.EventType.NOTE,  # ثابت نگه می‌داریم (یادداشت داخلی)
+            happened_at=today,
+            direction=OrderEvent.Direction.INTERNAL,
+            stage=si.label,
+            stage_instance=si,
+            notes="اتمام مرحله (گروهی) از Workbench"
+        )
+
+    messages.success(request, f"{updated} مرحله علامت‌گذاری شد.")
+    next_url = request.GET.get("next") or request.META.get("HTTP_REFERER") or reverse("core:workbench")
+    return redirect(next_url)
+
+from django.views.decorators.http import require_POST
+
+@require_POST
+def stage_bulk_start_today(request):
+    """
+    شروع گروهی مراحل (امروز) + ثبت OrderEvent داخلی برای هر مورد.
+    ورودی‌های قابل‌قبول:
+      - stage_id (تکراری): stage_id=12&stage_id=15&...
+      - stage_ids (تکراری): stage_ids=12&stage_ids=15&...
+      - stage_ids (CSV): stage_ids=12,15,20
+    """
+    from .models import StageInstance  # import محلی
+    today = _today_jdate()
+
+    # --- جمع‌آوری IDها از POST (مثل اتمام گروهی) ---
+    raw_ids = []
+    raw_ids += request.POST.getlist("stage_id")
+    raw_ids += request.POST.getlist("stage_ids")
+    csv_blob = (request.POST.get("stage_ids") or "").strip()
+    if csv_blob:
+        raw_ids += [p.strip() for p in csv_blob.split(",") if p.strip()]
+
+    # نرمال‌سازی به اعداد انگلیسی و تبدیل به int
+    trans = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+    ids = []
+    for r in raw_ids:
+        if not r: 
+            continue
+        s = str(r).translate(trans)
+        s = "".join(ch for ch in s if ch.isdigit())
+        if s:
+            try:
+                ids.append(int(s))
+            except ValueError:
+                pass
+    ids = list(dict.fromkeys(ids))  # یکتا
+
+    if not ids:
+        messages.error(request, "هیچ مرحله‌ای برای شروع گروهی انتخاب نشده است.")
+        next_url = request.GET.get("next") or request.META.get("HTTP_REFERER") or reverse("core:workbench")
+        return redirect(next_url)
+
+    # --- اعمال تغییرات ---
+    qs = StageInstance.objects.filter(pk__in=ids)
+    updated = 0
+    for si in qs:
+        changed_fields = []
+        if not si.started_date:
+            si.started_date = today
+            changed_fields.append('started_date')
+        if si.status != StageInstance.Status.IN_PROGRESS:
+            si.status = StageInstance.Status.IN_PROGRESS
+            changed_fields.append('status')
+        if changed_fields:
+            si.save(update_fields=changed_fields)
+            updated += 1
+
+        # رویداد داخلی: «شروع مرحله»
+        OrderEvent.objects.create(
+            order=si.order,
+            event_type=OrderEvent.EventType.IN_PROGRESS,
+            happened_at=today,
+            direction=OrderEvent.Direction.INTERNAL,
+            stage=si.label,
+            stage_instance=si,
+            notes="شروع مرحله (گروهی) از Workbench"
+        )
+
+    messages.success(request, f"{updated} مرحله شروع شد.")
+    next_url = request.GET.get("next") or request.META.get("HTTP_REFERER") or reverse("core:workbench")
+    return redirect(next_url)
+
+from django.views.decorators.http import require_POST
+
+@require_POST
+def stage_bulk_plan_date(request):
+    """
+    تنظیم برنامه (planned_date) به‌صورت گروهی برای StageInstance ها.
+    ورودی:
+      - planned_date: تاریخ (جلالی) مثل 1404/07/25 یا 1404-07-25
+      - stage_id / stage_ids: دقیقاً مثل bulk های قبلی (تک/چند/CSV)
+    """
+    from .models import StageInstance  # import محلی تا چرخه ایجاد نشود
+
+    # --- تاریخ برنامه ---
+    raw_date = (request.POST.get("planned_date") or request.POST.get("date") or "").strip()
+    if not raw_date:
+        messages.error(request, "تاریخ برنامه را وارد کنید.")
+        next_url = request.GET.get("next") or request.META.get("HTTP_REFERER") or reverse("core:workbench")
+        return redirect(next_url)
+
+    # نرمال‌سازی تاریخ جلالی به قالب قابل ذخیره (مثل 1404-07-25)
+    planned_norm = raw_date
+    try:
+        planned_norm = _normalize_for_jalali_field(raw_date)  # اگر هلسپر قبلاً داری، ازش استفاده می‌کنیم
+    except Exception:
+        pass  # اگر نبود، همان raw استفاده می‌شود (برای jDateField معمولاً کافی است)
+
+    # --- جمع‌آوری IDها (همان الگوی bulk قبلی) ---
+    raw_ids = []
+    raw_ids += request.POST.getlist("stage_id")
+    raw_ids += request.POST.getlist("stage_ids")
+    csv_blob = (request.POST.get("stage_ids") or "").strip()
+    if csv_blob:
+        raw_ids += [p.strip() for p in csv_blob.split(",") if p.strip()]
+
+    trans = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+    ids = []
+    for r in raw_ids:
+        if not r:
+            continue
+        s = str(r).translate(trans)
+        s = "".join(ch for ch in s if ch.isdigit())
+        if s:
+            try:
+                ids.append(int(s))
+            except ValueError:
+                pass
+    ids = list(dict.fromkeys(ids))
+
+    if not ids:
+        messages.error(request, "هیچ مرحله‌ای برای برنامه‌ریزی انتخاب نشده است.")
+        next_url = request.GET.get("next") or request.META.get("HTTP_REFERER") or reverse("core:workbench")
+        return redirect(next_url)
+
+    # --- اعمال تغییرات ---
+    qs = StageInstance.objects.filter(pk__in=ids)
+    updated = 0
+    for si in qs:
+        if si.planned_date != planned_norm:
+            si.planned_date = planned_norm
+            si.save(update_fields=['planned_date'])
+            updated += 1
+
+            # رویداد داخلی برای ثبت برنامه‌ریزی
+            OrderEvent.objects.create(
+                order=si.order,
+                event_type=OrderEvent.EventType.NOTE,
+                happened_at=planned_norm,
+                direction=OrderEvent.Direction.INTERNAL,
+                stage=si.label,
+                stage_instance=si,
+                notes=f"برنامه‌ریزی مرحله (گروهی) — تاریخ: {planned_norm}"
+            )
+
+    messages.success(request, f"برنامه‌ریزی {updated} مرحله به تاریخ {planned_norm} انجام شد.")
+    next_url = request.GET.get("next") or request.META.get("HTTP_REFERER") or reverse("core:workbench")
+    return redirect(next_url)
 
 
+from .models import StageInstance, StageTemplate, Doctor, Product
 
 
+def station_panel(request):
+    """
+    پنل مسئول مرحله (Station):
+      پارامترها:
+        - key: StageTemplate.key
+        - status: active|done|all (پیش‌فرض active)
+        - q: جستجو
+        - doctor: نام دقیق دکتر (Order.doctor)
+        - product: کُد محصول (Order.order_type = Product.code)
+        - page, ps: صفحه‌بندی
+    """
+    from .models import StageInstance, StageTemplate, Doctor, Product
+    from django.db.models import Q
+    from django.core.paginator import Paginator
+
+    # 1) پارامترها را قبل از هر استفاده‌ای بخوان
+    key           = (request.GET.get('key') or '').strip()
+    q             = (request.GET.get('q') or '').strip()
+    status_filter = (request.GET.get('status') or 'active').strip().lower()
+    doctor_name   = (request.GET.get('doctor') or '').strip()
+    product_code  = (request.GET.get('product') or '').strip()
+
+    # 2) دراپ‌داون‌ها
+    # 2.1) کلیدهای مرحله را بر اساس محصول (اگر انتخاب شده) محدود کن
+    keys_qs = StageTemplate.objects.filter(is_active=True)
+    if product_code:
+        keys_qs = keys_qs.filter(product__code=product_code)
+    keys_qs = keys_qs.order_by('product__name', 'order_index')
+    keys = list(keys_qs.values_list('key', 'label').distinct())
+
+    # 2.2) دکترها و محصولات
+    doctors  = list(Doctor.objects.order_by('name').values_list('name', flat=True))
+    products = list(Product.objects.filter(is_active=True).order_by('name').values('code', 'name'))
+
+    # 3) جدول مراحل
+    stages_qs = StageInstance.objects.none()
+    if key:
+        stages_qs = (
+            StageInstance.objects
+            .select_related('order', 'order__patient', 'template')
+            .filter(key=key)
+            .exclude(order__status='delivered')   # سفار‌ش‌های تحویل‌شده را نشان نده
+        )
+
+        # اگر محصول انتخاب شده، از هر دو مسیر فیلتر کن (Template و Order)
+        if product_code:
+            stages_qs = stages_qs.filter(template__product__code=product_code)
+            stages_qs = stages_qs.filter(order__order_type=product_code)
+
+        # فیلتر وضعیت
+        if status_filter == 'done':
+            stages_qs = stages_qs.filter(status=StageInstance.Status.DONE)
+        elif status_filter == 'all':
+            pass
+        else:
+            stages_qs = stages_qs.filter(
+                status__in=[StageInstance.Status.PENDING, StageInstance.Status.IN_PROGRESS]
+            )
+
+        # فیلتر دکتر
+        if doctor_name:
+            stages_qs = stages_qs.filter(order__doctor=doctor_name)
+
+        # جستجو
+        if q:
+            trans = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+            q_norm = q.translate(trans)
+            oid_filter = Q()
+            if q_norm.isdigit():
+                try:
+                    oid_filter = Q(order__id=int(q_norm)) | Q(order__serial_number__icontains=q_norm)
+                except Exception:
+                    oid_filter = Q(order__serial_number__icontains=q_norm)
+            stages_qs = stages_qs.filter(
+                oid_filter |
+                Q(order__patient__name__icontains=q) |
+                Q(order__doctor__icontains=q) |
+                Q(label__icontains=q) |
+                Q(order__serial_number__icontains=q_norm)
+            )
+
+        # مرتب‌سازی
+        stages_qs = stages_qs.order_by('status', 'planned_date', 'order__id', 'order_index', 'id')
+
+    # 4) صفحه‌بندی
+    try:
+        ps = int((request.GET.get('ps') or 50))
+        if ps < 10: ps = 10
+        if ps > 200: ps = 200
+    except Exception:
+        ps = 50
+    paginator   = Paginator(stages_qs, ps)
+    page_number = request.GET.get('page')
+    page_obj    = paginator.get_page(page_number)
+    stages      = list(page_obj.object_list)
+
+    # 5) برچسب عقب‌افتاده
+    today = _today_jdate()
+    def _ymd_int(d):
+        try: return d.year*10000 + d.month*100 + d.day
+        except: return None
+    today_i = _ymd_int(today)
+    for s in stages:
+        pd_i = _ymd_int(s.planned_date)
+        dd_i = _ymd_int(s.done_date)
+        s.is_overdue = bool(pd_i and not dd_i and today_i and (today_i > pd_i))
+
+    context = {
+        'keys': keys,
+        'key': key,
+        'q': q,
+        'status_filter': status_filter,
+        'ps': ps,
+        'page_obj': page_obj,
+        'is_paginated': page_obj.has_other_pages(),
+        'stages': stages,
+        # فیلترهای جدید در UI
+        'doctors': doctors,
+        'products': products,
+        'doctor': doctor_name,
+        'product': product_code,
+    }
+    return render(request, 'core/station.html', context)
 
 
 

@@ -29,10 +29,18 @@ urlpatterns = [
     path('dashboard/', views.dashboard, name='dashboard'),
     path('transfer/', TemplateView.as_view(template_name='core/transfer_gate.html'), name='transfer_gate'),
     path('workbench/', views.workbench, name='workbench'),
+    path('station/', views.station_panel, name='station_panel'),
     path('stages/<int:stage_id>/start/', views.stage_start_now, name='stage_start_now'),
     path('stages/<int:stage_id>/done/',  views.stage_done_today, name='stage_done_today'),
+    path('stages/bulk/done/', views.stage_bulk_done_today, name='stage_bulk_done_today'),
+    path('stages/bulk/start/', views.stage_bulk_start_today, name='stage_bulk_start_today'),
+    path('stages/bulk/plan/', views.stage_bulk_plan_date, name='stage_bulk_plan_date'),
+
         # --- APIs برای پنل ورود/خروج ---
     path('api/doctors', views.api_doctors, name='api_doctors'),
     path('api/orders-by-doctor', views.api_orders_by_doctor, name='api_orders_by_doctor'),
     path('api/order-stages', views.api_order_stages, name='api_order_stages'),
+    path('api/products', views.api_products, name='api_products'),
+    # --- Bulk event (ثبت گروهی رویداد) ---
+    path('orders/bulk-add-event/', views.add_order_event_bulk, name='add_order_event_bulk'),
 ]
