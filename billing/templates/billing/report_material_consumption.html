@@ -1,0 +1,191 @@
+{% extends "base_user_panel.html" %}
+{% load static %}
+{% load jalali_tags %}
+{% load num_extras %}
+
+{% block title %}گزارش تحلیل مصرف متریال{% endblock %}
+
+{% block head_extra %}
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
+<style>
+  body { background:#f8f9fa; }
+  .container-narrow { max-width: 1100px; margin-inline:auto; }
+  .page-head { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1.2rem; }
+  .card { border-radius:.8rem; }
+  .metric { text-align:center; padding:.8rem .6rem; border-radius:.7rem; background:#fff; border:1px solid #e9ecef; }
+  .metric .k { font-weight:800; font-size:1.1rem; margin-top:.25rem; }
+  .metric .v { font-variant-numeric:tabular-nums; }
+  .table-sm th, .table-sm td { padding:.45rem .5rem; vertical-align:middle; }
+  .num { text-align:center; font-variant-numeric:tabular-nums; }
+  .filter-card label { font-weight:600; font-size:.9rem; }
+  .filter-card .form-control, .filter-card .form-select { height:36px; padding:.25rem .5rem; }
+  .pwt-datepicker-container { z-index:2050 !important; }
+</style>
+{% endblock %}
+
+{% block subtabs %}
+<ul class="nav nav-pills mb-3">
+  <li class="nav-item">
+    <span class="nav-link active">📊 گزارش تحلیل مصرف متریال</span>
+  </li>
+</ul>
+{% endblock %}
+
+{% block content %}
+<div class="container-narrow">
+
+  <div class="page-head">
+    <h1 class="h5 mb-0">تحلیل مصرف متریال</h1>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'billing:financial_home' %}">بازگشت</a>
+  </div>
+
+  <!-- فیلتر -->
+  <div class="card filter-card shadow-sm mb-3">
+    <div class="card-body">
+      <form method="get" class="row g-2 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label">از تاریخ</label>
+          <input type="text" id="fromDate" name="from_date" value="{{ from_date|default:'' }}" class="form-control" placeholder="YYYY/MM/DD">
+          <input type="hidden" id="fromDateHidden" name="from_date_gregorian">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">تا تاریخ</label>
+          <input type="text" id="toDate" name="to_date" value="{{ to_date|default:'' }}" class="form-control" placeholder="YYYY/MM/DD">
+          <input type="hidden" id="toDateHidden" name="to_date_gregorian">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">آیتم متریال</label>
+          <select name="item_id" class="form-select">
+            <option value="">— همه آیتم‌ها —</option>
+            {% for m in materials %}
+              <option value="{{ m.id }}" {% if m.id|stringformat:"s" == item_id|stringformat:"s" %}selected{% endif %}>
+                {{ m.name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3 text-end">
+          <button class="btn btn-primary px-3">اعمال فیلتر</button>
+          <a class="btn btn-outline-secondary" href="?">پاک‌سازی</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- آمار -->
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+      <div class="metric">
+        <div class="k text-muted">تعداد رکوردها</div>
+        <div class="v k">{{ rows|length|default:0|int_fa }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="metric">
+        <div class="k text-muted">جمع مقدار</div>
+        <div class="v k">{{ total_qty|default:0|floatformat:2|digits_fa }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="metric">
+        <div class="k text-muted">جمع هزینه</div>
+        <div class="v k">{{ total_cost|default:0|money_fa }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="metric">
+        <div class="k text-muted">میانگین هزینه واحد</div>
+        <div class="v k">{{ avg_cost|default:0|money_fa }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- جدول -->
+  <div class="card shadow-sm">
+    <div class="card-header bg-primary text-white py-2 d-flex justify-content-between align-items-center">
+      <span>جزئیات مصرف</span>
+      <a href="?format=csv" class="btn btn-light btn-sm">دانلود CSV</a>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-striped align-middle mb-0">
+          <thead>
+            <tr>
+              <th class="num" style="width:60px">#</th>
+              <th>تاریخ</th>
+              <th>سفارش</th>
+              <th>دکتر</th>
+              <th>آیتم</th>
+              <th class="num">مقدار مصرف</th>
+              <th class="num">هزینه واحد</th>
+              <th class="num">هزینه کل</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if rows %}
+              {% for r in rows %}
+                <tr>
+                  <td class="num">{{ forloop.counter|int_fa }}</td>
+                  <td>{{ r.happened_at|to_jalali:"%Y/%m/%d"|digits_fa }}</td>
+                  <td>
+                    {% if r.order_id %}
+                      <a href="/core/orders/{{ r.order_id }}/" target="_blank" class="text-decoration-none">
+                        {{ r.order_id|int_fa }}
+                      </a>
+                    {% else %}—{% endif %}
+                  </td>
+                  <td>{{ r.doctor_name|default:"—" }}</td>
+                  <td>{{ r.item_name|default:"—" }}</td>
+                  <td class="num">{{ r.qty|floatformat:2|digits_fa }}</td>
+                  <td class="num">{{ r.unit_cost_effective|default:0|money_fa }}</td>
+                  <td class="num">{{ r.total_cost|default:r.unit_cost_effective|floatformat:0|money_fa }}</td>
+                </tr>
+              {% endfor %}
+              <tr class="table-light fw-bold">
+                <td colspan="5" class="text-end">جمع کل:</td>
+                <td class="num">{{ total_qty|default:0|floatformat:2|digits_fa }}</td>
+                <td></td>
+                <td class="num">{{ total_cost|default:0|money_fa }}</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="8" class="text-center text-muted py-4">داده‌ای یافت نشد.</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="text-center text-muted small mt-3">Material Consumption • v1.2</div>
+
+</div>
+{% endblock %}
+
+{% block body_extra %}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
+<script>
+(function(){
+  function attachJalali(id, hiddenId){
+    var $el = $("#"+id), $hidden = $("#"+hiddenId);
+    if(!$el.length) return;
+    try{
+      if(window.DateUtils && typeof DateUtils.attachJalaliInput === 'function'){
+        DateUtils.attachJalaliInput($el[0], $hidden[0]);
+        return;
+      }
+    }catch(e){}
+    $el.persianDatepicker({
+      format:'YYYY/MM/DD', autoClose:true, calendar:{persian:{locale:'fa'}},
+      altField:'#'+hiddenId, altFormat:'YYYY-MM-DD', altCalendar:'gregorian'
+    });
+  }
+  attachJalali('fromDate', 'fromDateHidden');
+  attachJalali('toDate', 'toDateHidden');
+})();
+</script>
+{% endblock %}
+

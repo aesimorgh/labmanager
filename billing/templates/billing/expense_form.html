@@ -1,0 +1,149 @@
+{% extends "base_user_panel.html" %}
+{% load jalali_tags %}
+{% load num_extras %}
+
+{% block title %}ثبت هزینه‌های جاری{% endblock %}
+
+{% block head_extra %}
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
+<style>.container-narrow{max-width:900px;margin-inline:auto;}</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-narrow">
+  <h1 class="h5 mb-3">ثبت هزینه‌های جاری</h1>
+
+  {# توجه: برای پیوست سند، enctype اضافه شد #}
+  <form method="post" class="card shadow-sm" enctype="multipart/form-data">
+    {% csrf_token %}
+    <div class="card-body row g-3">
+
+      {# --- تاریخ اصلی رکورد هزینه (برای سادگی همان "date") --- #}
+      <div class="col-md-4">
+        <label class="form-label">تاریخ ثبت هزینه</label>
+        <input type="text" name="date" id="x_date" class="form-control" placeholder="YYYY/MM/DD">
+        <!-- این خط هیدن را موقتاً حذف/کامنت کن -->
+        <!-- <input type="hidden" name="date" id="x_date_hidden" value="{{ today }}"> -->
+        <div class="form-text">شمسی وارد کنید؛ خودکار به تاریخ استاندارد تبدیل و ذخیره می‌شود.</div>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">دسته</label>
+        <select name="category" class="form-select">
+          {% for val,label in cat_choices %}
+            <option value="{{ val }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">مبلغ (ریال)</label>
+        <input type="text" name="amount" class="form-control" placeholder="مثلاً ۲,۵۰۰,۰۰۰" required>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">عنوان</label>
+        <input type="text" name="title" class="form-control" placeholder="مثلاً گچ دندان" required>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">فروشنده/پیمانکار (اختیاری)</label>
+        <input type="text" name="vendor" class="form-control" placeholder="مثلاً فروشگاه مواد دندانسازی">
+      </div>
+
+      {# — روش پرداخت — #}
+<div class="col-md-4">
+  <label class="form-label">روش پرداخت</label>
+  <select name="payment_method" id="x_pay_method" class="form-select">
+    <option value="">— انتخاب کنید —</option>
+    <option value="cash">نقد</option>
+    <option value="card">کارت</option>
+    <option value="transfer">حواله/کارت‌به‌کارت</option>
+    <option value="other">سایر</option>
+  </select>
+</div>
+
+{# — تاریخ پرداخت (شمسی) — #}
+<div class="col-md-4">
+  <label class="form-label">تاریخ پرداخت</label>
+  <input type="text" name="paid_date" id="x_paid_date" class="form-control" placeholder="YYYY/MM/DD">
+  <!-- <input type="hidden" name="paid_date" id="x_paid_date_hidden" value=""> -->
+  <div class="form-text">به‌صورت شمسی وارد کنید؛ خودکار به میلادی ذخیره می‌شود.</div>
+</div>
+
+      <div class="col-12">
+        <label class="form-label">یادداشت (اختیاری)</label>
+        <textarea name="note" class="form-control" rows="3"></textarea>
+      </div>
+
+      <hr class="my-2">
+
+    </div>
+    <div class="card-footer d-flex justify-content-between">
+      <a href="{% url 'billing:expense_list' %}" class="btn btn-light">انصراف</a>
+      <button class="btn btn-primary">ذخیره</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block body_extra %}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
+
+<script>
+(function(){
+  // ——— کمکی‌ها
+  function fa2en(s){
+    var fa='۰۱۲۳۴۵۶۷۸۹', ar='٠١٢٣٤٥٦٧٨٩';
+    return String(s||'')
+      .replace(/[۰-۹]/g, d=>''+fa.indexOf(d))
+      .replace(/[٠-٩]/g, d=>''+ar.indexOf(d));
+  }
+  function jalToISO(jal){
+    try{
+      var s = fa2en(String(jal||'').trim().replace(/-/g,'/'));
+      if(!/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(s) || !window.persianDate) return '';
+      var p = s.split('/').map(Number);
+      var pd = new persianDate([p[0],p[1],p[2]]);
+      // سازگار با هر دو API
+      if (typeof pd.toCalendar==='function') return pd.toCalendar('gregorian').format('YYYY-MM-DD');
+      if (typeof pd.calendar==='function')   return pd.calendar('gregorian').format('YYYY-MM-DD');
+      return '';
+    }catch(_){ return ''; }
+  }
+
+  function bindPicker($inp){
+    $inp.persianDatepicker({
+      format: 'YYYY/MM/DD',
+      autoClose: true,
+      calendar: { persian: { locale: 'fa' } }
+    });
+  }
+
+  // ——— اینیت تقویم‌ها روی هر دو فیلد فرم
+  bindPicker($("#x_date"));
+  bindPicker($("#x_paid_date"));
+
+  // ——— قبل از submit، hiddenها را «حتماً» از روی ورودی‌های قابل‌دیدن بازنویسی کن
+  $("form").on("submit", function(){
+    // تاریخ ثبت
+    var isoMain = jalToISO($("#x_date").val());
+    if (!isoMain) { // اگر کاربر خالی گذاشت
+      var d=new Date(), pad=n=>(n<10?'0':'')+n;
+      isoMain = d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+    }
+    $("#x_date_hidden").val(isoMain);
+
+    // تاریخ پرداخت
+    var isoPaid = jalToISO($("#x_paid_date").val());
+    if (!isoPaid) isoPaid = isoMain; // اگر خالی بود = تاریخ سند
+    $("#x_paid_date_hidden").val(isoPaid);
+  });
+})();
+</script>إ
+{% endblock %}
+
+

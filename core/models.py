@@ -79,6 +79,31 @@ class Order(models.Model):
     def patient_name(self):
         return self.patient.name if self.patient else ""
 
+    @property
+    def material_cogs(self):
+        """
+        جمع بهای تمام‌شدهٔ متریال‌های مصرفی این سفارش بر اساس کارتکس:
+        sum( |qty| * unit_cost_effective ) برای movement_type='issue'
+        """
+        from django.db.models import Sum, F
+        from django.db.models.functions import Coalesce
+        from decimal import Decimal
+        agg = self.stock_movements.filter(movement_type='issue').annotate(
+            cost_line=F('unit_cost_effective') * (F('qty') * -1)  # qty منفی است → قدر مطلق
+        ).aggregate(s=Coalesce(Sum('cost_line'), Decimal('0.00')))
+        return agg['s'] or Decimal('0.00')
+
+    def material_qty_by_item(self):
+        """
+        خروجی: دیکشنری {item_id: qty_consumed} برای این سفارش (فقط issue ها).
+        """
+        from django.db.models import Sum
+        qs = self.stock_movements.filter(movement_type='issue').values('item_id').annotate(
+            qty=Sum('qty')
+        )
+        # qty ها منفی‌اند → به قدر مطلق تبدیل می‌کنیم
+        return {row['item_id']: -row['qty'] for row in qs}
+
     def __str__(self):
         return f"Order #{self.id} - {self.patient_name}"
 

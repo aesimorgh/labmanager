@@ -229,7 +229,7 @@
 
             <tr>
               <th class="text-end">جمع کل پس از تخفیف‌ها:</th>
-              <td class="num">{{ invoice.total_amount|default_if_none:0|money_fa }}</td>
+              <td class="num">{{ invoice.grand_total|default_if_none:0|money_fa }}</td>
             </tr>
 
             <tr>
@@ -238,15 +238,20 @@
             </tr>
 
             <tr class="table-info">
-              <th class="text-end">ماندهٔ قبل از پرداخت‌ها:</th>
-              <td class="num">
-                {% if amount_due_raw_ctx is not None %}
-                  {{ amount_due_raw_ctx|money_fa }}
-                {% else %}
-                  {{ invoice.amount_due|default_if_none:0|money_fa }}
-                {% endif %}
-              </td>
-            </tr>
+  <th class="text-end">ماندهٔ قبل از پرداخت‌ها:</th>
+  <td class="num">
+    {% if amount_due_raw_ctx and amount_due_raw_ctx|stringformat:"s" != "0" %}
+      {{ amount_due_raw_ctx|money_fa }}
+    {% else %}
+      {% if invoice.previous_balance %}
+        {{ invoice.grand_total|default_if_none:0|add:invoice.previous_balance|money_fa }}
+      {% else %}
+        {{ invoice.grand_total|default_if_none:0|money_fa }}
+      {% endif %}
+    {% endif %}
+  </td>
+</tr>
+
 
             <tr>
               <th class="text-end">پرداخت‌های قبلی:</th>
@@ -277,6 +282,53 @@
       </div>
     </div>
   </div>
+
+  {% if payment_allocations %}
+  <div class="card shadow-sm mt-3">
+    <div class="card-header bg-light">پرداخت‌های تخصیص‌یافته به این فاکتور</div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead class="table-light">
+            <tr class="text-center">
+              <th style="width:60px;">#</th>
+              <th>تاریخ پرداخت</th>
+              <th>کد/رسید</th>
+              <th class="text-end" style="width:180px;">مبلغ تخصیص</th>
+              <th>یادداشت</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for alloc in payment_allocations %}
+              <tr class="text-center">
+                <td>{{ forloop.counter|int_fa }}</td>
+                <td>
+                  {% if alloc.payment_date %}
+                    {{ alloc.payment_date|to_jalali:"%Y/%m/%d"|digits_fa }}
+                  {% else %}—{% endif %}
+                </td>
+                <td>{{ alloc.payment_code|default:alloc.payment_id|default:"—" }}</td>
+                <td class="text-end text-success fw-semibold">{{ alloc.amount|default:0|money_fa }}</td>
+                <td class="text-muted">{{ alloc.notes|default:"—" }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="text-center text-muted py-3">موردی ثبت نشده است.</td></tr>
+            {% endfor %}
+          </tbody>
+          {% if allocated_sum %}
+            <tfoot class="table-light">
+              <tr class="text-center">
+                <th colspan="3" class="text-end">جمع تخصیص‌ها</th>
+                <th class="text-end text-success fw-bold">{{ allocated_sum|money_fa }}</th>
+                <th></th>
+              </tr>
+            </tfoot>
+          {% endif %}
+        </table>
+      </div>
+    </div>
+  </div>
+{% endif %}
 
   <!-- اطلاعات بانکی (انتهای صفحه) -->
   <div class="bank-box">

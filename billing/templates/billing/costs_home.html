@@ -1,0 +1,105 @@
+{% extends "base_user_panel.html" %}
+{% load num_extras %}
+{% block title %}هاب هزینه‌ها{% endblock %}
+
+{% block head_extra %}
+<style>
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem}
+  .cardx{border:1px solid #e5e7eb;border-radius:.75rem;background:#fff;padding:1rem}
+  .cardx h3{margin:.25rem 0 .5rem;font-size:1.1rem}
+  .muted{color:#6b7280;font-size:.9rem}
+  .actions{margin-top:.75rem;display:flex;gap:.5rem;flex-wrap:wrap}
+  .btn{display:inline-block;padding:.5rem .75rem;border:1px solid #e5e7eb;border-radius:.5rem;text-decoration:none;color:#111827}
+  .btn:hover{background:#f8fafc}
+
+  .nav-pills .nav-link{border-radius:.6rem}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.75rem;margin-bottom:1rem}
+  .kpi{border:1px solid #e5e7eb;background:#fff;border-radius:.75rem;padding:.8rem}
+  .kpi .t{font-size:.9rem;color:#6b7280;margin-bottom:.25rem}
+  .kpi .v{font-weight:800;font-size:1.1rem;font-variant-numeric:tabular-nums}
+</style>
+{% endblock %}
+
+{% block subtabs %}
+<ul class="nav nav-pills mb-3">
+  <li class="nav-item"><span class="nav-link active">هاب هزینه‌ها</span></li>
+  <li class="nav-item"><a class="nav-link" href="{% url 'billing:financial_home' %}">بازگشت به مالی</a></li>
+</ul>
+{% endblock %}
+
+{% block content %}
+
+<!-- KPI -->
+<div class="kpis">
+  <div class="kpi">
+    <div class="t">هزینهٔ جاری ماه</div>
+    <div class="v">{{ kpi_opex|default:0|money_fa }}</div>
+  </div>
+  <div class="kpi">
+    <div class="t">تعداد خرید متریال/ابزار (ماه)</div>
+    <div class="v">{{ kpi_purchases_count|default:0|int_fa }}</div>
+  </div>
+  <div class="kpi">
+    <div class="t">مجموع تعمیرات ماه</div>
+    <div class="v">{{ kpi_repairs_sum|default:0|money_fa }}</div>
+  </div>
+</div>
+
+<!-- تب‌ها -->
+<ul class="nav nav-pills mb-3" id="costTabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="tab-opex" data-bs-toggle="pill" data-bs-target="#pane-opex" type="button">هزینه‌های جاری</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="tab-mats" data-bs-toggle="pill" data-bs-target="#pane-mats" type="button">متریال و ابزار مصرفی</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="tab-equip" data-bs-toggle="pill" data-bs-target="#pane-equip" type="button">تجهیزات و تعمیرات</button>
+  </li>
+</ul>
+
+<div class="tab-content" id="costTabsContent">
+  <!-- جاری -->
+  <div class="tab-pane fade show active" id="pane-opex" role="tabpanel">
+    <div class="cardx">
+      <h3>هزینه‌های جاری</h3>
+      <p class="muted">ثبت مخارج روزمره: اجاره/قبض/پیک/تنخواه و ...</p>
+      <div class="actions">
+        <a class="btn" href="{% url 'billing:expense_create' %}">+ ثبت هزینه جاری</a>
+        <a class="btn" href="{% url 'billing:expense_list' %}">لیست هزینه‌های جاری</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- متریال/ابزار -->
+  <div class="tab-pane fade" id="pane-mats" role="tabpanel">
+    <div class="cardx">
+      <h3>متریال و ابزار مصرفی</h3>
+      <p class="muted">ثبت خرید، مشاهدهٔ لیست خریدها و گزارش مصرف.</p>
+      <div class="actions">
+        <a class="btn" href="{% url 'billing:material_purchase_create' %}">+ ثبت خرید</a>
+        <a class="btn" href="{% url 'billing:material_purchase_list' %}">لیست خریدها</a>
+        <a class="btn" href="{% url 'billing:report_material_consumption' %}">گزارش مصرف متریال</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- تجهیزات/تعمیرات -->
+  <div class="tab-pane fade" id="pane-equip" role="tabpanel">
+    <div class="cardx">
+      <h3>تجهیزات و تعمیرات</h3>
+      <p class="muted">فهرست تجهیزات با ارزش دفتری و ثبت تعمیرات.</p>
+      <div class="actions">
+        <a class="btn" href="{% url 'billing:equipment_list' %}">لیست تجهیزات</a>
+        <a class="btn" href="{% url 'billing:repairs_list' %}">لیست تعمیرات</a>
+        <a class="btn" href="{% url 'billing:repair_create' %}">+ ثبت تعمیر</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block body_extra %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+{% endblock %}

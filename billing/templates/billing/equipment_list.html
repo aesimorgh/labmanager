@@ -1,0 +1,106 @@
+{% load jalali_tags %}{% load num_extras %}
+<!DOCTYPE html><html lang="fa" dir="rtl"><head>
+<meta charset="UTF-8"><title>لیست تجهیزات</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
+<style>
+ body{background:#f7f7fb}.container-narrow{max-width:1100px;margin-inline:auto}
+ .num{font-variant-numeric:tabular-nums;text-align:end}.card{border-radius:14px}
+ .tight .form-control,.tight .form-select{height:38px;padding:.35rem .5rem}
+ .pwt-datepicker-container{z-index:2050!important}
+</style></head><body>
+<div class="container-narrow py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h5 m-0">تجهیزات</h1>
+    <div class="text-muted small">جمع ارزش برآوردی: <b>{{ total_estimated|money_fa }}</b></div>
+  </div>
+
+  <form method="get" class="card p-3 shadow-sm mb-3 tight">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label">جستجو</label>
+        <input class="form-control" type="text" name="q" value="{{ q }}" placeholder="نام/کد/مدل/سریال/یادداشت">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">از تاریخ خرید</label>
+        <input type="text" id="x_d1" class="form-control" placeholder="YYYY/MM/DD">
+        <input type="hidden" id="x_d1_h" name="d1" value="{{ d1 }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">تا تاریخ خرید</label>
+        <input type="text" id="x_d2" class="form-control" placeholder="YYYY/MM/DD">
+        <input type="hidden" id="x_d2_h" name="d2" value="{{ d2 }}">
+      </div>
+      <div class="col-md-4 text-end">
+        <a href="{% url 'billing:repairs_list' %}" class="btn btn-outline-secondary">لیست تعمیرات</a>
+        <a href="{% url 'billing:repair_create' %}" class="btn btn-primary">+ ثبت تعمیر</a>
+        <button class="btn btn-secondary">اعمال فیلتر</button>
+        <a class="btn btn-light" href="?">پاک‌سازی</a>
+      </div>
+    </div>
+  </form>
+
+  <div class="card shadow-sm">
+    <div class="card-header bg-primary text-white py-2">فهرست تجهیزات</div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-striped align-middle mb-0">
+          <thead>
+            <tr>
+              <th>نام/کد</th>
+              <th>مدل/سریال</th>
+              <th>خرید</th>
+              <th class="num">قیمت خرید</th>
+              <th class="num">استهلاک ماهانه</th>
+              <th class="num">ارزش دفتری</th>
+              <th class="num">ارزش برآوردی</th>
+              <th style="width:120px">اقدام</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% if rows %}
+            {% for e in rows %}
+              <tr>
+                <td><b>{{ e.name }}</b><div class="small text-muted">{{ e.code }}</div></td>
+                <td class="small">{{ e.model|default:"—" }} / {{ e.serial_no|default:"—" }}</td>
+                <td>{% if e.purchase_date %}{{ e.purchase_date|to_jalali:"%Y/%m/%d"|digits_fa }}{% else %}—{% endif %}</td>
+                <td class="num">{{ e.purchase_cost|money_fa }}</td>
+                <td class="num">{{ e.monthly_depreciation|money_fa }}</td>
+                <td class="num">{{ e.book_value|money_fa }}</td>
+                <td class="num">{{ e.estimated_value|money_fa }}</td>
+                <td>
+                  <a class="btn btn-sm btn-outline-primary" href="{% url 'billing:repair_create' %}?equipment_id={{ e.id }}">تعمیر</a>
+                </td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr><td colspan="8" class="text-center text-muted py-4">موردی ثبت نشده است.</td></tr>
+          {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="text-center text-muted small mt-3">Equipment • v1.0</div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
+<script>
+(function(){
+  var $d1=$("#x_d1"),$d1h=$("#x_d1_h"),$d2=$("#x_d2"),$d2h=$("#x_d2_h");
+  function fa2en(s){var fa='۰۱۲۳۴۵۶۷۸۹',ar='٠١٢٣٤٥٦٧٨٩';return String(s||'').replace(/[۰-۹]/g,d=>''+fa.indexOf(d)).replace(/[٠-٩]/g,d=>''+ar.indexOf(d))}
+  function isoToJal(iso){try{var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec((iso||'').trim());if(!m||!window.persianDate)return'';var gy=+m[1],gm=+m[2],gd=+m[3];return new persianDate([gy,gm,gd]).calendar('persian').format('YYYY/MM/DD')}catch(_){return''}}
+  function jalToISO(j){try{var s=fa2en(String(j||'').trim().replace(/-/g,'/'));if(!/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(s)||!window.persianDate)return'';var p=s.split('/').map(Number);var pd=new persianDate([p[0],p[1],p[2]]);if(pd.toCalendar)return pd.toCalendar('gregorian').format('YYYY-MM-DD');if(pd.calendar)return pd.calendar('gregorian').format('YYYY-MM-DD');return''}catch(_){return''}}
+  function bind($i,$h){$i.persianDatepicker({format:'YYYY/MM/DD',autoClose:true,initialValue:false,calendar:{persian:{locale:'fa'}},
+    onSelect:function(unix){try{var j=new persianDate(unix).calendar('persian').format('YYYY/MM/DD');var iso=jalToISO(j);if(iso)$h.val(iso)}catch(_){}}});
+    $i.on('change blur',function(){var iso=jalToISO($i.val());if(iso)$h.val(iso);});
+  }
+  bind($d1,$d1h);bind($d2,$d2h);
+  (function prefill(){var a=$d1h.val();if(a){var j=isoToJal(a);if(j)$d1.val(j.replace(/\d/g,d=>'۰۱۲۳۴۵۶۷۸۹'[d]))}var b=$d2h.val();if(b){var j=isoToJal(b);if(j)$d2.val(j.replace(/\d/g,d=>'۰۱۲۳۴۵۶۷۸۹'[d]))}})();
+  var f=document.querySelector('form.card');if(f){f.addEventListener('submit',function(){var i1=jalToISO($d1.val()),i2=jalToISO($d2.val());$d1h.val(i1||'');$d2h.val(i2||'');});}
+})();
+</script>
+</body></html>

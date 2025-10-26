@@ -92,7 +92,7 @@
                     {% if inv.doctor %}{{ inv.doctor }}{% else %}<span class="muted">—</span>{% endif %}
                   </td>
                   <td>
-                    {% if inv.issued_at %}{{ inv.issued_at|to_jalali:"%Y/%m/%d" }}{% else %}<span class="muted">—</span>{% endif %}
+                    {% if inv.issued_at %}{{ inv.issued_at|to_jalali:"%Y/%m/%d"|digits_fa }}{% else %}<span class="muted">—</span>{% endif %}
                   </td>
                   <td class="num">{{ inv.total_amount_display|default:0|money_fa }}</td>
                   <td class="num">− {{ inv.allocated_display|default:0|money_fa }}</td>
@@ -117,4 +117,65 @@
     (اگر «ماندهٔ قبلی» روی فاکتور استفاده شده باشد، در محاسبات لحاظ شده است.)
   </p>
 
+{% endblock %}
+{% block body_extra %}
+<script>
+(function(){
+  // استفاده‌ی ایمن از DateUtils (اگر لود شده باشد)
+  function faDigits(s){
+    try{
+      if (window.DateUtils && typeof DateUtils.faDigits === 'function') {
+        return DateUtils.faDigits(String(s));
+      }
+    }catch(e){}
+    return String(s).replace(/\d/g, function(d){ return "۰۱۲۳۴۵۶۷۸۹"[d]; });
+  }
+
+  function toJalaliFromISO(iso){
+    if (!iso) return '';
+    try{
+      if (window.DateUtils){
+        if (typeof DateUtils.toJalaliStrFromISO === 'function') {
+          return DateUtils.toJalaliStrFromISO(iso); // «YYYY/MM/DD» با ارقام فارسی (اگر آن‌طور پیاده‌سازی شده باشد)
+        }
+        if (typeof DateUtils.toJalaliString === 'function') {
+          return DateUtils.toJalaliString(iso);
+        }
+        if (typeof DateUtils.gregorianToJalali === 'function') {
+          var p = iso.split('-').map(Number); // [yyyy,mm,dd]
+          if (p.length === 3 && p[0] >= 1700){
+            var j = DateUtils.gregorianToJalali(p[0], p[1], p[2]); // [jy,jm,jd]
+            var pad = function(n){ return (n<10?'0':'') + n; };
+            return j ? (j[0] + '/' + pad(j[1]) + '/' + pad(j[2])) : '';
+          }
+        }
+      }
+    }catch(e){}
+    // اگر هیچ‌کدام نبود، خالی برگردان تا چیزی اشتباه نمایش ندهیم
+    return '';
+  }
+
+  document.querySelectorAll('td.pdate[data-gdate]').forEach(function(td){
+    var iso = (td.getAttribute('data-gdate') || '').trim();
+    if (!iso) return; // حالت «—» را دست نمی‌زنیم
+
+    // سال را چک می‌کنیم: اگر ISO واقعی باشد (>=1700)، تلاش به تبدیل؛
+    // اگر قبلاً شمسیِ خراب مثل «1404-07-10» ذخیره شده، فقط ارقام را فارسی و اسلش‌گذاری می‌کنیم.
+    var y = parseInt(iso.slice(0,4), 10);
+    var out = '';
+    if (!isNaN(y) && y >= 1700){
+      out = toJalaliFromISO(iso);
+      if (!out) out = faDigits(iso.replace(/-/g, '/')); // fallback ایمن
+    } else {
+      // داده‌ی قدیمی (شمسی با dash): فقط ظاهر را اصلاح می‌کنیم
+      out = faDigits(iso.replace(/-/g, '/'));
+    }
+
+    if (out){
+      td.textContent = faDigits(out);
+      td.classList.add('muted');
+    }
+  });
+})();
+</script>
 {% endblock %}

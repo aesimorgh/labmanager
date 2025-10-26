@@ -26,6 +26,9 @@
       padding:.18rem .55rem; border-radius:9999px; font-size:.78rem;
       border:1px solid transparent; white-space:nowrap;
     }
+    .status-unalloc{ background:#f1f5f9; color:#334155; border-color:#e2e8f0; }  /* بدون تخصیص - خاکستری */
+    .status-partial{ background:#fff7e6; color:#915f00; border-color:#ffe0a3; }  /* بخشی - نارنجی */
+    .status-alloc  { background:#eef9f1; color:#0f7a2e; border-color:#cbead6; }  /* کامل - سبز */
     .status-draft{ background:#fff7e6; color:#915f00; border-color:#ffe0a3; }
     .status-issued{ background:#eef9f1; color:#0f7a2e; border-color:#cbead6; }
     .actions a { text-decoration:none; }
@@ -142,7 +145,12 @@
 
   <!-- فرم ثبت پرداخت جدید -->
   <div class="card shadow-sm mb-3">
-    <div class="card-header bg-success text-white py-2">ثبت پرداخت جدید</div>
+    <div class="card-header bg-success text-white py-2 d-flex justify-content-between align-items-center">
+  <span>ثبت پرداخت جدید</span>
+  <button type="button" class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#allocModal">
+    تخصیص پیشرفته
+  </button>
+</div>
     <div class="card-body">
       <form method="post" action="/billing/doctor/{{ doctor.id }}/payments/create/" class="row g-3" id="paymentForm">
         {% csrf_token %}
@@ -167,6 +175,8 @@
           <label class="form-label">توضیحات</label>
           <input type="text" name="note" class="form-control" placeholder="اختیاری">
         </div>
+        <!-- اضافه‌شده: فیلد پنهان JSON تخصیص -->
+        <input type="hidden" name="alloc_json" id="alloc_json">
         <div class="col-12 text-end">
           <button type="submit" class="btn btn-success">ثبت پرداخت</button>
         </div>
@@ -188,6 +198,7 @@
               <th style="width:70px">#</th>
               <th style="width:140px">تاریخ</th>
               <th class="num" style="width:140px">مبلغ</th>
+              <th style="width:160px">وضعیت/تخصیص</th>  <!-- ← اضافه شد -->
               <th style="width:140px">روش</th>
               <th>توضیحات</th>
             </tr>
@@ -202,6 +213,38 @@
                     {{ p.date|to_jalali:"%Y/%m/%d"|default_if_none:"—"|digits_fa }}
                   </td>
                   <td class="num">{{ p.amount|default:0|money_fa }}</td>
+                  <td>
+  {# Badge وضعیت با تکیه بر فیلد جدید allocation_status #}
+  {% if p.allocation_status == 'allocated' %}
+    <span class="status-chip status-alloc">کامل تخصیص‌یافته</span>
+  {% elif p.allocation_status == 'partial' %}
+    <span class="status-chip status-partial">بخشی تخصیص‌یافته</span>
+  {% else %}
+    <span class="status-chip status-unalloc">بدون تخصیص</span>
+  {% endif %}
+
+  {# خط دوم: خلاصه تخصیص بر اساس pay_sums (دیکشنری‌ای که قبلاً در همین صفحه استفاده می‌کنی) #}
+  <div class="small mt-1">
+    {% if pay_sums %}
+      {% with pid=p.id|stringformat:"s" %}
+        {% for item in pay_sums.items %}
+          {% with sid=item.0 s=item.1 %}
+            {% if sid|stringformat:"s" == pid %}
+              تخصیص‌شده: <strong>{{ s.allocated|default:0|money_fa }}</strong>
+              &nbsp;|&nbsp;
+              باقیمانده:
+              <strong class="{% if s.remaining|default:0 > 0 %}text-danger{% else %}text-success{% endif %}">
+                {{ s.remaining|default:0|money_fa }}
+              </strong>
+            {% endif %}
+          {% endwith %}
+        {% endfor %}
+      {% endwith %}
+    {% else %}
+      <span class="text-muted">(دادهٔ جمع تخصیص ارسال نشده)</span>
+    {% endif %}
+  </div>
+</td>
                   <td>{% if p.method %}{{ p.method }}{% else %}—{% endif %}</td>
                   <td class="small">{{ p.note|default:"—" }}</td>
                 </tr>
@@ -215,6 +258,161 @@
     </div>
   </div>
 
+ <!-- اضافه‌شده: مودال تخصیص پیشرفته -->
+<div class="modal fade" id="allocModal" tabindex="-1" aria-labelledby="allocModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="allocModalLabel">تخصیص دستی پرداخت به فاکتورها (قدیمی→جدید)</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="بستن"></button>
+      </div>
+
+      <div class="modal-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="small text-muted">فقط فاکتورهای «صادر شده» که مانده دارند نمایش داده می‌شوند.</div>
+          <div>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="btnAutoDistribute">توزیع خودکار</button>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-sm table-striped align-middle mb-0" id="allocTable">
+            <thead>
+              <tr>
+                <th style="width:70px">#</th>
+                <th style="width:140px">کد/شناسه</th>
+                <th>بازه</th>
+                <th class="num" style="width:140px">ماندهٔ باز</th>
+                <th class="num" style="width:180px">مبلغ تخصیص</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for inv in invoices %}
+                {% if inv.status == 'issued' and inv.amount_due|default:0 > 0 %}
+                  <tr
+                    data-invoice-id="{{ inv.id }}"
+                    data-amount-due="{{ inv.amount_due|default:0 }}"
+                    data-issued-at="{{ inv.issued_at|date:'Y-m-d' }}"
+                  >
+                    <td class="num">{{ forloop.counter|int_fa }}</td>
+                    <td>
+                      {% if inv.code %}<strong>{{ inv.code }}</strong>{% else %}—{% endif %}
+                      <div class="small text-muted">ID: {{ inv.id|int_fa }}</div>
+                    </td>
+                    <td class="small">
+                      {% if inv.period_from %}{{ inv.period_from|date:"Y/m/d"|digits_fa }}{% else %}—{% endif %}
+                      <span class="mx-1">تا</span>
+                      {% if inv.period_to %}{{ inv.period_to|date:"Y/m/d"|digits_fa }}{% else %}—{% endif %}
+                    </td>
+                    <td class="num due-cell">{{ inv.amount_due|default:0|money_fa }}</td>
+                    <td class="num">
+                      <input type="text" class="form-control form-control-sm alloc-input" placeholder="۰"
+                             inputmode="decimal" dir="ltr" style="max-width: 160px;">
+                      <div class="form-text small">≤ مانده</div>
+                    </td>
+                  </tr>
+                {% endif %}
+              {% endfor %}
+              {% if not invoices or invoices|length == 0 %}
+                <tr><td colspan="5" class="text-center text-muted py-4">فاکتور باز پیدا نشد.</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <small class="me-auto text-muted">راهنما: مبلغ پرداخت را بالا وارد کنید؛ می‌توانید اینجا بین فاکتورها توزیع کنید.</small>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">بستن</button>
+        <button type="button" class="btn btn-primary" id="btnApplyAlloc">اعمال تخصیص</button>
+      </div>
+    </div> <!-- /.modal-content -->
+  </div>   <!-- /.modal-dialog -->
+</div>     <!-- /#allocModal -->
+<!-- /مودال -->
+
+<!-- ✅ جزئیات تخصیص پرداخت‌ها: بیرون از مودال تا همیشه قابل مشاهده باشد -->
+{% if payments %}
+  <div class="card shadow-sm mt-3">
+    <div class="card-header bg-info text-white py-2">جزئیات تخصیص پرداخت‌ها</div>
+    <div class="card-body">
+      {% for p in payments %}
+        <div class="mb-3">
+          <div class="d-flex justify-content-between align-items-center">
+            <div class="fw-bold">
+              پرداخت {{ forloop.counter|int_fa }} — مبلغ: {{ p.amount|default:0|money_fa }}
+              <span class="text-muted small">(تاریخ: {{ p.date|to_jalali:"%Y/%m/%d"|digits_fa }})</span>
+            </div>
+            <div class="small">
+              {% if pay_sums %}
+                {% with pid=p.id|stringformat:"s" %}
+                  {% for item in pay_sums.items %}
+                    {% with sid=item.0 s=item.1 %}
+                      {% if sid|stringformat:"s" == pid %}
+                        تخصیص‌شده: <strong>{{ s.allocated|default:0|money_fa }}</strong>
+                        &nbsp;|&nbsp;
+                        باقیمانده:
+                        <strong class="{% if s.remaining|default:0 > 0 %}text-danger{% else %}text-success{% endif %}">
+                          {{ s.remaining|default:0|money_fa }}
+                        </strong>
+                      {% endif %}
+                    {% endwith %}
+                  {% endfor %}
+                {% endwith %}
+              {% else %}
+                <span class="text-muted">(دادهٔ جمع تخصیص ارسال نشده)</span>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="table-responsive mt-2">
+            <table class="table table-sm table-striped align-middle mb-0">
+              <thead>
+                <tr>
+                  <th style="width:160px">فاکتور</th>
+                  <th class="num" style="width:160px">مبلغ تخصیص</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% with pid=p.id %}
+                  {% if pay_allocs %}
+                    {% for item in pay_allocs.items %}
+                      {% with aid=item.0 allocs=item.1 %}
+                        {% if aid == pid %}
+                          {% if allocs %}
+                            {% for a in allocs %}
+                              <tr>
+                                <td>
+                                  {% if a.invoice_id %}
+                                    <a href="/billing/invoices/{{ a.invoice_id }}/">{{ a.invoice_code|default_if_none:"—" }}</a>
+                                  {% else %}
+                                    {{ a.invoice_code|default_if_none:"—" }}
+                                  {% endif %}
+                                </td>
+                                <td class="num">{{ a.amount|default:0|money_fa }}</td>
+                              </tr>
+                            {% endfor %}
+                          {% else %}
+                            <tr><td colspan="2" class="text-muted text-center">تخصیصی برای این پرداخت ثبت نشده است.</td></tr>
+                          {% endif %}
+                        {% endif %}
+                      {% endwith %}
+                    {% endfor %}
+                  {% else %}
+                    <tr><td colspan="2" class="text-muted text-center">دادهٔ ریز تخصیص‌ها ارسال نشده است.</td></tr>
+                  {% endif %}
+                {% endwith %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% if not forloop.last %}<hr class="my-3">{% endif %}
+      {% endfor %}
+    </div>
+  </div>
+{% endif %}
+  <!-- /مودال -->
+
   <div class="text-center text-muted small mt-3">Doctor Account • v1.3</div>
 
 </div>
@@ -222,22 +420,45 @@
 
 {% block body_extra %}
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
+  
   <script>
     (function(){
-      // --- فعال‌سازی تقویم شمسی روی فیلد نمایشی
-      try {
-        var $el = $("#pay_date");
-        if ($el.length && !$el.data('pDatepicker')) {
-          $el.persianDatepicker({
-            format:'YYYY/MM/DD',
-            autoClose:true,
-            calendar:{ persian:{ locale:'fa' } }
-          });
-        }
-      } catch(e){}
+      // --- فعال‌سازی تقویم شمسی روی فیلد نمایشی (با اولویت DateUtils و fallback به persian-datepicker)
+(function initJalaliPicker(){
+  try {
+    var $el = $("#pay_date");
+    if (!$el.length) return;
 
+    // اگر پروژه DateUtils مرکزی دارد، از همان استفاده کن
+    if (window.DateUtils && typeof DateUtils.attachJalaliInput === 'function') {
+      // اگر hidden مخصوص داری، از همون استفاده کن؛ وگرنه فقط ورودی نمایشی رو وصل کن
+      var hidden = document.getElementById('pay_date_hidden');
+      try {
+        DateUtils.attachJalaliInput($el[0], hidden || null, { autoClose: true, format: 'YYYY/MM/DD' });
+        return; // با موفقیت از DateUtils استفاده شد
+      } catch (_) {}
+    }
+
+    // fallback: persian-datepicker
+    // نکته: بعضی نسخه‌ها data-flag متفاوت دارند، پس بدون چکِ data از نو مقداردهی کن
+    $el.persianDatepicker({
+      format: 'YYYY/MM/DD',
+      autoClose: true,
+      calendar: { persian: { locale: 'fa' } }
+    });
+
+    // اگر به هر دلیل lazy-init شد، با فوکوس کاربر هم باز شود
+    $el.on('focus', function(){
+      try { $(this).persianDatepicker(); } catch(_){}
+    });
+  } catch(e) {
+    console.warn('Jalali init error:', e);
+  }
+})();
+})();
       // --- تبدیل مقدار شمسی به میلادی و ارسال در hidden[name=date]
       $("#paymentForm").on("submit", function(){
         var v = ($("#pay_date").val() || "").trim();
@@ -300,23 +521,114 @@
         }
 
         document.querySelectorAll('td.pdate[data-gdate]').forEach(function(td){
-          var iso = (td.getAttribute('data-gdate')||'').trim();   // مثل "1404-07-10" یا "2025-10-02"
-          if(!iso){ td.textContent='—'; return; }
-          var y = parseInt(iso.slice(0,4),10);
+  var iso = (td.getAttribute('data-gdate')||'').trim();
+  if (!iso) { td.textContent = '—'; return; }
 
-          if (!isNaN(y) && y >= 1700) {
-            // میلادی معتبر → به شمسی تبدیل کن
-            var j = toJalaliFromISO(iso);
-            td.textContent = j || faDigits(iso.replace(/-/g,'/'));
-          } else {
-            // مقدارِ قدیمی/خراب که شمسی را به‌صورت "1404-07-10" ذخیره کرده → همان را فقط با ارقام فارسی نمایش بده
-            td.textContent = faDigits(iso.replace(/-/g,'/'));
-          }
-          td.classList.add('muted');
-        });
+  var y = parseInt(iso.slice(0,4),10);
+
+  if (!isNaN(y) && y >= 1700) {
+    // فقط اگر تبدیل واقعاً موفق شد، متن را عوض کن؛ وگرنه به خروجیِ درستِ سرور دست نزن
+    var j = toJalaliFromISO(iso);
+    if (j) {
+      td.textContent = faDigits(j);
+      td.classList.add('muted');
+    }
+  } else {
+    // به‌نظر می‌رسد مقدار از قبل شمسی/نمایشی است؛ دست نزن
+  }
+});
       })();
   </script>
+
+  <!-- اضافه‌شده: اسکریپت تخصیص دستی (کاملاً مستقل از بلوک قبلی) -->
+  <script>
+    (function(){
+      function normalizeNumber(str){
+        if (str == null) return 0;
+        var s = String(str).trim();
+        if (!s) return 0;
+        var mapFa = {'۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9','٫':'.','٬':',','،':','};
+        s = s.replace(/[۰-۹٫٬،]/g, function(c){ return mapFa[c] || c; }).replace(/,/g,'');
+        var n = parseFloat(s);
+        return isNaN(n) ? 0 : n;
+      }
+
+      function buildAllocJSON(){
+        var rows = document.querySelectorAll('#allocTable tbody tr[data-invoice-id]');
+        var out = [];
+        rows.forEach(function(tr){
+          var id = parseInt(tr.getAttribute('data-invoice-id'), 10);
+          var due = normalizeNumber(tr.getAttribute('data-amount-due'));
+          var inp = tr.querySelector('input.alloc-input');
+          var val = normalizeNumber(inp && inp.value);
+          if (!id || !val) return;
+          if (val > due) val = due;
+          if (val > 0){
+            out.push({invoice_id: id, amount: String(val)});
+          }
+        });
+        return out;
+      }
+
+      function autoDistribute(){
+        var total = normalizeNumber(document.querySelector('#paymentForm input[name="amount"]').value || 0);
+        if (total <= 0) return;
+
+        var rows = Array.from(document.querySelectorAll('#allocTable tbody tr[data-invoice-id]'));
+        rows.sort(function(a,b){
+          return String(a.getAttribute('data-issued-at')||'') < String(b.getAttribute('data-issued-at')||'') ? -1 : 1;
+        });
+
+        rows.forEach(function(tr){
+          var inp = tr.querySelector('input.alloc-input');
+          if (inp) inp.value = '';
+        });
+
+        var remaining = total;
+        for (var i=0; i<rows.length && remaining>0; i++){
+          var tr = rows[i];
+          var due = normalizeNumber(tr.getAttribute('data-amount-due'));
+          if (due <= 0) continue;
+          var alloc = remaining >= due ? due : remaining;
+          var inp = tr.querySelector('input.alloc-input');
+          if (inp){ inp.value = String(alloc); }
+          remaining -= alloc;
+        }
+      }
+
+      document.getElementById('btnAutoDistribute') && document.getElementById('btnAutoDistribute').addEventListener('click', autoDistribute);
+
+      document.getElementById('btnApplyAlloc') && document.getElementById('btnApplyAlloc').addEventListener('click', function(){
+        var arr = buildAllocJSON();
+        var hid = document.getElementById('alloc_json');
+        if (hid) hid.value = arr.length ? JSON.stringify(arr) : '';
+        var modalEl = document.getElementById('allocModal');
+        if (window.bootstrap && modalEl){
+          var m = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+          m.hide();
+              // پاکسازی دفاعی اگر بک‌دراپ یا کلاس‌ها باقی ماندند
+          setTimeout(function(){
+            document.body.classList.remove('modal-open');
+            document.querySelectorAll('.modal-backdrop').forEach(function(b){ b.remove(); });
+            // اگر به هر دلیل خودِ مودال به حالت نمایش باقی مانده بود:
+            modalEl.classList.remove('show');
+            modalEl.setAttribute('aria-hidden','true');
+            modalEl.style.display = 'none';
+          }, 50);
+        }
+      });
+
+      document.getElementById('paymentForm') && document.getElementById('paymentForm').addEventListener('submit', function(){
+        var hid = document.getElementById('alloc_json');
+        if (hid && !hid.value){
+          var arr = buildAllocJSON();
+          hid.value = arr.length ? JSON.stringify(arr) : '';
+        }
+      });
+    })();
+  </script>
 {% endblock %}
+
 
 
 

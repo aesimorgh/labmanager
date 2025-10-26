@@ -1,0 +1,278 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>ثبت خرید متریال و ابزار مصرفی</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
+  <style>
+    body{background:#f7f7fb}
+    .container-narrow{max-width:980px;margin-inline:auto}
+    .card{border-radius:14px}
+    .card-header{border-top-left-radius:14px;border-top-right-radius:14px}
+    .form-label{font-weight:600}
+    .help-text{font-size:.85rem;color:#6c757d}
+    .tight .form-control,.tight .form-select{height:38px;padding:.35rem .5rem}
+    .kv{display:flex;align-items:center;gap:.5rem}
+    .kv .k{color:#6b7280;font-size:.85rem}
+    .kv .v{font-weight:700}
+    .muted{color:#6b7280}
+    .pill{background:#eef2ff;color:#374151;border-radius:999px;padding:.1rem .55rem;font-size:.8rem}
+    .hidden{display:none}
+  </style>
+  {{ form.media }}
+</head>
+<body>
+<div class="container-narrow py-4">
+
+  {% if messages %}
+    <div class="mb-3">
+      {% for m in messages %}
+        <div class="alert {% if m.tags %}alert-{{ m.tags }}{% else %}alert-info{% endif %} shadow-sm" role="alert">{{ m }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <!-- فیلتر نوع آیتم (GET) -->
+  <form method="get" class="card shadow-sm mb-3 tight">
+    <div class="card-body row g-2 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label">نوع آیتم</label>
+        <select name="type" class="form-select" onchange="this.form.submit()">
+          {% with t=request.GET.type|default:'all' %}
+            <option value="all"      {% if t == 'all' %}selected{% endif %}>همه</option>
+            <option value="material" {% if t == 'material' %}selected{% endif %}>متریال</option>
+            <option value="tool"     {% if t == 'tool' %}selected{% endif %}>ابزار مصرفی</option>
+          {% endwith %}
+        </select>
+        <div class="help-text mt-1">بر اساس نوع، لیست «آیتم» در فرم زیر فیلتر می‌شود.</div>
+      </div>
+      <div class="col"></div>
+      <div class="col-md-auto text-end">
+        <span class="pill">ثبت خرید متریال و ابزار مصرفی</span>
+      </div>
+    </div>
+  </form>
+
+  <!-- فرم اصلی (POST) -->
+  <form id="purchase-post-form" method="post" enctype="multipart/form-data" class="card shadow-sm tight">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+      <div class="alert alert-danger small mb-2">{{ form.non_field_errors }}</div>
+    {% endif %}
+    <input type="hidden" name="item_type_filter" value="{{ request.GET.type|default:'all' }}">
+
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-2">
+      <span>فرم خرید</span>
+      <small class="kv">
+        <span class="k">قیمت کل (نمایشی):</span>
+        <span id="totalPreview" class="v">—</span>
+      </small>
+    </div>
+
+    <div class="card-body">
+
+      <!-- ردیف 1: آیتم/کد لات/فروشنده -->
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">آیتم</label>
+          {{ form.item }}
+          {% if form.item.errors %}<div class="text-danger small">{{ form.item.errors }}</div>{% endif %}
+          <div class="help-text mt-1">از قبل در ادمین تعریف شده (متریال یا ابزار مصرفی).</div>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">کد لات/سری</label>
+          {{ form.lot_code }}
+          {% if form.lot_code.errors %}<div class="text-danger small">{{ form.lot_code.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">تأمین‌کننده</label>
+          {{ form.vendor }}
+          {% if form.vendor.errors %}<div class="text-danger small">{{ form.vendor.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <hr class="my-3">
+
+      <!-- ردیف 2: تاریخ‌ها -->
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">تاریخ خرید</label>
+          {{ form.purchase_date }}
+          {% if form.purchase_date.errors %}<div class="text-danger small">{{ form.purchase_date.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">آغاز مصرف (اختیاری)</label>
+          {{ form.start_use_date }}
+          {% if form.start_use_date.errors %}<div class="text-danger small">{{ form.start_use_date.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">اتمام مصرف (اختیاری)</label>
+          {{ form.end_use_date }}
+          {% if form.end_use_date.errors %}<div class="text-danger small">{{ form.end_use_date.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">انقضا (اختیاری)</label>
+          {{ form.expire_date }}
+          {% if form.expire_date.errors %}<div class="text-danger small">{{ form.expire_date.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <hr class="my-3">
+
+      <!-- ردیف 3: رنگ + مقدار/واحد + قیمت‌گذاری -->
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label d-flex align-items-center gap-2">
+            رنگ (Shade) <span class="muted">(برای پرسلن ضروری)</span>
+          </label>
+          {{ form.shade_code }}
+          {% if form.shade_code.errors %}<div class="text-danger small">{{ form.shade_code.errors }}</div>{% endif %}
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">مقدار خرید</label>
+          {{ form.qty_in }}
+          {% if form.qty_in.errors %}<div class="text-danger small">{{ form.qty_in.errors }}</div>{% endif %}
+          <div class="help-text">عدد را بنویس (مثل 2.5 یا 100)</div>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">واحد مقدار</label>
+          {{ form.input_uom }}
+          {% if form.input_uom.errors %}<div class="text-danger small">{{ form.input_uom.errors }}</div>{% endif %}
+        </div>
+
+        <div class="col-md-4">
+          <div class="row g-2">
+            <div class="col-12">
+              <label class="form-label">حالت قیمت‌گذاری</label>
+              {{ form.price_mode }}
+            </div>
+            <div class="col-6" id="unitPriceBox">
+              <label class="form-label">قیمت واحد</label>
+              {{ form.unit_cost }}
+              {% if form.unit_cost.errors %}<div class="text-danger small">{{ form.unit_cost.errors }}</div>{% endif %}
+              <div class="help-text">براساس «واحد مقدار» بالا (مثلاً هر kg / box / pcs)</div>
+            </div>
+            <div class="col-6 hidden" id="totalPriceBox">
+              <label class="form-label">قیمت کل</label>
+              {{ form.total_cost }}
+              {% if form.total_cost.errors %}<div class="text-danger small">{{ form.total_cost.errors }}</div>{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <hr class="my-3">
+
+      <!-- ردیف 4: فاکتور/پیوست/یادداشت/ارز -->
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">شماره فاکتور</label>
+          {{ form.invoice_no }}
+          {% if form.invoice_no.errors %}<div class="text-danger small">{{ form.invoice_no.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">ارز</label>
+          {{ form.currency }}
+          {% if form.currency.errors %}<div class="text-danger small">{{ form.currency.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">پیوست فاکتور</label>
+          {{ form.attachment }}
+          {% if form.attachment.errors %}<div class="text-danger small">{{ form.attachment.errors }}</div>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">توضیحات</label>
+          {{ form.notes }}
+          {% if form.notes.errors %}<div class="text-danger small">{{ form.notes.errors }}</div>{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card-footer d-flex justify-content-between">
+      <a href="{% url 'billing:expense_list' %}" class="btn btn-light">بازگشت</a>
+      <button type="submit" class="btn btn-primary">ذخیره</button>
+    </div>
+  </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  var postForm = document.getElementById('purchase-post-form');
+
+  // تاریخ‌ها
+  ['id_purchase_date','id_start_use_date','id_end_use_date','id_expire_date'].forEach(function(id){
+    var el = document.getElementById(id);
+    if (!el) return;
+    try { el.type = 'text'; } catch(e){}
+    el.classList.add('jalali_date');
+    el.setAttribute('autocomplete', 'off');
+    el.setAttribute('dir', 'ltr');
+    el.setAttribute('placeholder', 'YYYY/MM/DD');
+  });
+
+  if (window.DateUtils && typeof DateUtils.initJalaliInputs === 'function') {
+    DateUtils.initJalaliInputs();
+  }
+  if (postForm && window.DateUtils && typeof DateUtils.normalizeFormDates === 'function') {
+    postForm.addEventListener('submit', function(){ DateUtils.normalizeFormDates(postForm); });
+  }
+
+  // سوییچ حالت قیمت‌گذاری (unit/total)
+  var priceMode = document.getElementById('id_price_mode');
+  var unitBox = document.getElementById('unitPriceBox');
+  var totalBox = document.getElementById('totalPriceBox');
+  function syncPriceBoxes(){
+    var pm = priceMode ? priceMode.value : 'unit';
+    if(pm === 'total'){
+      unitBox.classList.add('hidden');
+      totalBox.classList.remove('hidden');
+    }else{
+      totalBox.classList.add('hidden');
+      unitBox.classList.remove('hidden');
+    }
+    updateTotal();
+  }
+  if(priceMode){ priceMode.addEventListener('change', syncPriceBoxes); syncPriceBoxes(); }
+
+  // پیش‌نمایش قیمت کل = qty * unit یا خودِ total
+  function faToEnNum(s){
+    return String(s||'')
+      .replace(/[۰-۹]/g, d=>'۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
+      .replace(/[٠-٩]/g, d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d))
+      .replace(/[,\s٬،]/g,'')
+      .replace('٫','.');
+  }
+  function toDec(s){ var x = parseFloat(faToEnNum(s)); return isNaN(x) ? 0 : x; }
+
+  var qty = document.getElementById('id_qty_in');
+  var unitPrice = document.getElementById('id_unit_cost');
+  var totalPrice = document.getElementById('id_total_cost');
+  var preview = document.getElementById('totalPreview');
+
+  function updateTotal(){
+    var pm = priceMode ? priceMode.value : 'unit';
+    var total = 0;
+    if(pm === 'total'){
+      total = toDec(totalPrice && totalPrice.value);
+    }else{
+      total = (toDec(qty && qty.value) * toDec(unitPrice && unitPrice.value));
+    }
+    preview.textContent = total ? total.toLocaleString('fa-IR') : '—';
+  }
+  ['input','change'].forEach(function(ev){
+    if(qty) qty.addEventListener(ev, updateTotal);
+    if(unitPrice) unitPrice.addEventListener(ev, updateTotal);
+    if(totalPrice) totalPrice.addEventListener(ev, updateTotal);
+  });
+  updateTotal();
+});
+</script>
+</body>
+</html>
+
+
+
+
+

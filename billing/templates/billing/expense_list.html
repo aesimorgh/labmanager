@@ -1,0 +1,184 @@
+{% extends "base_user_panel.html" %}
+{% load jalali_tags %}
+{% load num_extras %}
+
+{% block title %}هزینه‌ها{% endblock %}
+
+{% block head_extra %}
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
+<style>
+  .container-narrow{max-width:1100px;margin-inline:auto;}
+  .num{font-variant-numeric:tabular-nums;text-align:end;}
+  .nowrap{white-space:nowrap;}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-narrow">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h5 m-0">هزینه‌ها</h1>
+    <div class="d-flex gap-2">
+      <a class="btn btn-primary btn-sm" href="{% url 'billing:expense_create' %}">+ ثبت هزینه</a>
+      <a class="btn btn-outline-secondary btn-sm" href="?{% if q %}q={{ q }}&{% endif %}{% if cat %}cat={{ cat }}&{% endif %}{% if d1 %}d1={{ d1 }}&{% endif %}{% if d2 %}d2={{ d2 }}&{% endif %}format=csv">خروجی CSV</a>
+    </div>
+  </div>
+
+  <form class="row g-2 mb-3">
+    <div class="col-md-3">
+      <input type="text" class="form-control" name="q" value="{{ q }}" placeholder="جستجو در یادداشت/عنوان/فروشنده">
+    </div>
+    <div class="col-md-2">
+      <select class="form-select" name="cat">
+        <option value="">همه دسته‌ها</option>
+        {% for val,label in cat_choices %}
+          <option value="{{ val }}" {% if val == cat %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    {# فیلتر تاریخ شمسی + ارسال ISO در هیدن #}
+    <div class="col-md-2">
+      <input type="text" id="x_d1" class="form-control" placeholder="از تاریخ (شمسی)">
+      <input type="hidden" id="x_d1_h" name="d1" value="{{ d1 }}">
+    </div>
+    <div class="col-md-2">
+      <input type="text" id="x_d2" class="form-control" placeholder="تا تاریخ (شمسی)">
+      <input type="hidden" id="x_d2_h" name="d2" value="{{ d2 }}">
+    </div>
+
+    <div class="col-md-3 text-end">
+      <button class="btn btn-secondary">اعمال فیلتر</button>
+    </div>
+  </form>
+
+  <div class="card shadow-sm">
+    <div class="card-header bg-primary text-white py-2 d-flex justify-content-between">
+      <span>لیست هزینه‌ها</span>
+      <small>جمع: {{ total|money_fa }}</small>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-striped align-middle mb-0">
+          <thead>
+            <tr>
+              <th style="width:120px">تاریخ ثبت</th>
+              <th style="width:120px">تاریخ پرداخت</th>
+              <th style="width:140px">دسته</th>
+              <th>عنوان</th>
+              <th style="width:200px">فروشنده</th>
+              <th class="num" style="width:160px">مبلغ</th>
+              <th class="nowrap" style="width:110px">پیوست</th>
+            </tr>
+          </thead>
+          <tbody>
+  {% if rows %}
+    {% for e in rows %}
+      <tr data-note="{{ e.note|default:'' }}">
+        <td class="pdate" data-gdate="{{ e.date|date:'Y-m-d' }}">{{ e.date|to_jalali:"%Y/%m/%d"|digits_fa }}</td>
+        <td>
+          {% if e.paid_date %}
+            {{ e.paid_date|to_jalali:"%Y/%m/%d"|digits_fa }}
+          {% elif e.paid_text %}
+            {{ e.paid_text|digits_fa }}
+          {% else %}
+           —
+          {% endif %}
+        </td>
+
+        <td>{{ e.get_category_display }}</td>
+
+        <td>
+  {{ e.title|default:"—" }}
+</td>
+
+        <td>{{ e.vendor|default:"—" }}</td>
+        <td class="num">{{ e.amount|money_fa }}</td>
+        <td class="nowrap">
+          {% if e.attachment %}
+            <a class="btn btn-outline-primary btn-sm" href="{{ e.attachment.url }}" download>دانلود</a>
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+  {% else %}
+    <tr><td colspan="6" class="text-center text-muted py-4">موردی ثبت نشده است.</td></tr>
+  {% endif %}
+</tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="text-center text-muted small mt-3">Expenses • v1.2 (Jalali Filters + Attachments)</div>
+</div>
+{% endblock %}
+
+{% block body_extra %}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
+<script>
+(function(){
+  var $d1 = $("#x_d1"), $d1h = $("#x_d1_h");
+  var $d2 = $("#x_d2"), $d2h = $("#x_d2_h");
+
+  function fa2en(s){
+    var fa='۰۱۲۳۴۵۶۷۸۹', ar='٠١٢٣٤٥٦٧٨٩';
+    return String(s||'')
+      .replace(/[۰-۹]/g, d=>''+fa.indexOf(d))
+      .replace(/[٠-٩]/g, d=>''+ar.indexOf(d));
+  }
+  function isoToJal(iso){
+    try{
+      var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec((iso||'').trim());
+      if(!m || !window.persianDate) return '';
+      var gy=+m[1],gm=+m[2],gd=+m[3];
+      return new persianDate([gy,gm,gd]).calendar('persian').format('YYYY/MM/DD');
+    }catch(_){return '';}
+  }
+  function jalToISO(jal){
+    try{
+      var s=fa2en(String(jal||'').trim().replace(/-/g,'/'));
+      if(!/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(s) || !window.persianDate) return '';
+      var p=s.split('/').map(Number);
+      var pd=new persianDate([p[0],p[1],p[2]]);
+      if (typeof pd.toCalendar==='function') return pd.toCalendar('gregorian').format('YYYY-MM-DD');
+      if (typeof pd.calendar==='function')   return pd.calendar('gregorian').format('YYYY-MM-DD');
+      return '';
+    }catch(_){return '';}
+  }
+
+  function bindPicker($inp, $hid){
+    $inp.persianDatepicker({
+      format: 'YYYY/MM/DD',
+      autoClose: true,
+      calendar: { persian: { locale: 'fa' } },
+      onSelect: function(unix){
+        try{
+          var j = new persianDate(unix).calendar('persian').format('YYYY/MM/DD');
+          var iso = jalToISO(j);
+          if (iso) $hid.val(iso);
+        }catch(_){}
+      }
+    });
+    // اگر دستی تایپ شد
+    $inp.on('change blur', function(){
+      var iso = jalToISO($inp.val());
+      if (iso) $hid.val(iso);
+    });
+  }
+
+  bindPicker($d1,$d1h);
+  bindPicker($d2,$d2h);
+
+  // پرکردن اولیه از مقادیر ISO موجود (برای فیلترهای قبلی)
+  (function prefill(){
+    var a=$d1h.val(); if(a){ var j=isoToJal(a); if(j) $d1.val(j.replace(/\d/g, d=>'۰۱۲۳۴۵۶۷۸۹'[d])); }
+    var b=$d2h.val(); if(b){ var j=isoToJal(b); if(j) $d2.val(j.replace(/\d/g, d=>'۰۱۲۳۴۵۶۷۸۹'[d])); }
+  })();
+})();
+</script>
+{% endblock %}

@@ -45,6 +45,64 @@
       </div>
     </div>
   </div>
+      <!-- مصرف متریال (COGS) -->
+    <div class="col-md-7">
+      <div class="card shadow-sm">
+        <div class="card-header bg-warning">مصرف متریال (COGS)</div>
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="text-muted">بهای متریال این سفارش:</div>
+            <div class="fs-5 fw-bold">{{ order.material_cogs|money_fa }}</div>
+          </div>
+
+          {% with moves=order.stock_movements.all %}
+            {% if moves %}
+              {% if moves|length > 0 %}
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle">
+                    <thead>
+                      <tr>
+                        <th style="width:48px;">#</th>
+                        <th>آیتم</th>
+                        <th>مقدار مصرف</th>
+                        <th>هزینهٔ واحد</th>
+                        <th>تاریخ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for mv in moves %}
+                        {% if mv.movement_type == 'issue' %}
+                          <tr>
+                            <td>{{ forloop.counter|int_fa }}</td>
+                            <td>{{ mv.item.name }}</td>
+                            <td>
+                              {# qty در issue منفی است؛ با cut «-» را حذف می‌کنیم تا مقدار مثبت نمایش داده شود #}
+                              {{ mv.qty|floatformat:"-3"|cut:"-"|digits_fa }} {{ mv.item.uom }}
+                            </td>
+                            <td>{{ mv.unit_cost_effective|money_fa }}</td>
+                            <td>{{ mv.happened_at|jalali_date|digits_fa }}</td>
+                          </tr>
+                        {% endif %}
+                      {% endfor %}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <th colspan="3" class="text-end">جمع کل متریال:</th>
+                        <th colspan="2">{{ order.material_cogs|money_fa }}</th>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              {% else %}
+                <div class="text-muted">مصرفی ثبت نشده است.</div>
+              {% endif %}
+            {% else %}
+              <div class="text-muted">مصرفی ثبت نشده است.</div>
+            {% endif %}
+          {% endwith %}
+        </div>
+      </div>
+    </div>
 
   <div class="row g-3">
     <!-- مراحل تولید (StageInstance) -->

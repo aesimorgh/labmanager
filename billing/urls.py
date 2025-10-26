@@ -25,6 +25,21 @@ from .views import (
 
     # هاب مالی (ویوی جدید)
     FinancialHomeView,
+
+    # ←← افزودنی‌ها
+    ExpenseListView,
+    ExpenseCreateView,
+
+    MaterialPurchaseCreateView,
+    MaterialIssueCreateView,
+
+    MaterialConsumptionReportView,
+    MaterialPurchaseListView,
+
+    EquipmentListView,
+    RepairCreateView,
+    RepairsListView,
+    CostsHomeView,
 )
 
 app_name = "billing"
@@ -75,6 +90,20 @@ urlpatterns = [
 
     # ثبت پرداخت جدید برای دکتر
     path("doctor/<int:doctor_id>/payments/create/", DoctorPaymentCreateView.as_view(), name="doctor_payment_create"),
+
+        # هزینه‌ها
+    path("expenses/", ExpenseListView.as_view(), name="expense_list"),
+    path("expenses/create/", ExpenseCreateView.as_view(), name="expense_create"),
+
+    path("materials/purchase/new/", MaterialPurchaseCreateView.as_view(), name="material_purchase_create"),
+    path("materials/issue/new/",    MaterialIssueCreateView.as_view(),    name="material_issue_create"),
+    path("reports/material-consumption/", MaterialConsumptionReportView.as_view(), name="report_material_consumption"),
+    path("materials/purchase/list/", MaterialPurchaseListView.as_view(), name="material_purchase_list"),
+
+    path("assets/equipment/", EquipmentListView.as_view(), name="equipment_list"),
+    path("assets/repairs/", RepairsListView.as_view(), name="repairs_list"),
+    path("assets/repairs/create/", RepairCreateView.as_view(), name="repair_create"),
+    path("costs/", CostsHomeView.as_view(), name="costs_home"),
 ]
 
 

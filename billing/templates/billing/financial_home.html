@@ -1,7 +1,7 @@
 {% extends "base_user_panel.html" %}
 {% load num_extras %}
 {% block title %}مالی{% endblock %}
-
+{% load jalali_tags %}
 {% block head_extra %}
   <style>
     .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem}
@@ -90,10 +90,18 @@
       <h3>گزارش‌های مالی</h3>
       <p class="muted">فروش ماهانه، مجموع تخفیف‌ها، مطالبات باز و Aging بدهی‌ها.</p>
       <div class="actions">
-        <a class="btn" href="{% url 'billing:reports_home' %}">نمایش گزارش‌ها</a>
+        <a class="btn" href="{% url 'billing:report_open_invoices' %}">نمایش گزارش‌ها</a>
       </div>
     </div>
   </div>
+
+      <div class="cardx">
+      <h3>هزینه‌ها</h3>
+      <p class="muted">ثبت و مدیریت: هزینه‌های جاری، خرید متریال/ابزار، تجهیزات و تعمیرات.</p>
+      <div class="actions">
+        <a class="btn" href="{% url 'billing:costs_home' %}">هاب هزینه‌ها</a>
+      </div>
+    </div>
 
   <!-- نمودار + آخرین‌ها + ۵ بدهکار برتر -->
   <div class="grid-2">
@@ -127,8 +135,10 @@
                 <tr>
                   <td>{{ inv.code }}</td>
                   <td>{{ inv.doctor_name }}</td>
-                  <td class="muted">{{ inv.issued_at|date:"Y-m-d"|digits_fa }}</td>
-                  <td class="num">{{ inv.amount_due|money_fa }}</td>
+                   <td class="muted" data-gdate="{{ inv.issued_at|date:'Y-m-d' }}">
+                     <span class="jalali-date">{{ inv.issued_at|to_jalali:"%Y/%m/%d"|digits_fa }}</span>
+                   </td>
+                 <td class="num">{{ inv.amount_due|money_fa }}</td>
                   <td><a class="btn" href="{{ inv.url|default:'#' }}">جزئیات</a></td>
                 </tr>
               {% endfor %}
@@ -187,6 +197,44 @@
 
 {% block body_extra %}
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
+<script>
+(function formatLatestOpenInvoicesDates(){
+  function faDigits(s){
+    if (window.DateUtils && typeof DateUtils.faDigits === 'function') return DateUtils.faDigits(s+'');
+    return (s+'').replace(/\d/g, d=>"۰۱۲۳۴۵۶۷۸۹"[d]);
+  }
+  function toJalaliFromISO(iso){
+    if (!iso) return '';
+    // اولویت با DateUtils مرکزی
+    if (window.DateUtils){
+      if (typeof DateUtils.toJalaliStrFromISO === 'function') return DateUtils.toJalaliStrFromISO(iso);
+      if (typeof DateUtils.toJalaliString    === 'function')    return DateUtils.toJalaliString(iso);
+      if (typeof DateUtils.gregorianToJalali === 'function'){
+        try{
+          var p = iso.split('-').map(Number);
+          var j = DateUtils.gregorianToJalali(p[0], p[1], p[2]); // [jy,jm,jd]
+          var pad = n => (n<10?'0':'')+n;
+          return j ? (j[0]+'/'+pad(j[1])+'/'+pad(j[2])) : '';
+        }catch(e){}
+      }
+    }
+    // fallback با persian-date
+    try{
+      var g = new Date(iso + 'T00:00:00');
+      if (isNaN(g.getTime())) return '';
+      return new persianDate(g).calendar('persian').format('YYYY/MM/DD');
+    }catch(e){ return ''; }
+  }
+
+  document.querySelectorAll('td.pdate[data-gdate]').forEach(function(td){
+    var iso = (td.getAttribute('data-gdate')||'').trim(); // مثل "2025-10-02"
+    if(!iso){ td.textContent = '—'; return; }
+    var j = toJalaliFromISO(iso);
+    td.textContent = j ? faDigits(j) : faDigits(iso.replace(/-/g,'/'));
+  });
+})();
+</script>
   <script>
     (function(){
       var raw = document.getElementById('monthlyData');
@@ -228,6 +276,59 @@
       });
     })();
   </script>
+  <script>
+document.addEventListener('DOMContentLoaded', function(){
+  (function formatDashboardDatesFix(){
+    function faDigits(s){
+      return (s+'').replace(/\d/g, d=>"۰۱۲۳۴۵۶۷۸۹"[d]);
+    }
+    function toJalaliFromISO(iso){
+      if (!iso) return '';
+      var out = '';
+      try {
+        if (window.DateUtils){
+          if (typeof DateUtils.toJalaliStrFromISO === 'function')
+            out = DateUtils.toJalaliStrFromISO(iso);
+          else if (typeof DateUtils.toJalaliString === 'function')
+            out = DateUtils.toJalaliString(iso);
+          else if (typeof DateUtils.gregorianToJalali === 'function'){
+            var p = iso.split('-').map(Number);
+            var j = DateUtils.gregorianToJalali(p[0], p[1], p[2]);
+            var pad = n => (n<10?'0':'')+n;
+            out = j ? (j[0]+'/'+pad(j[1])+'/'+pad(j[2])) : '';
+          }
+        }
+      }catch(e){ /* ساکت باش؛ پیام دیباگ نده */ }
+
+      // اگر هنوز خروجی خالیه، fallback با persian-date
+      if (!out && window.persianDate){
+        try {
+          var g = new Date(iso + 'T00:00:00');
+          if (!isNaN(g.getTime()))
+            out = new persianDate(g).calendar('persian').format('YYYY/MM/DD');
+        } catch(e){}
+      }
+      return out;
+    }
+
+    // فقط تاریخ‌های جدول «آخرین فاکتورهای باز»
+    document.querySelectorAll('td.pdate[data-gdate]').forEach(function(td){
+      var iso = (td.getAttribute('data-gdate')||'').trim();
+      if(!iso){ td.textContent = '—'; return; }
+      var j = toJalaliFromISO(iso);
+      td.textContent = j ? faDigits(j) : faDigits(iso.replace(/-/g,'/'));
+    });
+  })();
+});
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  // هر سلول تاریخ شمسی رو دوباره با مقدار داخلیش بازنویسی می‌کنیم تا میلادی جایگزین نشه
+  document.querySelectorAll('td[data-gdate] .jalali-date').forEach(function(span){
+    if(span && span.textContent) span.parentNode.textContent = span.textContent;
+  });
+});
+</script>
 {% endblock %}
 
 

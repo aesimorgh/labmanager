@@ -1,0 +1,200 @@
+{% load jalali_tags %}
+{% load num_extras %}
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>لیست خرید متریال و ابزار مصرفی</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
+  <style>
+    body{background:#f7f7fb}
+    .container-narrow{max-width:1100px;margin-inline:auto}
+    .num{font-variant-numeric:tabular-nums;text-align:end}
+    .tight .form-control,.tight .form-select{height:38px;padding:.35rem .5rem}
+    .card{border-radius:14px}
+    .card-header{border-top-left-radius:14px;border-top-right-radius:14px}
+    .pwt-datepicker-container{z-index:2050 !important;}
+  </style>
+</head>
+<body>
+<div class="container-narrow py-4">
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h5 m-0">لیست خریدها</h1>
+    <div class="d-flex gap-2">
+      <a href="{% url 'billing:material_purchase_create' %}?type={{ t|default:'all' }}" class="btn btn-primary btn-sm">+ ثبت خرید جدید</a>
+    </div>
+  </div>
+
+  <!-- فیلترها: نوع، جستجو، بازه تاریخ شمسی -->
+  <form method="get" class="card p-3 shadow-sm mb-3 tight">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label">نوع آیتم</label>
+        <select name="type" class="form-select">
+          <option value="all" {% if t == 'all' %}selected{% endif %}>همه</option>
+          <option value="material" {% if t == 'material' %}selected{% endif %}>متریال</option>
+          <option value="tool" {% if t == 'tool' %}selected{% endif %}>ابزار مصرفی</option>
+        </select>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">جستجو</label>
+        <input class="form-control" type="text" name="q" value="{{ q }}" placeholder="نام/کد آیتم، فروشنده، فاکتور">
+      </div>
+
+      <!-- تاریخ از (شمسی) -->
+      <div class="col-md-2">
+        <label class="form-label">از تاریخ</label>
+        <input type="text" id="x_d1" class="form-control" placeholder="YYYY/MM/DD">
+        <input type="hidden" id="x_d1_h" name="d1" value="{{ d1 }}">
+      </div>
+
+      <!-- تاریخ تا (شمسی) -->
+      <div class="col-md-2">
+        <label class="form-label">تا تاریخ</label>
+        <input type="text" id="x_d2" class="form-control" placeholder="YYYY/MM/DD">
+        <input type="hidden" id="x_d2_h" name="d2" value="{{ d2 }}">
+      </div>
+
+      <div class="col-md-3 text-end">
+        <button class="btn btn-secondary">اعمال فیلتر</button>
+        <a class="btn btn-light" href="?">پاک‌سازی</a>
+      </div>
+    </div>
+  </form>
+
+  <!-- جدول -->
+  <div class="card shadow-sm">
+    <div class="card-header bg-primary text-white py-2">خریدهای اخیر</div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-striped align-middle mb-0">
+          <thead>
+            <tr>
+              <th style="width:110px">تاریخ خرید</th>
+              <th>آیتم</th>
+              <th style="width:95px">نوع</th>
+              <th style="width:110px">رنگ</th>
+              <th class="num" style="width:150px">مقدار (پایه)</th>
+              <th class="num" style="width:140px">قیمت واحد (پایه)</th>
+              <th class="num" style="width:160px">قیمت کل</th>
+              <th style="width:160px">فروشنده</th>
+              <th style="width:120px">فاکتور</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if rows %}
+              {% for r in rows %}
+                <tr>
+                  <td>{{ r.purchase_date|to_jalali:"%Y/%m/%d"|digits_fa }}</td>
+                  <td>{{ r.item.name }}</td>
+                  <td>{% if r.item.item_type == 'tool' %}ابزار{% else %}متریال{% endif %}</td>
+                  <td>{{ r.shade_code|default:"—" }}</td>
+
+                  <!-- عدم نمایش اعشار اضافی -->
+                  <td class="num">
+                    {% if r.qty_in == r.qty_in|floatformat:0 %}
+                      {{ r.qty_in|floatformat:0|digits_fa }}
+                    {% else %}
+                      {{ r.qty_in|floatformat:3|digits_fa }}
+                    {% endif %}
+                    {{ r.item.uom }}
+                  </td>
+
+                  <td class="num">{{ r.unit_cost|money_fa }}</td>
+                  <td class="num">{{ r.total_cost|money_fa }}</td>
+                  <td>{{ r.vendor|default:"—" }}</td>
+                  <td>{{ r.invoice_no|default:"—" }}</td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr><td colspan="9" class="text-center text-muted py-4">خریدی ثبت نشده است.</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="text-center text-muted small mt-3">Purchases • v0.3 (Jalali filters)</div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
+<script>
+(function(){
+  var $d1 = $("#x_d1"), $d1h = $("#x_d1_h");
+  var $d2 = $("#x_d2"), $d2h = $("#x_d2_h");
+
+  function fa2en(s){
+    var fa='۰۱۲۳۴۵۶۷۸۹', ar='٠١٢٣٤٥٦٧٨٩';
+    return String(s||'')
+      .replace(/[۰-۹]/g, d=>''+fa.indexOf(d))
+      .replace(/[٠-٩]/g, d=>''+ar.indexOf(d));
+  }
+  function isoToJal(iso){
+    try{
+      var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec((iso||'').trim());
+      if(!m || !window.persianDate) return '';
+      var gy=+m[1],gm=+m[2],gd=+m[3];
+      return new persianDate([gy,gm,gd]).calendar('persian').format('YYYY/MM/DD');
+    }catch(_){return '';}
+  }
+  function jalToISO(jal){
+    try{
+      var s=fa2en(String(jal||'').trim().replace(/-/g,'/'));
+      if(!/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(s) || !window.persianDate) return '';
+      var p=s.split('/').map(Number);
+      var pd=new persianDate([p[0],p[1],p[2]]);
+      if (typeof pd.toCalendar==='function') return pd.toCalendar('gregorian').format('YYYY-MM-DD');
+      if (typeof pd.calendar==='function')   return pd.calendar('gregorian').format('YYYY-MM-DD');
+      return '';
+    }catch(_){return '';}
+  }
+
+  function bindPicker($inp, $hid){
+    $inp.persianDatepicker({
+    format: 'YYYY/MM/DD',
+    autoClose: true,
+    initialValue: false,               // ⬅️ جلوگیری از پرشدن خودکار با «امروز»
+    calendar: { persian: { locale: 'fa' } },
+    onSelect: function(unix){
+      try{
+        var j = new persianDate(unix).calendar('persian').format('YYYY/MM/DD');
+        var iso = jalToISO(j);
+        if (iso) $hid.val(iso);
+      }catch(_){}
+    }
+  });
+    // اگر دستی تایپ شد
+    $inp.on('change blur', function(){
+      var iso = jalToISO($inp.val());
+      if (iso) $hid.val(iso);
+    });
+  }
+
+  bindPicker($d1,$d1h);
+  bindPicker($d2,$d2h);
+
+  // پرکردن اولیه از مقادیر ISO موجود
+  (function prefill(){
+    var a=$d1h.val(); if(a){ var j=isoToJal(a); if(j) $d1.val(j.replace(/\d/g, d=>'۰۱۲۳۴۵۶۷۸۹'[d])); }
+    var b=$d2h.val(); if(b){ var j=isoToJal(b); if(j) $d2.val(j.replace(/\d/g, d=>'۰۱۲۳۴۵۶۷۸۹'[d])); }
+  })();
+  // ⬇️ همگام‌سازی قطعی در لحظهٔ ارسال فرم فیلتر
+var filterForm = document.querySelector('form.card.p-3.shadow-sm.mb-3.tight');
+if (filterForm){
+  filterForm.addEventListener('submit', function(){
+    var j1 = $d1.val(), j2 = $d2.val();
+    var i1 = jalToISO(j1), i2 = jalToISO(j2);
+    if (i1) $d1h.val(i1); else $d1h.val('');   // خالی = بدون فیلتر از تاریخ
+    if (i2) $d2h.val(i2); else $d2h.val('');   // خالی = بدون فیلتر تا تاریخ
+  });
+}
+})();
+</script>
+</body>
+</html>

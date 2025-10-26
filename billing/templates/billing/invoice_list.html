@@ -94,8 +94,7 @@
                   <td class="num">{{ inv.total_amount|default:0|money_fa }}</td>
                   <td class="num">{{ inv.amount_due|default:0|money_fa }}</td>
                   <td>
-                    {% if inv.issued_at %}{{ inv.issued_at|to_jalali:"%Y/%m/%d" }}{% else %}<span class="text-muted">—</span>{% endif %}
-                  </td>
+                    {% if inv.issued_at %}{{ inv.issued_at|to_jalali:"%Y/%m/%d"|digits_fa }}{% else %}<span class="text-muted">—</span>{% endif %}                  </td>
                   <td>
                     <a class="btn btn-sm btn-outline-primary btn-chip" href="{% url 'billing:invoice_detail' inv.id %}">جزئیات</a>
                     <a class="btn btn-sm btn-outline-secondary btn-chip" href="{% url 'billing:invoice_print' inv.id %}" target="_blank">چاپ</a>

@@ -1,0 +1,57 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>ثبت مصرف متریال</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
+  {{ form.media }} {# ضروری برای JalaliDateField / ویجت تاریخ #}
+</head>
+<body class="container mt-4">
+  <h3 class="mb-3">ثبت مصرف متریال برای سفارش</h3>
+
+  {% if messages %}
+    <div class="mb-3">
+      {% for m in messages %}
+        <div class="alert {% if m.tags %}alert-{{ m.tags }}{% else %}alert-info{% endif %}" role="alert">{{ m }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <form method="post" class="card p-3 shadow-sm">
+    {% csrf_token %}
+    {{ form.as_p }}
+
+    <div class="mt-2 d-flex gap-2">
+      <button type="submit" class="btn btn-success">ثبت مصرف</button>
+      <a href="{% url 'billing:expense_list' %}" class="btn btn-secondary">بازگشت</a>
+    </div>
+  </form>
+</body>
+</html>
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  // این ID باید با فیلد تاریخ مصرف یکی باشد
+  var el = document.getElementById('id_happened_at');
+  if (el){
+    try { el.type = 'text'; } catch(e){}
+    el.classList.add('jalali_date');
+    el.setAttribute('autocomplete', 'off');
+    el.setAttribute('dir', 'ltr');
+    el.setAttribute('placeholder', 'YYYY/MM/DD');
+  }
+
+  // راه‌اندازی دیت‌پیکر از فایل مرکزی
+  if (window.DateUtils && typeof DateUtils.initJalaliInputs === 'function') {
+    DateUtils.initJalaliInputs();
+  }
+
+  // نرمال‌سازی تاریخ‌ها قبل از submit
+  var form = document.querySelector('form');
+  if (form && window.DateUtils && typeof DateUtils.normalizeFormDates === 'function') {
+    form.addEventListener('submit', function(){
+      DateUtils.normalizeFormDates(form);
+    });
+  }
+});
+</script>
