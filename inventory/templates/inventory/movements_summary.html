@@ -1,0 +1,53 @@
+{% extends "base_user_panel.html" %}
+{% load num_extras %}
+{% block title %}گزارش خلاصه حرکات انبار{% endblock %}
+
+{% block content %}
+<div class="card"><div class="card-body">
+  <h2 style="margin:0 0 1rem 0">گزارش خلاصه حرکات انبار</h2>
+  <p class="small" style="margin:0 0 1rem 0">
+    در این جدول برای هر آیتم، مجموع ورود، مجموع خروج و موجودی فعلی نمایش داده می‌شود.
+  </p>
+
+  {% if summary %}
+  <div style="overflow:auto">
+    <table style="width:100%;border-collapse:collapse">
+      <thead style="background:#f8fafc">
+        <tr>
+          <th style="text-align:right;padding:.5rem">#</th>
+          <th style="text-align:right;padding:.5rem">نام آیتم</th>
+          <th style="text-align:right;padding:.5rem">نوع</th>
+          <th style="text-align:right;padding:.5rem">واحد</th>
+          <th style="text-align:right;padding:.5rem">مجموع ورود</th>
+          <th style="text-align:right;padding:.5rem">مجموع خروج</th>
+          <th style="text-align:right;padding:.5rem">موجودی فعلی</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in summary %}
+        <tr style="border-top:1px solid #e5e7eb">
+          <td style="padding:.5rem">{{ forloop.counter|int_fa }}</td>
+          <td style="padding:.5rem">{{ row.item__name }}</td>
+          <td style="padding:.5rem">
+            {% if row.item__item_type == 'material' %}متریال{% else %}ابزار مصرفی{% endif %}
+          </td>
+          <td style="padding:.5rem">{{ row.item__uom }}</td>
+          <td style="padding:.5rem">{{ row.total_in|floatformat:3|digits_fa }}</td>
+          <td style="padding:.5rem">{{ row.total_out|floatformat:3|digits_fa }}</td>
+          <td style="padding:.5rem">
+            {% if row.balance < 0 %}
+              <span style="color:#dc2626;font-weight:bold">{{ row.balance|floatformat:3|digits_fa }}</span>
+            {% else %}
+              {{ row.balance|floatformat:3|digits_fa }}
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <p class="small muted">داده‌ای برای نمایش وجود ندارد.</p>
+  {% endif %}
+</div></div>
+{% endblock %}

@@ -1509,7 +1509,7 @@ from django.utils.decorators import method_decorator
 from django.contrib.auth.decorators import login_required
 from django.views import View
 from django.shortcuts import render
-from django.db.models import Sum
+from django.db.models import Sum, F, DecimalField
 from django.urls import reverse
 from django.db.models import Q
 
@@ -1595,6 +1595,8 @@ class FinancialHomeView(View):  # ← فقط همین تغییر: حذف @method
     # --- اکشن اصلی ------------------------------------------------------------
     def get(self, request):
         from billing.models import Invoice
+        from billing.models import StockMovement, MaterialItem
+        from django.utils import timezone
 
         today = timezone.localdate()
         month_keys = self._last_12_months_keys(today)
@@ -1759,7 +1761,29 @@ class FinancialHomeView(View):  # ← فقط همین تغییر: حذف @method
             key=lambda r: r['amount_due'],
             reverse=True
         )[:5]
+        
+                # --- محاسبات مالی مرتبط با انبار ---
+        dec = DecimalField(max_digits=14, decimal_places=2)
+        today = timezone.localdate()
+        first_day_month = today.replace(day=1)
 
+        # ارزش کل موجودی فعلی (موجودی × میانگین قیمت واحد)
+        inventory_value = (
+            MaterialItem.objects.aggregate(
+                total=Sum(F("stock_qty") * F("avg_unit_cost"), output_field=dec)
+            )["total"] or 0
+        )
+
+        # هزینه مواد مصرفی در ماه جاری (movement_type='issue')
+        month_consumption = (
+            StockMovement.objects.filter(
+                movement_type="issue", happened_at__gte=first_day_month
+            ).aggregate(
+                total=Sum(F("qty") * F("unit_cost_effective"), output_field=dec)
+            )["total"] or 0
+        )
+
+        
         ctx = {
             'kpis': {
                 'open_total': open_total,
@@ -1771,6 +1795,8 @@ class FinancialHomeView(View):  # ← فقط همین تغییر: حذف @method
             'monthly_json': monthly_json,
             'latest_open_invoices': latest_open,
             'top_debtors': top_debtors,
+            'inventory_value': inventory_value,
+            'month_consumption': month_consumption,
         }
         return render(request, self.template_name, ctx)
 

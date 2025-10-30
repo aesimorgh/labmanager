@@ -1,0 +1,70 @@
+{% extends "base_user_panel.html" %}
+{% load jalali_tags num_extras %}
+{% block title %}کارتکس انبار{% endblock %}
+
+{% block content %}
+<div class="card"><div class="card-body">
+  <h2 style="margin:0 0 1rem 0">کارتکس انبار</h2>
+  <p class="small" style="margin:0 0 1rem 0">
+    فهرست همهٔ حرکت‌های ورود و خروج انبار (تاریخ‌ها به‌صورت شمسی و با ارقام فارسی نمایش داده می‌شوند).
+  </p>
+
+  {% if movements %}
+  <div style="overflow:auto">
+    <table style="width:100%;border-collapse:collapse">
+      <thead style="background:#f8fafc">
+        <tr>
+          <th style="text-align:right;padding:.5rem">#</th>
+          <th style="text-align:right;padding:.5rem">تاریخ</th>
+          <th style="text-align:right;padding:.5rem">نوع حرکت</th>
+          <th style="text-align:right;padding:.5rem">آیتم</th>
+          <th style="text-align:right;padding:.5rem">رنگ</th>
+          <th style="text-align:right;padding:.5rem">مقدار</th>
+          <th style="text-align:right;padding:.5rem">هزینهٔ واحد</th>
+          <th style="text-align:right;padding:.5rem">توضیح</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in movements %}
+        <tr style="border-top:1px solid #e5e7eb">
+          <td style="padding:.5rem">{{ forloop.counter }}</td>
+
+          {# تاریخ شمسی و اعداد فارسی با / بین اجزا #}
+          <td style="padding:.5rem">
+            {{ m.happened_at|to_jalali:"%Y/%m/%d"|digits_fa }}
+          </td>
+
+          <td style="padding:.5rem">
+            {% if m.movement_type == 'purchase' %}
+              ورود از خرید
+            {% elif m.movement_type == 'issue' %}
+              خروج مصرف
+            {% else %}
+              {{ m.movement_type }}
+            {% endif %}
+          </td>
+          <td style="padding:.5rem">{{ m.item.name }}</td>
+          <td style="padding:.5rem">
+  {% if m.lot and m.lot.shade_code %}
+    {{ m.lot.shade_code }}
+  {% else %}
+    {% if m.item and m.item.shade_enabled %}
+      <span style="color:#999">—</span>
+    {% else %}
+      <span style="color:#ccc">—</span>
+    {% endif %}
+  {% endif %}
+</td>
+          <td style="padding:.5rem">{{ m.qty|floatformat:3|digits_fa }}</td>
+          <td style="padding:.5rem">{{ m.unit_cost_effective|floatformat:2|digits_fa }}</td>
+          <td style="padding:.5rem">{{ m.comment|default:"—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <p class="small muted">حرکتی در انبار ثبت نشده است.</p>
+  {% endif %}
+</div></div>
+{% endblock %}

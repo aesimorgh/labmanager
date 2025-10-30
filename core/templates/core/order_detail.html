@@ -65,7 +65,7 @@
                         <th style="width:48px;">#</th>
                         <th>آیتم</th>
                         <th>مقدار مصرف</th>
-                        <th>هزینهٔ واحد</th>
+                        <th>قیمت واحد متریال</th>
                         <th>تاریخ</th>
                       </tr>
                     </thead>
@@ -79,7 +79,7 @@
                               {# qty در issue منفی است؛ با cut «-» را حذف می‌کنیم تا مقدار مثبت نمایش داده شود #}
                               {{ mv.qty|floatformat:"-3"|cut:"-"|digits_fa }} {{ mv.item.uom }}
                             </td>
-                            <td>{{ mv.unit_cost_effective|money_fa }}</td>
+                            <td>{{ mv.unit_cost_effective|money_fa }}</td> / {{ mv.item.uom }}</td>
                             <td>{{ mv.happened_at|jalali_date|digits_fa }}</td>
                           </tr>
                         {% endif %}
@@ -103,7 +103,50 @@
         </div>
       </div>
     </div>
-
+     <!-- مصرف خودکار از لات‌ها (Stock Issues) -->
+<div class="col-md-7">
+  <div class="card shadow-sm mt-3">
+    <div class="card-header bg-light text-primary fw-bold">مصرف خودکار از لات‌ها</div>
+    <div class="card-body">
+      {% if stock_issues and stock_issues|length > 0 %}
+        <div class="table-responsive">
+          <table class="table table-sm align-middle">
+            <thead class="table-light">
+              <tr>
+                <th style="width:48px;">#</th>
+                <th>آیتم</th>
+                <th>مقدار مصرف</th>
+                <th>هزینهٔ این ردیف</th>
+                <th>تاریخ</th>
+                <th>توضیح</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for si in stock_issues %}
+                <tr>
+                  <td>{{ forloop.counter|int_fa }}</td>
+                  <td>{{ si.item.name }}</td>
+                  <td>{{ si.qty_issued|floatformat:"-3"|digits_fa }} {{ si.item.uom }}</td>
+                  <td>{{ si.row_cost|money_fa }}</td>
+                  <td>{{ si.happened_at|jalali_date|digits_fa }}</td>
+                  <td>{{ si.comment|default:"—" }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot>
+              <tr class="fw-bold text-end">
+                <td colspan="3">جمع هزینهٔ مصرف خودکار:</td>
+                <td colspan="3">{{ issue_costs_total|money_fa }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      {% else %}
+        <div class="text-muted">مصرف خودکار ثبت نشده است.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
   <div class="row g-3">
     <!-- مراحل تولید (StageInstance) -->
     <div class="col-md-7">

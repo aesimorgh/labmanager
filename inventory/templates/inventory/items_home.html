@@ -1,0 +1,38 @@
+{% extends "base_user_panel.html" %}
+{% block title %}مدیریت موجودی‌ها{% endblock %}
+
+{% block content %}
+<div class="card"><div class="card-body">
+  <h2 style="margin:0 0 1rem 0">مدیریت موجودی‌ها</h2>
+  <p class="small" style="margin:0 0 1rem 0">
+    اینجا سه گروه موجودی انبار را می‌بینی: متریال (مواد مصرفی)، ابزار مصرفی و تجهیزات.
+  </p>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">
+    <!-- متریال (مواد مصرفی) -->
+    <a class="card" href="/inventory/items/materials/" style="text-decoration:none">
+      <div class="card-body">
+        <strong>متریال (مواد مصرفی)</strong>
+        <div class="small">فهرست متریال‌های تعریف‌شده و مدیریت آن‌ها</div>
+      </div>
+    </a>
+
+    <!-- ابزار مصرفی -->
+    <a class="card" href="/inventory/items/consumables/" style="text-decoration:none">
+      <div class="card-body">
+        <strong>ابزار مصرفی</strong>
+        <div class="small">فهرست ابزارهای مصرفی و مدیریت آن‌ها</div>
+      </div>
+    </a>
+
+    <!-- تجهیزات -->
+    <a class="card" href="/inventory/items/equipment/" style="text-decoration:none">
+      <div class="card-body">
+        <strong>تجهیزات</strong>
+        <div class="small">فهرست تجهیزات (اتصال به صفحهٔ تجهیزات موجود)</div>
+      </div>
+    </a>
+
+  </div>
+</div></div>
+{% endblock %}

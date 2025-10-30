@@ -1,0 +1,93 @@
+{% extends "base_user_panel.html" %}
+{% block title %}گزارش وضعیت موجودی{% endblock %}
+
+{% block content %}
+<div class="card"><div class="card-body">
+  <h2 style="margin:0 0 1rem 0">گزارش وضعیت موجودی فعلی</h2>
+  <p class="small" style="margin:0 0 1rem 0">موجودی «متریال» و «ابزار مصرفی» به‌صورت جداگانه نمایش داده می‌شود.</p>
+
+  <!-- جدول ۱: متریال (مواد مصرفی) -->
+  <h3 style="margin:1rem 0 .5rem 0;font-size:1.05rem">متریال (مواد مصرفی)</h3>
+  {% with has_mat=False %}
+  <div style="overflow:auto">
+    <table style="width:100%;border-collapse:collapse">
+      <thead style="background:#f8fafc">
+        <tr>
+          <th style="text-align:right;padding:.5rem">#</th>
+          <th style="text-align:right;padding:.5rem">نام</th>
+          <th style="text-align:right;padding:.5rem">واحد</th>
+          <th style="text-align:right;padding:.5rem">موجودی فعلی</th>
+          <th style="text-align:right;padding:.5rem">حداقل موجودی</th>
+          <th style="text-align:right;padding:.5rem">وضعیت</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in items %}
+          {% if it.item_type == 'material' %}
+            {% if not has_mat %}{% with has_mat=True %}{% endwith %}{% endif %}
+            <tr style="border-top:1px solid #e5e7eb">
+              <td style="padding:.5rem">{{ forloop.counter }}</td>
+              <td style="padding:.5rem">{{ it.name }}</td>
+              <td style="padding:.5rem">{{ it.uom }}</td>
+              <td style="padding:.5rem">{{ it.computed_stock_qty }}</td>
+              <td style="padding:.5rem">{{ it.min_stock }}</td>
+              <td style="padding:.5rem">
+                {% if it.stock_qty < it.min_stock %}
+                  <span style="color:#dc2626;font-weight:bold">کمبود</span>
+                {% else %}
+                  <span style="color:#16a34a">کافی</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if not has_mat %}<p class="small muted" style="margin:.5rem 0 0">متریالی ثبت نشده است.</p>{% endif %}
+  {% endwith %}
+
+  <!-- جدول ۲: ابزار مصرفی -->
+  <h3 style="margin:1.5rem 0 .5rem 0;font-size:1.05rem">ابزار مصرفی</h3>
+  {% with has_tool=False %}
+  <div style="overflow:auto">
+    <table style="width:100%;border-collapse:collapse">
+      <thead style="background:#f8fafc">
+        <tr>
+          <th style="text-align:right;padding:.5rem">#</th>
+          <th style="text-align:right;padding:.5rem">نام</th>
+          <th style="text-align:right;padding:.5rem">واحد</th>
+          <th style="text-align:right;padding:.5rem">موجودی فعلی</th>
+          <th style="text-align:right;padding:.5rem">حداقل موجودی</th>
+          <th style="text-align:right;padding:.5rem">وضعیت</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in items %}
+          {% if it.item_type == 'tool' %}
+            {% if not has_tool %}{% with has_tool=True %}{% endwith %}{% endif %}
+            <tr style="border-top:1px solid #e5e7eb">
+              <td style="padding:.5rem">{{ forloop.counter }}</td>
+              <td style="padding:.5rem">{{ it.name }}</td>
+              <td style="padding:.5rem">{{ it.uom }}</td>
+              <td style="padding:.5rem">{{ it.computed_stock_qty }}</td>
+              <td style="padding:.5rem">{{ it.min_stock }}</td>
+              <td style="padding:.5rem">
+                {% if it.stock_qty < it.min_stock %}
+                  <span style="color:#dc2626;font-weight:bold">کمبود</span>
+                {% else %}
+                  <span style="color:#16a34a">کافی</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if not has_tool %}<p class="small muted" style="margin:.5rem 0 0">ابزار مصرفی ثبت نشده است.</p>{% endif %}
+  {% endwith %}
+
+</div></div>
+{% endblock %}
+

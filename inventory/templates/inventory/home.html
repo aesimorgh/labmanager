@@ -1,0 +1,90 @@
+{% extends "base_user_panel.html" %}
+{% block title %}خانهٔ انبارداری{% endblock %}
+
+{% block content %}
+<div class="card"><div class="card-body">
+  <h2 style="margin:0 0 1rem 0">خانهٔ انبارداری</h2>
+  <p class="small" style="margin:0 0 1rem 0">
+    از این بخش می‌توانی موجودی متریال‌ها، سری‌های خرید و حرکت‌های انبار را مدیریت کنی.
+  </p>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+    <a class="card" href="/billing/materials/purchase/list/" style="text-decoration:none">
+      <div class="card-body">
+        <strong>لیست خریدها</strong>
+        <div class="small">مشاهده و فیلتر خریدهای متریال و ابزار مصرفی</div>
+      </div>
+    </a>
+
+    <a class="card" href="/billing/materials/purchase/new/" style="text-decoration:none">
+      <div class="card-body">
+        <strong>ثبت خرید جدید</strong>
+        <div class="small">افزودن سری خرید تازه</div>
+      </div>
+    </a>
+
+    <a class="card" href="/billing/reports/material-consumption/" style="text-decoration:none">
+      <div class="card-body">
+        <strong>گزارش مصرف</strong>
+        <div class="small">تحلیل مصرف متریال‌ها</div>
+      </div>
+    </a>
+
+    <a class="card" href="/inventory/movements/" style="text-decoration:none">
+      <div class="card-body">
+        <strong>کارتکس انبار</strong>
+        <div class="small">مشاهدهٔ حرکت‌های ورود و خروج</div>
+      </div>
+    </a>
+
+    <!-- گزارش خلاصهٔ حرکات انبار -->
+<a class="card" href="/inventory/reports/movements-summary/" style="text-decoration:none">
+  <div class="card-body">
+    <strong>گزارش خلاصهٔ حرکات</strong>
+    <div class="small">ورود کل، خروج کل و موجودی فعلی هر آیتم</div>
+  </div>
+</a>
+
+<!-- گزارش وضعیت موجودی فعلی -->
+<a class="card" href="/inventory/reports/stock/" style="text-decoration:none">
+  <div class="card-body">
+    <strong>گزارش وضعیت موجودی</strong>
+    <div class="small">نمایش متریال و ابزار مصرفی به‌صورت جداگانه</div>
+  </div>
+</a>
+
+<!-- فهرست متریال -->
+<a class="card" href="/inventory/items/materials/" style="text-decoration:none">
+  <div class="card-body">
+    <strong>فهرست متریال</strong>
+    <div class="small">نمایش و مدیریت مواد مصرفی لابراتوار</div>
+  </div>
+</a>
+
+<!-- فهرست ابزار مصرفی -->
+<a class="card" href="/inventory/items/consumables/" style="text-decoration:none">
+  <div class="card-body">
+    <strong>فهرست ابزار مصرفی</strong>
+    <div class="small">نمایش و کنترل ابزار مصرفی روزمره</div>
+  </div>
+</a>
+
+<!-- فهرست تجهیزات -->
+<a class="card" href="/inventory/items/equipment/" style="text-decoration:none">
+  <div class="card-body">
+    <strong>فهرست تجهیزات</strong>
+    <div class="small">مشاهده و مدیریت تجهیزات و دستگاه‌ها</div>
+  </div>
+</a>
+
+<!-- مصرف دستی متریال (استثنایی) -->
+<a class="card" href="/billing/materials/issue/new/" style="text-decoration:none">
+  <div class="card-body">
+    <strong>مصرف دستی متریال</strong>
+    <div class="small">فقط برای مواقع استثنایی؛ ثبت مصرف برای یک سفارش</div>
+  </div>
+</a>
+
+  </div>
+</div></div>
+{% endblock %}

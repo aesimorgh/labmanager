@@ -67,6 +67,22 @@
     </div>
   </div>
 
+      <div class="kpi">
+      <div class="t">ارزش کل موجودی انبار</div>
+      <div class="v">{{ inventory_value|money_fa }}</div>
+      <div class="muted" style="margin-top:.25rem">
+        <a href="/inventory/reports/stock/" class="muted">مشاهدهٔ جزئیات</a>
+      </div>
+    </div>
+
+    <div class="kpi">
+      <div class="t">هزینهٔ مواد مصرفی در ماه جاری</div>
+      <div class="v">{{ month_consumption|money_fa }}</div>
+      <div class="muted" style="margin-top:.25rem">
+        <a href="/inventory/reports/movements-summary/" class="muted">گزارش حرکات</a>
+      </div>
+    </div>
+
   <!-- شورتکات‌های اصلی -->
   <div class="grid">
     <div class="cardx">
@@ -95,11 +111,28 @@
     </div>
   </div>
 
-      <div class="cardx">
+    <div class="grid" style="margin-top:1rem"></div> 
+     <div class="cardx">
       <h3>هزینه‌ها</h3>
       <p class="muted">ثبت و مدیریت: هزینه‌های جاری، خرید متریال/ابزار، تجهیزات و تعمیرات.</p>
       <div class="actions">
         <a class="btn" href="{% url 'billing:costs_home' %}">هاب هزینه‌ها</a>
+      </div>
+    </div>
+  </div>
+
+      <div class="cardx">
+      <h3>انبارداری</h3>
+      <p class="muted">دسترسی سریع به فهرست‌ها و گزارش‌های انبار.</p>
+      <div class="actions">
+        <a class="btn" href="/inventory/">خانهٔ انبار</a>
+        <a class="btn" href="/inventory/items/materials/">فهرست متریال</a>
+        <a class="btn" href="/inventory/items/consumables/">ابزار مصرفی</a>
+        <a class="btn" href="/inventory/items/equipment/">تجهیزات</a>
+        <a class="btn" href="/inventory/movements/">کارتکس</a>
+        <a class="btn" href="/inventory/reports/movements-summary/">خلاصهٔ حرکات</a>
+        <a class="btn" href="/inventory/reports/stock/">وضعیت موجودی</a>
+        <a class="btn" href="/billing/materials/issue/new/">مصرف دستی متریال</a>
       </div>
     </div>
 

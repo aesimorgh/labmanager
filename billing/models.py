@@ -6,6 +6,8 @@ from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.db import transaction
 from django.core.exceptions import ValidationError
+from django.db.models.signals import post_delete, post_save
+from django.dispatch import receiver
 
 class Invoice(models.Model):
     class Status(models.TextChoices):
@@ -391,6 +393,8 @@ class MaterialLot(models.Model):
     shade_code     = models.CharField(max_length=16, blank=True, default="", verbose_name="رنگ/Shade (در صورت نیاز)")
     start_use_date = models.DateField(null=True, blank=True, verbose_name="تاریخ آغاز مصرف")
     end_use_date   = models.DateField(null=True, blank=True, verbose_name="تاریخ اتمام مصرف")
+    allocated      = models.BooleanField(default=False, verbose_name="لات تخصیص یافته؟")
+    allocated_at   = models.DateTimeField(null=True, blank=True, verbose_name="زمان تخصیص")
     attachment    = models.FileField(upload_to='inventory/purchases/', null=True, blank=True)
     notes         = models.TextField(blank=True, default="")
 
@@ -401,13 +405,98 @@ class MaterialLot(models.Model):
             models.Index(fields=['item']),
             models.Index(fields=['purchase_date']),
             models.Index(fields=['expire_date']),
+            models.Index(fields=['allocated']),
         ]
         ordering = ['-purchase_date', '-id']
         verbose_name = "لات خرید متریال"
         verbose_name_plural = "لات‌های خرید متریال"
+    
+    def clean(self):
+        """
+        نگهبان بازهٔ مصرف:
+        - end_use_date نباید قبل از start_use_date باشد
+        - اگر آیتم رنگ‌محور است، shade_code باید پر باشد
+        - برای همان (item, shade_code) هیچ لات دیگری نباید بازهٔ هم‌پوشان داشته باشد
+        """
+        super().clean()
 
+        # نرمال‌سازی رنگ
+        shade = (self.shade_code or "").strip()
+
+        # اگر آیتم رنگ‌محور است، رنگ الزامی است
+        try:
+            if self.item and getattr(self.item, "shade_enabled", False) and not shade:
+                raise ValidationError("برای این متریال، وارد کردن رنگ (Shade) الزامی است.")
+        except Exception:
+            # اگر self.item هنوز ست نشده باشد، از این چک عبور می‌کنیم
+            pass
+
+        # sanity: ترتیب تاریخ‌ها
+        if self.start_use_date and self.end_use_date:
+            if self.end_use_date < self.start_use_date:
+                raise ValidationError("تاریخ اتمام مصرف نمی‌تواند قبل از تاریخ آغاز مصرف باشد.")
+
+            # هم‌پوشانی بازه با لات‌های دیگرِ همین آیتم/رنگ
+            qs = MaterialLot.objects.filter(
+                item=self.item,
+                shade_code=shade,
+                start_use_date__isnull=False,
+                end_use_date__isnull=False,
+                start_use_date__lte=self.end_use_date,
+                end_use_date__gte=self.start_use_date,
+            )
+            if self.pk:
+                qs = qs.exclude(pk=self.pk)
+
+            if qs.exists():
+                other = qs.order_by('-id').first()
+                raise ValidationError(f"بازهٔ مصرف با لات دیگری هم‌پوشانی دارد (Lot ID {other.id}).")
+
+    
     def __str__(self):
         return f"Lot {self.lot_code or self.id} · {self.item.code}"
+
+class StageDefault(models.Model):
+    """
+    پیش‌فرض‌های متریال برای هر کلید مشترک مرحله (stage_key).
+    هر ردیف یعنی: این متریال در مرحله‌ای با این کلید مصرف می‌شود.
+    """
+    stage_key = models.CharField(
+        max_length=50,
+        db_index=True,
+        verbose_name="کلید مشترک مرحله (stage_key)"
+    )
+    material = models.ForeignKey(
+        'MaterialItem',
+        on_delete=models.PROTECT,
+        related_name='stage_defaults',
+        verbose_name="متریال"
+    )
+    shade_sensitive = models.BooleanField(default=False, verbose_name="وابسته به رنگ/Shade؟")
+    is_active = models.BooleanField(default=True, verbose_name="فعال؟")
+    note = models.CharField(max_length=200, blank=True, default="", verbose_name="یادداشت")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "پیش‌فرض متریالِ مرحله"
+        verbose_name_plural = "پیش‌فرض‌های متریالِ مرحله"
+        ordering = ['stage_key', 'material']
+        constraints = [
+            models.UniqueConstraint(fields=['stage_key', 'material'], name='uniq_stage_default_stage_material'),
+        ]
+        indexes = [
+            models.Index(fields=['stage_key', 'material']),
+        ]
+
+    def __str__(self):
+        mat = None
+        try:
+            # اگر material ست نشده باشد، دسترسی مستقیم خطا می‌دهد
+            mat = self.material.name if getattr(self, "material_id", None) else None
+        except Exception:
+            mat = None
+        return f"{self.stage_key} → {mat or '—'}"
 
 
 
@@ -553,6 +642,13 @@ class StockMovement(models.Model):
 
         # سپس اسنپ‌شات آیتم ذخیره شود
         item.save(update_fields=['stock_qty', 'avg_unit_cost'])
+
+# === Proxy for manual issues in Admin (نمای جدا برای «مصرف دستی» از دل کارتکس) ===
+class ManualStockIssue(StockMovement):
+    class Meta:
+        proxy = True
+        verbose_name = "مصرف دستی متریال (کارتکس)"
+        verbose_name_plural = "مصرف‌های دستی متریال (کارتکس)"
 
 
 class BOMRecipe(models.Model):
@@ -730,3 +826,66 @@ class Repair(models.Model):
         if not self.paid_date:
             self.paid_date = self.occurred_date
         super().save(*args, **kwargs)
+
+# ===== Keep MaterialItem snapshot always consistent with cardex =====
+@receiver(post_delete, sender=StockMovement)
+def _recompute_item_snapshot_after_delete(sender, instance, **kwargs):
+    """
+    هر حرکت کارتکس که حذف شد (حتی با bulk delete)،
+    اسنپ‌شات آیتم مربوطه را از روی کل کارتکس بازسازی کن.
+    """
+    try:
+        instance.item.recompute_snapshot()
+    except Exception:
+        pass
+
+
+@receiver(post_save, sender=StockMovement)
+def _recompute_item_snapshot_after_save(sender, instance, **kwargs):
+    """
+    هر حرکت که ذخیره/ویرایش شد، برای اطمینان از هم‌خوانی،
+    اسنپ‌شات آیتم دوباره از روی کارتکس بازسازی شود.
+    (کمی هزینه‌ی محاسبه دارد، اما خطای موجودی منفیِ کاذب را برای همیشه می‌بندد.)
+    """
+    try:
+        instance.item.recompute_snapshot()
+    except Exception:
+        pass
+
+
+# =====================[ Digital Lab Charges ]=====================
+class DigitalLabCharge(models.Model):
+    """
+    ثبت هزینه‌های خدمات لابراتوار دیجیتال (اسکن، طراحی، پرینت، میلینگ و ...)
+    مرتبط با هر سفارش.
+    """
+    class ServiceType(models.TextChoices):
+        SCAN     = 'scan',     'اسکن'
+        DESIGN   = 'design',   'طراحی دیجیتال'
+        PRINT    = 'print',    'پرینت سه‌بعدی'
+        MILLING  = 'milling',  'میلینگ'
+        PACKAGE  = 'package',  'پکج کامل'
+        OTHER    = 'other',    'سایر خدمات'
+
+    order       = models.ForeignKey('core.Order', on_delete=models.CASCADE, related_name='digital_charges', verbose_name="سفارش")
+    vendor      = models.CharField(max_length=160, blank=True, default="", verbose_name="نام لابراتوار دیجیتال / فروشنده")
+    service     = models.CharField(max_length=40, choices=ServiceType.choices, default='other', verbose_name="نوع خدمت")
+    amount      = models.DecimalField(max_digits=14, decimal_places=2, verbose_name="مبلغ (تومان)")
+    payment_date = models.DateField(null=True, blank=True, verbose_name="تاریخ پرداخت")
+    attachment  = models.FileField(upload_to='digital_lab/', null=True, blank=True, verbose_name="پیوست فاکتور/رسید")
+    note        = models.CharField(max_length=200, blank=True, default="", verbose_name="توضیح")
+
+    created_at  = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['order']),
+            models.Index(fields=['service']),
+            models.Index(fields=['payment_date']),
+        ]
+        ordering = ['-payment_date', '-id']
+        verbose_name = "هزینه لابراتوار دیجیتال"
+        verbose_name_plural = "هزینه‌های لابراتوار دیجیتال"
+
+    def __str__(self):
+        return f"{self.order_id} • {self.get_service_display()} • {self.amount:,.0f} تومان"

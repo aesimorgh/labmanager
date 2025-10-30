@@ -354,13 +354,39 @@ def accounting_report(request):
 # Order detail + timeline
 # ============================
 def order_detail(request, order_id):
+    from decimal import Decimal  # برای محاسبهٔ مبلغ مصرف خودکار
+
     order = get_object_or_404(Order, pk=order_id)
     events = order.events.all().order_by('happened_at', 'id')
     form = OrderEventForm(order=order)
+
+    # --- محاسبهٔ مصرف خودکار: مبلغ هر ردیف و جمع کل ---
+    stock_issues_qs = (
+        order.stock_issues
+        .select_related('item')
+        .prefetch_related('linked_moves')
+        .order_by('happened_at')
+    )
+
+    issue_costs_total = Decimal('0.00')
+    for si in stock_issues_qs:
+        row_cost = Decimal('0.00')
+        for mv in si.linked_moves.all():
+            if mv.movement_type == 'issue':
+                qty_abs = (-mv.qty) if mv.qty < 0 else mv.qty  # خروج = منفی → قدر مطلق
+                row_cost += Decimal(qty_abs) * Decimal(mv.unit_cost_effective)
+        # ضمیمه‌کردن مبلغ هر ردیف روی آبجکت برای استفاده در قالب
+        si.row_cost = row_cost.quantize(Decimal('0.01'))
+        issue_costs_total += si.row_cost
+
+    issue_costs_total = issue_costs_total.quantize(Decimal('0.01'))
+
     context = {
         'order': order,
         'events': events,
         'event_form': form,
+        'stock_issues': stock_issues_qs,
+        'issue_costs_total': issue_costs_total,
     }
     return render(request, 'core/order_detail.html', context)
 

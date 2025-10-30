@@ -1,0 +1,40 @@
+{% extends "base_user_panel.html" %}
+{% block title %}فهرست ابزار مصرفی{% endblock %}
+
+{% block content %}
+<div class="card"><div class="card-body">
+  <h2 style="margin:0 0 1rem 0">فهرست ابزار مصرفی</h2>
+  <p class="small" style="margin:0 0 1rem 0">نمایش ابزارهای مصرفی فعال در انبار.</p>
+
+  {% if tools %}
+  <div style="overflow:auto">
+    <table style="width:100%;border-collapse:collapse">
+      <thead style="background:#f8fafc">
+        <tr>
+          <th style="text-align:right;padding:.5rem">#</th>
+          <th style="text-align:right;padding:.5rem">نام ابزار</th>
+          <th style="text-align:right;padding:.5rem">دسته</th>
+          <th style="text-align:right;padding:.5rem">واحد</th>
+          <th style="text-align:right;padding:.5rem">وضعیت</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tools %}
+        <tr style="border-top:1px solid #e5e7eb">
+          <td style="padding:.5rem">{{ forloop.counter }}</td>
+          <td style="padding:.5rem">{{ t.name }}</td>
+          <td style="padding:.5rem">{{ t.category }}</td>
+          <td style="padding:.5rem">{{ t.uom }}</td>
+          <td style="padding:.5rem">
+            {% if t.is_active %}<span style="color:green">فعال</span>{% else %}<span style="color:#888">غیرفعال</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <p class="small muted">ابزار مصرفی ثبت نشده است.</p>
+  {% endif %}
+</div></div>
+{% endblock %}

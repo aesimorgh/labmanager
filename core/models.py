@@ -223,6 +223,13 @@ class StageTemplate(models.Model):
     """
     product = models.ForeignKey('Product', on_delete=models.CASCADE, related_name='stages', verbose_name="محصول")
     key = models.SlugField(max_length=50, verbose_name="کلید مرحله (slug لاتین)")  # یکتا در هر محصول
+    stage_key = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        db_index=True,
+        verbose_name="کلید مشترک مرحله (برای گروه‌بندی مراحل مشابه بین محصولات)"
+    )
     label = models.CharField(max_length=120, verbose_name="عنوان مرحله برای نمایش")
     order_index = models.PositiveSmallIntegerField(verbose_name="ترتیب مرحله")
     default_duration_days = models.PositiveSmallIntegerField(default=1, verbose_name="مدت پیشنهادی (روز)")

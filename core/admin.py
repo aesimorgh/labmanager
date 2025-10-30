@@ -910,7 +910,7 @@ class StageTemplateInline(admin.TabularInline):
     model = StageTemplate
     fk_name = 'product'  # صراحتاً می‌گوییم FK کدام است
     extra = 1
-    fields = ('order_index', 'key', 'label', 'default_duration_days', 'is_active', 'notes')
+    fields = ('order_index', 'key', 'stage_key', 'label', 'default_duration_days', 'is_active', 'notes')
     ordering = ('order_index',)
     show_change_link = True
 
@@ -930,9 +930,9 @@ class ProductAdmin(admin.ModelAdmin):
 
 @admin.register(StageTemplate)
 class StageTemplateAdmin(admin.ModelAdmin):
-    list_display = ('product', 'order_index', 'label', 'key', 'default_duration_days', 'is_active')
+    list_display = ('product', 'order_index', 'label', 'key', 'stage_key', 'default_duration_days', 'is_active')
     list_filter = ('product', 'is_active')
-    search_fields = ('label', 'key', 'product__name', 'product__code')
+    search_fields = ('label', 'key', 'stage_key', 'product__name', 'product__code')
     ordering = ('product', 'order_index')
 
 

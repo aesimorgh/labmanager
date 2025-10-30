@@ -1,0 +1,44 @@
+{% extends "base_user_panel.html" %}
+{% block title %}فهرست تجهیزات{% endblock %}
+
+{% block content %}
+<div class="card"><div class="card-body">
+  <h2 style="margin:0 0 1rem 0">فهرست تجهیزات</h2>
+  <p class="small" style="margin:0 0 1rem 0">نمایش تجهیزات موجود در لابراتوار.</p>
+
+  {% if equipment_list %}
+  <div style="overflow:auto">
+    <table style="width:100%;border-collapse:collapse">
+      <thead style="background:#f8fafc">
+        <tr>
+          <th style="text-align:right;padding:.5rem">#</th>
+          <th style="text-align:right;padding:.5rem">نام تجهیز</th>
+          <th style="text-align:right;padding:.5rem">دسته</th>
+          <th style="text-align:right;padding:.5rem">تاریخ خرید</th>
+          <th style="text-align:right;padding:.5rem">قیمت</th>
+          <th style="text-align:right;padding:.5rem">محل استقرار</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in equipment_list %}
+        <tr style="border-top:1px solid #e5e7eb">
+          <td style="padding:.5rem">{{ forloop.counter }}</td>
+          <td style="padding:.5rem">{{ e.name }}</td>
+          <td style="padding:.5rem">{{ e.category }}</td>
+          <td style="padding:.5rem">
+            {% if e.purchase_date %}
+              {{ e.purchase_date|date:"Y/m/d"|default:"—" }}
+            {% else %}—{% endif %}
+          </td>
+          <td style="padding:.5rem">{{ e.cost|default:"—" }}</td>
+          <td style="padding:.5rem">{{ e.location|default:"—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <p class="small muted">هنوز هیچ تجهیزی ثبت نشده است.</p>
+  {% endif %}
+</div></div>
+{% endblock %}

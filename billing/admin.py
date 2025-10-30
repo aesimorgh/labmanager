@@ -1,10 +1,18 @@
 from decimal import Decimal
 from django.contrib import admin
+from django.contrib import messages
+from billing.services.lot_allocation import rollback_lot_allocation
+from django.core.exceptions import ValidationError
+from .models import StageDefault
+from core.models import StageTemplate
 from django.db.models import Sum
 from django.db.models.functions import Coalesce
 from django import forms
 from decimal import Decimal, InvalidOperation
 from .models import Invoice, InvoiceLine, DoctorPayment, PaymentAllocation, Expense
+from django.contrib.admin.widgets import FilteredSelectMultiple
+from billing.services.lot_allocation import simulate_lot_allocation
+from .models import ManualStockIssue
 
 # LabProfile اختیاری: اگر مدل وجود دارد، در ادمین ثبت می‌کنیم
 try:
@@ -246,8 +254,8 @@ class MaterialItemAdmin(admin.ModelAdmin):
 @admin.register(MaterialLot)
 class MaterialLotAdmin(admin.ModelAdmin):
     form = MaterialLotAdminForm  # ⬅️ این خط اضافه شود
-    list_display  = ('item', 'shade_code', 'lot_code', 'vendor', 'purchase_date', 'start_use_date', 'end_use_date', 'qty_in', 'unit_cost', 'currency', 'expire_date')
-    list_filter   = ('purchase_date', 'expire_date', 'start_use_date', 'end_use_date', 'vendor', 'shade_code')
+    list_display  = ('item', 'shade_code', 'lot_code', 'vendor', 'purchase_date', 'start_use_date', 'end_use_date', 'allocated', 'allocated_at', 'qty_in', 'unit_cost', 'currency', 'expire_date')
+    list_filter   = ('purchase_date', 'expire_date', 'start_use_date', 'end_use_date', 'vendor', 'shade_code', 'allocated')
     search_fields = ('lot_code', 'vendor', 'invoice_no', 'notes', 'item__code', 'item__name')
     date_hierarchy = 'purchase_date'
     ordering      = ('-purchase_date', '-id')
@@ -258,6 +266,9 @@ class MaterialLotAdmin(admin.ModelAdmin):
         }),
         ('بازه مصرف', {
             'fields': (('start_use_date', 'end_use_date'),),
+        }),
+        ('وضعیت تخصیص', {
+            'fields': (('allocated', 'allocated_at'),),
         }),
         ('مقادیر/قیمت', {
             'fields': (('qty_in', 'unit_cost', 'currency'),)
@@ -270,7 +281,211 @@ class MaterialLotAdmin(admin.ModelAdmin):
             'classes': ('collapse',),
         }),
     )
-    readonly_fields = ('created_at',)
+    readonly_fields = ('created_at', 'allocated', 'allocated_at')
+    
+        # --- اکشن بستن لات و تخصیص خودکار ---
+    actions = ['action_allocate_lot_usage', "action_rollback_lot",]
+
+    def action_allocate_lot_usage(self, request, queryset):
+        """
+        اکشن ادمین: بستن لات و تخصیص خودکار مصرف متریال.
+        """
+        from billing.services.lot_allocation import allocate_lot_usage
+        success_count = 0
+        messages = []
+        for lot in queryset:
+            try:
+                result = allocate_lot_usage(lot.id)
+                r = result.get("result", {})
+                msg = (
+                    f"لات {lot.id} → کلید {r.get('stage_key')} | "
+                    f"تعداد سفارش‌ها: {r.get('orders_count')} | "
+                    f"میانگین هر واحد: {r.get('per_unit_avg')} | "
+                    f"جمع تخصیص: {result.get('allocated_qty_sum')} / "
+                    f"کل لات: {result.get('lot_qty_in')}"
+                )
+                messages.append(msg)
+                success_count += 1
+            except Exception as e:
+                messages.append(f"لات {lot.id}: خطا → {e}")
+        if success_count:
+            self.message_user(request, f"{success_count} لات با موفقیت تخصیص یافت.")
+        for m in messages:
+            self.message_user(request, m)
+
+    action_allocate_lot_usage.short_description = "بستن لات و تخصیص خودکار مصرف متریال"
+
+    def action_rollback_lot(self, request, queryset):
+        """
+        ادمین ▶ لغو تخصیص لات
+        """
+        ok = 0
+        none = 0
+        errs = 0
+        for lot in queryset:
+            try:
+                res = rollback_lot_allocation(lot.id)
+                if res.get("ok"):
+                    ok += 1
+                else:
+                    none += 1
+                    messages.info(request, f"لات {lot.id}: {res.get('msg', 'عدم تخصیص فعال')}")
+            except ValidationError as ve:
+                errs += 1
+                messages.error(request, f"لات {lot.id}: خطا → {ve}")
+            except Exception as e:
+                errs += 1
+                messages.error(request, f"لات {lot.id}: خطای غیرمنتظره → {e}")
+        if ok:
+            messages.success(request, f"لغو تخصیص برای {ok} لات انجام شد.")
+        if none:
+            messages.info(request, f"{none} لات تخصیص فعالی نداشت.")
+        if errs:
+            messages.error(request, f"{errs} مورد ناموفق بود.")
+    action_rollback_lot.short_description = "لغو تخصیص لات"
+
+    
+    # اکشن پیشنمایش بدون ذخیره‌سازی
+    def action_simulate_lot(self, request, queryset, *args, **kwargs):
+        """
+        ادمین ▶ پیشنمایش تخصیص (Dry-Run)
+        هیچ تغییری در دیتابیس انجام نمی‌شود؛ فقط گزارش می‌دهد.
+        """
+        from django.contrib import messages
+        from billing.models import MaterialLot
+
+        shown = 0
+        for obj in queryset:
+            # نرمال‌سازی: مطمئن شو lot آبجکت مدل است نه bytes/int
+            lot = obj
+            if not isinstance(lot, MaterialLot):
+                try:
+                    pk = int(lot if not isinstance(lot, bytes) else lot.decode())
+                    lot = MaterialLot.objects.select_related('item').get(pk=pk)
+                except Exception as e:
+                    messages.error(request, f"شناسهٔ نامعتبر برای لات: {obj} → {e}")
+                    continue
+
+            try:
+                res = simulate_lot_allocation(lot.id)
+                if res.get("ok"):
+                    stage_key = res.get("stage_key", "")
+                    orders = res.get("orders_count", 0)
+                    total_units = res.get("total_units", "0.000")
+                    per_unit = res.get("per_unit_avg", "0.000")
+                    alloc_sum = res.get("allocated_qty_sum", "0.000")
+                    lot_qty = res.get("lot_qty_in", "0.000")
+                    msg = (
+                        f"لات {lot.id} · stage={stage_key} · سفارش‌ها={orders} · "
+                        f"جمع واحد={total_units} · میانگین/واحد={per_unit} · "
+                        f"پیشنهاد تخصیص={alloc_sum} از {lot_qty}"
+                    )
+                    messages.info(request, msg)
+                    for w in (res.get("warnings") or []):
+                        messages.warning(request, f"لات {lot.id}: {w}")
+                    shown += 1
+                else:
+                    messages.error(request, f"لات {lot.id}: پیشنمایش ناموفق.")
+            except Exception as e:
+                messages.error(request, f"لات {lot.id}: خطا در پیشنمایش → {e}")
+
+        if shown == 0:
+            messages.error(request, "هیچ گزارشی برای پیشنمایش نمایش داده نشد.")
+    action_simulate_lot.short_description = "پیشنمایش تخصیص (Dry-Run)"
+    actions = ['action_allocate_lot_usage', 'action_rollback_lot', 'action_simulate_lot']
+
+    
+
+
+class StageDefaultAdminForm(forms.ModelForm):
+    stage_key = forms.ChoiceField(
+        label="کلید مشترک مرحله",
+        choices=(),
+        widget=forms.Select(attrs={'style': 'min-width: 260px;'})
+    )
+
+
+    class Meta:
+        model = StageDefault
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        keys = (StageTemplate.objects
+                .exclude(stage_key__isnull=True)
+                .exclude(stage_key__exact="")
+                .values_list('stage_key', flat=True)
+                .distinct()
+                .order_by('stage_key'))
+        self.fields['stage_key'].choices = [(k, k) for k in keys]
+
+    def clean_stage_key(self):
+        val = self.cleaned_data['stage_key']
+        if not StageTemplate.objects.filter(stage_key=val).exists():
+            raise forms.ValidationError("این کلید در مراحل تولید تعریف نشده است.")
+        return val
+
+
+class StageDefaultBulkAddForm(StageDefaultAdminForm):
+    # انتخاب چندمتریالی با ویجت دو ستونه (انتقالی)
+    materials = forms.ModelMultipleChoiceField(
+        queryset=MaterialItem.objects.filter(is_active=True),
+        required=False,
+        widget=FilteredSelectMultiple('متریال‌ها', is_stacked=False),
+        label="متریال‌ها (انتخاب چندتایی)"
+    )
+
+    class Meta(StageDefaultAdminForm.Meta):
+        # در حالت افزودن، به‌جای فیلد «material» تکی، از «materials» چندتایی استفاده می‌کنیم
+        fields = ['stage_key', 'materials', 'shade_sensitive', 'is_active', 'note']
+
+
+@admin.register(StageDefault)
+class StageDefaultAdmin(admin.ModelAdmin):
+    list_display  = ('stage_key', 'material', 'shade_sensitive', 'is_active', 'created_at')
+    list_filter   = ('stage_key', 'shade_sensitive', 'is_active')
+    search_fields = ('stage_key', 'material__name', 'material__code')
+    ordering      = ('stage_key', 'material__name')
+    autocomplete_fields = ('material',)
+    form = StageDefaultAdminForm
+
+    def get_form(self, request, obj=None, **kwargs):
+        """
+        در حالت افزودن (obj=None) فرمِ چندتایی را نشان بده؛
+        در حالت ویرایش، همان فرم استاندارد تک‌متریالی باقی بماند.
+        """
+        if obj is None:
+            return StageDefaultBulkAddForm
+        return super().get_form(request, obj, **kwargs)
+
+    def save_model(self, request, obj, form, change):
+        """
+        اگر در حالت افزودن، چند متریال انتخاب شده باشد،
+        برای هر کدام یک ردیف StageDefault می‌سازیم و از ذخیرهٔ default شیء صرف‌نظر می‌کنیم.
+        """
+        if not change and hasattr(form, 'cleaned_data') and form.cleaned_data.get('materials'):
+            stage_key = form.cleaned_data['stage_key']
+            shade_sensitive = form.cleaned_data.get('shade_sensitive', False)
+            is_active = form.cleaned_data.get('is_active', True)
+            note = form.cleaned_data.get('note', '')
+            created = 0
+            for m in form.cleaned_data['materials']:
+                # از ایجاد ردیف تکراری جلوگیری می‌کنیم
+                _, was_created = StageDefault.objects.get_or_create(
+                    stage_key=stage_key,
+                    material=m,
+                    defaults={
+                        'shade_sensitive': shade_sensitive,
+                        'is_active': is_active,
+                        'note': note,
+                    }
+                )
+                if was_created:
+                    created += 1
+            self.message_user(request, f"{created} ردیف ثبت شد.")
+            return  # از ذخیرهٔ obj پیش‌فرض صرف‌نظر می‌کنیم
+        # در حالت ویرایش تک‌رکوردی
+        return super().save_model(request, obj, form, change)
 
 
 @admin.register(StockMovement)
@@ -349,3 +564,47 @@ class RepairAdmin(admin.ModelAdmin):
     ordering      = ('-occurred_date', '-id')
     raw_id_fields = ('equipment',)
     readonly_fields = ('created_at',)
+
+@admin.register(ManualStockIssue)
+class ManualStockIssueAdmin(admin.ModelAdmin):
+    """
+    ادمین ویژه‌ی «مصرف دستی متریال»:
+    - فقط رکوردهای movement_type='issue' را نشان می‌دهد
+    - در فرم، نوع حرکت قفل است (issue) تا اشتباهاً چیزی دیگر ثبت نشود
+    """
+    list_display   = ('item', 'qty', 'unit_cost_effective', 'happened_at', 'order', 'product_code', 'reason')
+    list_filter    = ('happened_at', 'item__item_type', 'item__category')
+    search_fields  = ('item__code', 'item__name', 'order__id', 'product_code', 'reason')
+    date_hierarchy = 'happened_at'
+    ordering       = ('-happened_at', '-id')
+    raw_id_fields  = ('item', 'lot', 'order')
+
+    # فرم تمیز با بخش «هزینه/لات» اختیاری + نمایش نوع حرکت (قفل‌شده)
+    fieldsets = (
+        (None, {
+            'fields': ('item', 'qty', 'happened_at', 'order', 'product_code', 'reason')
+        }),
+        ('هزینه / لات (اختیاری)', {
+            'fields': ('unit_cost_effective', 'lot'),
+        }),
+        ('نوع حرکت', {
+            'fields': ('movement_type',),
+            'classes': ('collapse',),
+        }),
+    )
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.filter(movement_type='issue')
+
+    def get_readonly_fields(self, request, obj=None):
+        ro = list(super().get_readonly_fields(request, obj))
+        # نوع حرکت را قفل می‌کنیم تا فقط issue بماند
+        if 'movement_type' not in ro:
+            ro.append('movement_type')
+        return ro
+
+    def save_model(self, request, obj, form, change):
+        # هر رکوردی اینجاست «مصرف» است؛ نوع حرکت را تثبیت کن
+        obj.movement_type = 'issue'
+        super().save_model(request, obj, form, change)

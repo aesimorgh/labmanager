@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     # اپ‌های شما
     'core',
     'billing.apps.BillingConfig',
+    'inventory',
 
     # پکیج‌های خارجی
     'crispy_forms',
