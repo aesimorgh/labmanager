@@ -1,0 +1,222 @@
+{% extends "base_user_panel.html" %}
+{% load num_extras %}
+{% load jalali_tags %}
+{% block title %}تحلیل مالی لاب دیجیتال{% endblock %}
+
+{% block head_extra %}
+  <style>
+    .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;margin:1rem 0}
+    .kpi{border:1px solid #e5e7eb;background:#fff;border-radius:.75rem;padding:.8rem}
+    .kpi .t{font-size:.9rem;color:#6b7280;margin-bottom:.25rem}
+    .kpi .v{font-weight:800;font-size:1.1rem;font-variant-numeric:tabular-nums}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1rem}
+    .cardx{border:1px solid #e5e7eb;border-radius:.75rem;background:#fff;padding:1rem}
+    .muted{color:#6b7280;font-size:.9rem}
+    .table{width:100%;border-collapse:collapse}
+    .table th,.table td{padding:.45rem .55rem;border-top:1px solid #eef2f7;text-align:start}
+    .table thead th{background:#f8fafc;white-space:nowrap}
+    .num{text-align:end;font-variant-numeric:tabular-nums}
+    .filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.5rem}
+    .filters input,.filters select{border:1px solid #e5e7eb;border-radius:.5rem;padding:.45rem}
+    .btn{display:inline-block;padding:.5rem .75rem;border:1px solid #e5e7eb;border-radius:.5rem;text-decoration:none;color:#111827;background:#fff}
+    .btn:hover{background:#f8fafc}
+  </style>
+{% endblock %}
+
+{% block subtabs %}
+  <ul class="nav nav-pills mb-3">
+    <li class="nav-item"><span class="nav-link active">تحلیل مالی لاب دیجیتال</span></li>
+  </ul>
+{% endblock %}
+
+{% block content %}
+  <h2 style="margin-top:.5rem">تحلیل مالی لاب دیجیتال</h2>
+
+  <!-- فیلترها -->
+  <form method="get" class="cardx" style="margin-bottom:1rem">
+    <div class="filters">
+      <input type="text" name="q" value="{{ filters.q }}" placeholder="جستجو (بیمار/سریال/مرحله/یادداشت)">
+      <input type="text" name="doctor" value="{{ filters.doctor }}" placeholder="نام دکتر">
+      <input type="text" name="lab" value="{{ filters.lab }}" placeholder="نام لاب دیجیتال">
+      <select name="status">
+        <option value="">همه وضعیت‌ها</option>
+        <option value="SENT" {% if filters.status == 'SENT' %}selected{% endif %}>ارسال‌شده</option>
+        <option value="RECEIVED" {% if filters.status == 'RECEIVED' %}selected{% endif %}>دریافت‌شده</option>
+      </select>
+      <input type="text" class="jalali_date" name="date_from" value="{{ filters.date_from }}" placeholder="از تاریخ (جلالی)">
+      <input type="text" class="jalali_date" name="date_to" value="{{ filters.date_to }}" placeholder="تا تاریخ (جلالی)">
+    </div>
+    <div style="margin-top:.6rem">
+      <button class="btn">اعمال فیلتر</button>
+      <a class="btn" href="{% url 'core:digital_lab_report' %}">حذف فیلتر</a>
+    </div>
+  </form>
+
+  <!-- KPI ها -->
+  <div class="kpis">
+    <div class="kpi">
+      <div class="t">جمع هزینهٔ لاب‌ها (Charge)</div>
+      <div class="v">{{ kpi.sum_charge|money_fa }}</div>
+    </div>
+    <div class="kpi">
+      <div class="t">اعتبارات/کسورات ثبت‌شده (Credit)</div>
+      <div class="v">{{ kpi.sum_credit|money_fa }}</div>
+    </div>
+    <div class="kpi">
+      <div class="t">خالص (Net = Charge - Credit)</div>
+      <div class="v">{{ kpi.sum_net|money_fa }}</div>
+    </div>
+    <div class="kpi">
+      <div class="t">تعداد رکوردها</div>
+      <div class="v">{{ kpi.rows_count|int_fa }}</div>
+    </div>
+    <div class="kpi">
+      <div class="t">تعداد سفارش‌های یکتا</div>
+      <div class="v">{{ kpi.unique_orders|int_fa }}</div>
+    </div>
+  </div>
+
+  <!-- نمودار و جداول -->
+  <div class="grid">
+    <div class="cardx">
+      <h3>سری ماهانه (Charge / Credit / Net)</h3>
+      <canvas id="dlMonthly" height="120"></canvas>
+      <script id="dlMonthlyData" type="application/json">{{ monthly|safe }}</script>
+      <p class="muted" style="margin-top:.4rem">بر اساس تاریخ «ارسال» (sent_date).</p>
+    </div>
+
+    <div class="cardx">
+      <h3>۲۰ لاب برتر (خالص هزینه)</h3>
+      <div style="overflow:auto">
+        <table class="table">
+          <thead>
+            <tr><th>لاب</th><th class="num">Charge</th><th class="num">Credit</th><th class="num">Net</th><th class="num">#</th></tr>
+          </thead>
+          <tbody>
+          {% for r in per_lab %}
+            <tr>
+              <td>{{ r.lab_name|default:"—" }}</td>
+              <td class="num">{{ r.lab_charge|money_fa }}</td>
+              <td class="num">{{ r.lab_credit|money_fa }}</td>
+              <td class="num">{{ r.lab_net|money_fa }}</td>
+              <td class="num">{{ r.rows|int_fa }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="muted">داده‌ای نیست.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="cardx">
+      <h3>۲۰ مرحله برتر (خالص هزینه)</h3>
+      <div style="overflow:auto">
+        <table class="table">
+          <thead>
+            <tr><th>مرحله</th><th class="num">Charge</th><th class="num">Credit</th><th class="num">Net</th><th class="num">#</th></tr>
+          </thead>
+          <tbody>
+          {% for r in per_stage %}
+            <tr>
+              <td>{{ r.stage_name|default:"—" }}</td>
+              <td class="num">{{ r.st_charge|money_fa }}</td>
+              <td class="num">{{ r.st_credit|money_fa }}</td>
+              <td class="num">{{ r.st_net|money_fa }}</td>
+              <td class="num">{{ r.rows|int_fa }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="muted">داده‌ای نیست.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="cardx">
+      <h3>نمونه ردیف‌ها (تا ۵۰۰ مورد)</h3>
+      <div style="overflow:auto">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>#</th><th>لاب</th><th>مرحله</th><th>کُد رنگ</th><th>وضعیت</th>
+              <th>ارسال</th><th>دریافت</th><th class="num">Charge</th><th class="num">Credit</th><th>سفارش</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for r in rows %}
+            <tr>
+              <td>{{ r.id|int_fa }}</td>
+              <td>{{ r.lab_name|default:"—" }}</td>
+              <td>{{ r.stage_name|default:"—" }}</td>
+              <td>{{ r.shade_code|default:"—" }}</td>
+              <td>{{ r.get_status_display|default:r.status }}</td>
+              <td>{{ r.sent_date|jalali_date|digits_fa }}</td>
+              <td>{{ r.received_date|jalali_date|digits_fa }}</td>
+              <td class="num">{{ r.charge_amount|money_fa }}</td>
+              <td class="num">{{ r.credit_amount|money_fa }}</td>
+              <td>
+                {% if r.order_id %}
+                  <a class="btn" href="{% url 'core:order_detail' r.order_id %}" target="_blank" rel="noopener">سفارش #{{ r.order_id|int_fa }}</a>
+                {% else %}<span class="muted">—</span>{% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="10" class="muted">داده‌ای نیست.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block body_extra %}
+  <!-- اگر Chart.js و persian-datepicker جهانی نیستند، این دو CDN را فعال بگذار -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
+  <script>
+    // Datepicker های جلالی
+    (function(){
+      try{
+        document.querySelectorAll('input.jalali_date').forEach(function(inp){
+          $(inp).persianDatepicker({ format:'YYYY/MM/DD', autoClose:true, initialValue:false, calendar:{persian:{locale:'fa'}}, persianDigit:true });
+        });
+      }catch(e){}
+    })();
+
+    // نمودار ماهانه
+    (function(){
+      var raw = document.getElementById('dlMonthlyData');
+      var data = [];
+      try { data = JSON.parse(raw ? (raw.textContent || '[]') : '[]'); } catch(e){ data = []; }
+      var labels=[], charge=[], credit=[], net=[];
+      data.forEach(function(r){
+        var iso = (r.m || r.m__month || r.m__date || r.m__iso || r.m__start) + '';
+        labels.push(iso.substring(0,10)); // تاریخ truncate
+        charge.push(Number(r.m_charge || 0));
+        credit.push(Number(r.m_credit || 0));
+        net.push(Number(r.m_net || 0));
+      });
+      var el = document.getElementById('dlMonthly');
+      if(!el) return;
+      new Chart(el, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            { label:'Charge', data: charge },
+            { label:'Credit', data: credit },
+            { label:'Net', data: net }
+          ]
+        },
+        options:{
+          responsive:true,
+          plugins:{ legend:{ position:'top' } },
+          scales:{ y:{ ticks:{ callback:function(v){ try{ return Number(v).toLocaleString('fa-IR'); }catch(_){ return v; } } } } }
+        }
+      });
+    })();
+  </script>
+{% endblock %}

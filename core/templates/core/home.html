@@ -100,6 +100,22 @@
     👷‍♂️ پنل مسئول مرحله
   </button>
 </li>
+    <!-- تب‌های لاب دیجیتال -->
+    <li class="nav-item" role="presentation">
+  <button class="nav-link" id="dl-form-tab"
+          data-bs-toggle="tab" data-bs-target="#dl-form-tab-pane"
+          type="button" role="tab" aria-controls="dl-form-tab-pane" aria-selected="false">
+    🧪 لاب دیجیتال (فرم)
+  </button>
+</li>
+
+<li class="nav-item" role="presentation">
+  <button class="nav-link" id="dl-list-tab"
+          data-bs-toggle="tab" data-bs-target="#dl-list-tab-pane"
+          type="button" role="tab" aria-controls="dl-list-tab-pane" aria-selected="false">
+    📊 لاب دیجیتال (لیست)
+  </button>
+</li>
   </ul>
 {% endblock %}
 
@@ -512,60 +528,61 @@
         </div>
       </div>
     </div>
-      <!-- ========== تب 4: 🛠️ ورک‌بنچ مراحل ========== -->
-  <div class="tab-pane fade" id="wb-tab-pane" role="tabpanel" aria-labelledby="wb-tab">
-    <div class="mt-3">
-      <iframe id="wb-iframe"
-              src="/workbench/?status=active"
-              style="width:100%; height:80vh; border:0; background:#fff;"></iframe>
+          <!-- ========== تب 4: 🛠️ ورک‌بنچ مراحل ========== -->
+    <div class="tab-pane fade" id="wb-tab-pane" role="tabpanel" aria-labelledby="wb-tab">
+      <div class="mt-3">
+        <iframe id="wb-iframe"
+                src="/workbench/?status=active"
+                style="width:100%; height:80vh; border:0; background:#fff;"></iframe>
+      </div>
     </div>
-  </div>
 
-  </div>
-  <!-- ========== تب: پنل مسئول مرحله ========== -->
-<div class="tab-pane fade" id="station-tab-pane" role="tabpanel" aria-labelledby="station-tab">
-  <div class="card shadow-sm mt-3">
-    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-      <span>پنل مسئول مرحله</span>
-      <a class="btn btn-sm btn-outline-light" href="{% url 'core:station_panel' %}" target="_blank" rel="noopener">
-        باز کردن در صفحهٔ جدا
-      </a>
+    <!-- ========== تب: پنل مسئول مرحله ========== -->
+    <div class="tab-pane fade" id="station-tab-pane" role="tabpanel" aria-labelledby="station-tab">
+      <div class="card shadow-sm mt-3">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+          <span>پنل مسئول مرحله</span>
+          <a class="btn btn-sm btn-outline-light" href="{% url 'core:station_panel' %}" target="_blank" rel="noopener">
+            باز کردن در صفحهٔ جدا
+          </a>
+        </div>
+        <div class="card-body">
+          <div class="border rounded">
+            <iframe id="station-frame" class="station-frame"
+                    src="{% url 'core:station_panel' %}"
+                    data-base="{% url 'core:station_panel' %}"
+                    style="width:100%; min-height:75vh; border:0; display:block;"></iframe>
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="card-body">
-  <!-- نوار کنترل فیلتر برای iframe -->
-  <div class="row g-2 align-items-end mb-2 d-none">
-    <div class="col-md-4">
-      <label class="form-label">دکتر</label>
-      <select id="st-sync-doctor" class="form-select">
-        <option value="">— همه دکترها —</option>
-        <!-- با JS از /api/doctors پر می‌شود -->
-      </select>
-    </div>
-    <div class="col-md-4">
-  <label class="form-label">محصول</label>
-  <select id="st-sync-product" class="form-select">
-    <option value="">— همه محصولات —</option>
-    <!-- با JS از /api/products پر می‌شود -->
-  </select>
-  <div class="form-text">لیست محصولات فعال از سیستم بارگذاری می‌شود.</div>
-</div>
-    <div class="col-md-4 d-flex gap-2">
-      <button type="button" class="btn btn-primary" id="st-sync-apply">اعمال روی پنل</button>
-      <button type="button" class="btn btn-outline-secondary" id="st-sync-clear">پاک‌سازی</button>
-    </div>
-  </div>
 
-  <!-- خود iframe -->
-  <div class="border rounded">
-    <iframe id="station-frame" class="station-frame"
-            src="{% url 'core:station_panel' %}"
-            data-base="{% url 'core:station_panel' %}"
-            style="width:100%; min-height:75vh; border:0; display:block;"></iframe>
-  </div>
-</div>
-  </div>
-</div>
- <!-- /.tab-content -->
+    <!-- ========== تب: لاب دیجیتال (فرم) ========== -->
+    <div class="tab-pane fade" id="dl-form-tab-pane" role="tabpanel" aria-labelledby="dl-form-tab">
+      <div class="mt-3">
+        <iframe id="dl-form-iframe"
+                src="{% url 'core:digital_lab_new_global' %}"
+                style="width:100%; height:80vh; border:0; background:#fff;"></iframe>
+        <div class="text-muted small mt-2">
+          اگر لازم شد در صفحه جدا باز کنی:
+          <a href="{% url 'core:digital_lab_new_global' %}" target="_blank" rel="noopener">باز کردن در تب جدید</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== تب: لاب دیجیتال (لیست/گزارش) ========== -->
+    <div class="tab-pane fade" id="dl-list-tab-pane" role="tabpanel" aria-labelledby="dl-list-tab">
+      <div class="mt-3">
+        <iframe id="dl-list-iframe"
+                src="{% url 'core:digital_lab_list' %}"
+                style="width:100%; height:80vh; border:0; background:#fff;"></iframe>
+        <div class="text-muted small mt-2">
+          خروجی CSV و فیلترها داخل همین پنل فعّال است.
+          <a href="{% url 'core:digital_lab_list' %}" target="_blank" rel="noopener">باز کردن در تب جدید</a>
+        </div>
+      </div>
+    </div>
+  </div> <!-- /.tab-content -->
 {% endblock %}
 
 {% block body_extra %}
@@ -1018,6 +1035,63 @@ document.addEventListener('DOMContentLoaded', function(){
       } catch(e){}
     });
   }
+});
+</script>
+<script>
+(function(){
+  // انتخاب تب بر اساس hash
+  try{
+    const h = window.location.hash;
+    const showById = (btnId) => {
+      const el = document.querySelector(btnId);
+      if (el) new bootstrap.Tab(el).show();
+    };
+    if (h === '#dl-form-tab-pane')      showById('#dl-form-tab');
+    else if (h === '#dl-list-tab-pane') showById('#dl-list-tab');
+  }catch(e){}
+
+  // فیت ارتفاع iFrameهای لاب دیجیتال + ورک‌بنچ (اگر قبلاً اضافه شده)
+  const dlForm = document.getElementById('dl-form-iframe');
+  const dlList = document.getElementById('dl-list-iframe');
+  const wbIfr  = document.getElementById('wb-iframe');
+
+  function fitHeight(){
+    const base = Math.max(400, window.innerHeight - 180) + 'px';
+    if (dlForm) dlForm.style.height = base;
+    if (dlList) dlList.style.height = base;
+    if (wbIfr)  wbIfr.style.height  = base;
+  }
+  window.addEventListener('resize', fitHeight);
+  document.addEventListener('shown.bs.tab', function(e){
+    const id = (e.target && e.target.id) || '';
+    if (id === 'dl-form-tab' || id === 'dl-list-tab' || id === 'wb-tab'){
+      fitHeight();
+      // رفرش سبک برای دریافت آخرین محتوا (اختیاری، خیلی سبک):
+      try{
+        const targetIframe = (id==='dl-form-tab') ? dlForm : (id==='dl-list-tab') ? dlList : wbIfr;
+        if (targetIframe){
+          const src = targetIframe.getAttribute('src');
+          targetIframe.setAttribute('src', src);
+        }
+      }catch(_){}
+    }
+  });
+  // اندازه اولیه
+  fitHeight();
+})();
+</script>
+<script>
+document.addEventListener('shown.bs.tab', function (e) {
+  try {
+    if (e.target && e.target.id === 'dl-form-tab') {
+      var f = document.getElementById('dl-form-iframe');
+      if (f && !f.dataset._loaded) { f.src = f.src; f.dataset._loaded = "1"; }
+    }
+    if (e.target && e.target.id === 'dl-list-tab') {
+      var g = document.getElementById('dl-list-iframe');
+      if (g && !g.dataset._loaded) { g.src = g.src; g.dataset._loaded = "1"; }
+    }
+  } catch(_) {}
 });
 </script>
 {% endblock %}

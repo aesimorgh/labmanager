@@ -1,0 +1,354 @@
+{# templates/core/wages_payout_preview.html #}
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <title>پیش‌نمایش تسویه دستمزد</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    body{
+      background:#f8f9fa;
+      font-family:tahoma, sans-serif;
+    }
+    .card{
+      border-radius:12px;
+    }
+    .card-header{
+      border-radius:12px 12px 0 0 !important;
+    }
+    th,td{
+      vertical-align:middle !important;
+      font-size:0.9rem;
+    }
+    .table-sm th,
+    .table-sm td{
+      padding:.45rem .6rem;
+    }
+    .badge-stage{
+      font-size:0.75rem;
+    }
+    .summary-box{
+      background:#eff6ff;
+      border-radius:.75rem;
+      padding:.75rem 1rem;
+    }
+    .summary-box .label{
+      font-size:.85rem;
+      color:#64748b;
+    }
+    .summary-box .value{
+      font-size:1.1rem;
+      font-weight:600;
+    }
+    .table-log thead th{
+      white-space:nowrap;
+    }
+    .table-log td:nth-child(1),
+    .table-log th:nth-child(1){
+      width:6%;
+      text-align:center;
+    }
+    .table-log td:nth-child(2),
+    .table-log th:nth-child(2){
+      width:22%;
+    }
+    .table-log td:nth-child(3),
+    .table-log th:nth-child(3){
+      width:18%;
+    }
+    .table-log td:nth-child(4),
+    .table-log th:nth-child(4){
+      width:8%;
+      text-align:center;
+    }
+    .table-log td:nth-child(5),
+    .table-log th:nth-child(5),
+    .table-log td:nth-child(6),
+    .table-log th:nth-child(6){
+      width:15%;
+      text-align:right;
+      white-space:nowrap;
+    }
+    .table-log td:nth-child(7),
+    .table-log th:nth-child(7){
+      width:16%;
+      white-space:nowrap;
+    }
+    label{
+      font-weight:500;
+    }
+
+    /* مخفی‌کردن فلش‌های input[type=number] */
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button{
+      -webkit-appearance:none;
+      margin:0;
+    }
+    input[type=number]{
+      -moz-appearance:textfield;
+    }
+  </style>
+</head>
+<body class="container py-3">
+
+  <div class="row justify-content-center">
+    <div class="col-lg-10">
+
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="m-0">پیش‌نمایش تسویهٔ دستمزد</h4>
+        <div class="text-muted small">
+          تکنسین: <strong>{{ technician }}</strong>
+          {% if start or end %}
+            |
+            بازه:
+            {% if start %}از {{ start }}{% endif %}
+            {% if end %} تا {{ end }}{% endif %}
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+          <span>خلاصه تسویه</span>
+          <a href="{% url 'core:wages_payout_new' %}" class="btn btn-outline-secondary btn-sm">
+            بازگشت و تغییر بازه
+          </a>
+        </div>
+        <div class="card-body">
+
+          {% if messages %}
+            <div class="mb-3">
+              {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} mb-2" role="alert">
+                  {{ message }}
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          <div class="summary-box mb-3 d-flex justify-content-between align-items-center">
+            <div>
+              <div class="label mb-1">
+                جمع ناخالص دستمزد در این تسویه:
+              </div>
+              <div class="value">
+                {{ gross_total }} <span class="text-muted small">تومان</span>
+              </div>
+            </div>
+            <div class="text-end">
+              <div class="label mb-1">تعداد لاگ‌ها:</div>
+              <div class="value">{{ logs|length }}</div>
+            </div>
+          </div>
+
+          <div class="table-responsive mb-4">
+            <table class="table table-sm table-striped table-hover align-middle table-log">
+              <thead class="table-light">
+              <tr>
+                <th>#</th>
+                <th>سفارش</th>
+                <th>مرحله</th>
+                <th>تعداد</th>
+                <th>نرخ واحد</th>
+                <th>مبلغ کل</th>
+                <th>تاریخ پایان</th>
+              </tr>
+              </thead>
+              <tbody>
+              {% for log in logs %}
+                <tr>
+                  <td>{{ log.id }}</td>
+                  <td>
+                    <div class="fw-semibold">
+                      سفارش #{{ log.order_id }}
+                    </div>
+                    <div class="small text-muted">
+                      {{ log.order.patient_name|default:"" }}
+                    </div>
+                  </td>
+                  <td>
+                    {% if log.stage_tpl %}
+                      <span class="badge bg-info-subtle text-dark badge-stage">
+                        {{ log.stage_tpl.label }}
+                      </span>
+                    {% elif log.stage_inst %}
+                      <span class="badge bg-secondary-subtle text-dark badge-stage">
+                        {{ log.stage_inst.label }}
+                      </span>
+                    {% else %}
+                      <span class="text-muted small">بدون مرحله</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-center">{{ log.quantity }}</td>
+                  <td class="text-end">
+                    {{ log.unit_wage }}
+                    <span class="text-muted small">تومان</span>
+                  </td>
+                  <td class="text-end fw-semibold">
+                    {{ log.total_wage }}
+                    <span class="text-muted small">تومان</span>
+                  </td>
+                  <td>{{ log.finished_at }}</td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="7" class="text-center text-muted py-4">
+                    هیچ لاگ دستمزدی برای این بازه یافت نشد.
+                  </td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <hr class="mb-3">
+
+          <h6 class="mb-3">تأیید تسویه و وارد کردن کسورات / پاداش</h6>
+
+          <form method="post" novalidate id="payout-confirm-form">
+            {% csrf_token %}
+
+            {# فیلدهای مخفی (تکنسین و بازه) #}
+            {{ form_confirm.technician_id }}
+            {{ form_confirm.period_start_j }}
+            {{ form_confirm.period_end_j }}
+
+            <div class="row align-items-end">
+              <div class="col-md-4 mb-3">
+                <label for="{{ form_confirm.deductions_total.id_for_label }}" class="form-label">
+                  جمع کسورات
+                </label>
+                {{ form_confirm.deductions_total }}
+                {% if form_confirm.deductions_total.errors %}
+                  <div class="text-danger small mt-1">
+                    {{ form_confirm.deductions_total.errors|striptags }}
+                  </div>
+                {% endif %}
+                <div class="form-text small">
+                  در صورت نداشتن کسورات، صفر بگذارید.
+                </div>
+              </div>
+
+              <div class="col-md-4 mb-3">
+                <label for="{{ form_confirm.bonus_total.id_for_label }}" class="form-label">
+                  جمع پاداش
+                </label>
+                {{ form_confirm.bonus_total }}
+                {% if form_confirm.bonus_total.errors %}
+                  <div class="text-danger small mt-1">
+                    {{ form_confirm.bonus_total.errors|striptags }}
+                  </div>
+                {% endif %}
+                <div class="form-text small">
+                  در صورت نداشتن پاداش، صفر بگذارید.
+                </div>
+              </div>
+
+              <div class="col-md-4 mb-3">
+                <label class="form-label">
+                  خالص قابل پرداخت (پس از ثبت)
+                </label>
+                <div class="form-control bg-light">
+                  {{ gross_total }} <span class="text-muted small">± کسورات/پاداش</span>
+                </div>
+                <div class="form-text small text-muted">
+                  رقم دقیق بعد از تأیید محاسبه می‌شود.
+                </div>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label for="{{ form_confirm.note.id_for_label }}" class="form-label">
+                توضیحات تسویه
+              </label>
+              {{ form_confirm.note }}
+              {% if form_confirm.note.errors %}
+                <div class="text-danger small mt-1">
+                  {{ form_confirm.note.errors|striptags }}
+                </div>
+              {% endif %}
+            </div>
+
+            <div class="mb-3">
+              <label for="{{ form_confirm.payment_ref.id_for_label }}" class="form-label">
+                مرجع/شماره سند پرداخت (اختیاری)
+              </label>
+              {{ form_confirm.payment_ref }}
+              {% if form_confirm.payment_ref.errors %}
+                <div class="text-danger small mt-1">
+                  {{ form_confirm.payment_ref.errors|striptags }}
+                </div>
+              {% endif %}
+            </div>
+
+            {% if form_confirm.non_field_errors %}
+              <div class="alert alert-danger small">
+                {{ form_confirm.non_field_errors }}
+              </div>
+            {% endif %}
+
+            <div class="d-flex justify-content-between align-items-center mt-3">
+              <a href="{% url 'core:wages_payout_new' %}" class="btn btn-outline-secondary btn-sm">
+                بازگشت و تغییر بازه
+              </a>
+              <button type="submit" class="btn btn-success">
+                تأیید و ایجاد تسویه
+              </button>
+            </div>
+          </form>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      // آی‌دی فیلدهای پول
+      var ids = [
+        "{{ form_confirm.deductions_total.id_for_label }}",
+        "{{ form_confirm.bonus_total.id_for_label }}"
+      ];
+
+      function normalizeMoney(value){
+        if(!value) return "";
+        var fa = "۰۱۲۳۴۵۶۷۸۹";
+        var ar = "٠١٢٣٤٥٦٧٨٩";
+        var en = "0123456789";
+        var out = "";
+        for (var i=0; i<value.length; i++){
+          var ch = value[i];
+          var idx = fa.indexOf(ch);
+          if (idx !== -1){ out += en[idx]; continue; }
+          idx = ar.indexOf(ch);
+          if (idx !== -1){ out += en[idx]; continue; }
+          // جداکننده‌ها و فاصله‌ها را حذف کن
+          if (ch === "," || ch === "٬" || ch === " "){
+            continue;
+          }
+          out += ch;
+        }
+        return out;
+      }
+
+      var form = document.getElementById("payout-confirm-form");
+      if (form){
+        form.addEventListener("submit", function(){
+          ids.forEach(function(id){
+            var inp = document.getElementById(id);
+            if (inp){
+              inp.value = normalizeMoney(inp.value);
+            }
+          });
+        });
+      }
+    })();
+  </script>
+
+</body>
+</html>
+

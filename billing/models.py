@@ -212,6 +212,60 @@ def _on_alloc_deleted(sender, instance, **kwargs):
     except Exception:
         pass
 
+# === Auto-update Invoice.status when allocations change ===
+@receiver([post_save, post_delete], sender=PaymentAllocation)
+def _update_invoice_status_after_allocation(sender, instance, **kwargs):
+    """
+    بعد از هر ذخیره/حذف تخصیص پرداخت، وضعیت فاکتور را بر مبنای جمع تخصیص‌ها به‌روز می‌کند.
+    قواعد:
+      - total_alloc == 0           → issued
+      - 0 < total_alloc < total    → partial
+      - total_alloc >= total       → paid
+    """
+    invoice = getattr(instance, "invoice", None)
+    if not invoice:
+        return
+
+    # اگر این متد در مدل فاکتور داری (مثل محاسبه دوباره مبالغ)، قبل از مقایسه صدا بزن:
+    # if hasattr(invoice, "recompute_totals"):
+    #     invoice.recompute_totals()
+
+    from decimal import Decimal, ROUND_HALF_UP
+
+    def q2(x):
+        # گرد کردن دو رقم اعشار؛ سازگار با Decimalهای شما
+        return (Decimal(str(x or "0"))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    # مجموع تخصیص‌ها برای همین فاکتور
+    total_alloc = PaymentAllocation.objects.filter(invoice=invoice).aggregate(
+        s=Sum("amount_allocated")
+    )["s"] or Decimal("0")
+    total_alloc = q2(total_alloc)
+
+    # مبلغ کل فاکتور
+    grand_total = q2(getattr(invoice, "grand_total", Decimal("0")))
+
+    # اگر فیلد status شما choices/کانستنت دارد، این مپ کار را سازگار می‌کند
+    STATUS_ISSUED  = getattr(Invoice, "STATUS_ISSUED",  "issued")
+    STATUS_PARTIAL = getattr(Invoice, "STATUS_PARTIAL", "partial")
+    STATUS_PAID    = getattr(Invoice, "STATUS_PAID",    "paid")
+
+    if grand_total <= Decimal("0.00"):
+        # اگر کل صفر/نامعتبر بود، وضعیت را حداقل issued نگه دار
+        new_status = STATUS_ISSUED
+    elif total_alloc <= Decimal("0.00"):
+        new_status = STATUS_ISSUED
+    elif total_alloc < grand_total:
+        new_status = STATUS_PARTIAL
+    else:
+        new_status = STATUS_PAID
+
+    if getattr(invoice, "status", None) != new_status:
+        invoice.status = new_status
+        # اگر فیلدهای دیگری مثل amount_due دارید و نیاز به همگام‌سازی است، اینجا آپدیت کنید:
+        # if hasattr(invoice, "amount_due"):
+        #     invoice.amount_due = max(Decimal("0.00"), grand_total - total_alloc)
+        invoice.save(update_fields=["status"])
 
 # =====================[ NEW ]=====================
 class LabProfile(models.Model):
@@ -851,41 +905,3 @@ def _recompute_item_snapshot_after_save(sender, instance, **kwargs):
         instance.item.recompute_snapshot()
     except Exception:
         pass
-
-
-# =====================[ Digital Lab Charges ]=====================
-class DigitalLabCharge(models.Model):
-    """
-    ثبت هزینه‌های خدمات لابراتوار دیجیتال (اسکن، طراحی، پرینت، میلینگ و ...)
-    مرتبط با هر سفارش.
-    """
-    class ServiceType(models.TextChoices):
-        SCAN     = 'scan',     'اسکن'
-        DESIGN   = 'design',   'طراحی دیجیتال'
-        PRINT    = 'print',    'پرینت سه‌بعدی'
-        MILLING  = 'milling',  'میلینگ'
-        PACKAGE  = 'package',  'پکج کامل'
-        OTHER    = 'other',    'سایر خدمات'
-
-    order       = models.ForeignKey('core.Order', on_delete=models.CASCADE, related_name='digital_charges', verbose_name="سفارش")
-    vendor      = models.CharField(max_length=160, blank=True, default="", verbose_name="نام لابراتوار دیجیتال / فروشنده")
-    service     = models.CharField(max_length=40, choices=ServiceType.choices, default='other', verbose_name="نوع خدمت")
-    amount      = models.DecimalField(max_digits=14, decimal_places=2, verbose_name="مبلغ (تومان)")
-    payment_date = models.DateField(null=True, blank=True, verbose_name="تاریخ پرداخت")
-    attachment  = models.FileField(upload_to='digital_lab/', null=True, blank=True, verbose_name="پیوست فاکتور/رسید")
-    note        = models.CharField(max_length=200, blank=True, default="", verbose_name="توضیح")
-
-    created_at  = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        indexes = [
-            models.Index(fields=['order']),
-            models.Index(fields=['service']),
-            models.Index(fields=['payment_date']),
-        ]
-        ordering = ['-payment_date', '-id']
-        verbose_name = "هزینه لابراتوار دیجیتال"
-        verbose_name_plural = "هزینه‌های لابراتوار دیجیتال"
-
-    def __str__(self):
-        return f"{self.order_id} • {self.get_service_display()} • {self.amount:,.0f} تومان"

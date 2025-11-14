@@ -1,0 +1,280 @@
+{% extends "base_user_panel.html" %}
+{% load static %}
+
+{% block title %}مشاور قیمت (Pricing Advisor){% endblock %}
+
+{% block content %}
+<style>
+  :root{
+    --bg:#f7f7fb; --card:#fff; --muted:#6b7280; --ring:#e9eaf3;
+    --shadow:0 8px 24px rgba(15,23,42,.06);
+    --radius:14px; --radius-sm:12px;
+  }
+  body{background:var(--bg)}
+  .container-narrow{max-width:1100px;margin-inline:auto}
+  .card-soft{background:var(--card);border:1px solid var(--ring);border-radius:var(--radius);box-shadow:var(--shadow)}
+  .card-headerx{border-bottom:1px solid var(--ring);padding:.85rem 1rem;border-top-left-radius:var(--radius);border-top-right-radius:var(--radius);background:#fff}
+
+  .form-label{font-weight:600;margin-bottom:.35rem}
+  .ctrl{box-sizing:border-box!important;height:44px!important;padding:.45rem .6rem!important;font-size:.95rem;line-height:1.2;}
+  .form-control.ctrl,.form-select.ctrl{width:100%;height:44px!important}
+  .form-select.ctrl{-webkit-appearance:none; -moz-appearance:none; appearance:none;padding-right:.6rem!important;background-position: left .6rem center;}
+  .pdate{direction:ltr;text-align:center;letter-spacing:.4px}
+  .form-control.ctrl::placeholder{font-size:.9rem;color:#9ca3af}
+
+  .filter-wrap{padding:1rem 1.2rem}
+  .equal-grid-4{display:grid !important;grid-template-columns:repeat(4, minmax(0,1fr));grid-auto-rows:auto;gap:12px;align-items:end;}
+  @media (max-width: 992px){ .equal-grid-4{grid-template-columns:repeat(2, minmax(0,1fr));} }
+  @media (max-width: 576px){ .equal-grid-4{grid-template-columns:1fr;} }
+
+  .filter-actions{display:flex;gap:.8rem;justify-content:space-between;align-items:center;margin-top:.6rem;flex-wrap:wrap}
+  .btn-lgx{height:44px;padding:.45rem 1rem;font-weight:700;border-radius:10px}
+
+  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:.75rem;margin-bottom:1rem}
+  .kpi{background:linear-gradient(180deg,#ffffff,#fafbff);border:1px solid var(--ring);border-radius:var(--radius-sm);padding:1rem;display:flex;align-items:center;gap:.75rem;box-shadow:var(--shadow)}
+  .kpi .ico{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;font-size:18px}
+  .kpi .meta .lbl{color:var(--muted);font-size:.85rem}
+  .kpi .meta .val{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:800;font-size:1.05rem}
+  .ico-g{background:#eef9f0} .ico-b{background:#eef2ff} .ico-y{background:#fff7e6} .ico-r{background:#fff1f2}
+  .ok{color:#16a34a} .muted{color:var(--muted)}
+  .table-wrap{border:1px solid var(--ring);border-radius:var(--radius);overflow:hidden;background:#fff;box-shadow:var(--shadow)}
+  table thead th{background:#f5f7ff !important;position:sticky;top:0;z-index:2}
+  .money{font-family:ui-monospace,Menlo,Consolas,monospace}
+  .page-head{display:flex;align-items:center;justify-content:space-between;margin:12px 0 18px}
+  .page-title{font-weight:900;font-size:1.15rem}
+  .chip{font-size:.8rem;background:#eef2ff;border:1px solid var(--ring);padding:.2rem .6rem;border-radius:999px;color:#374151}
+</style>
+
+<div class="container-narrow py-3">
+  <div class="page-head">
+    <div class="page-title">🪙 مشاور قیمت (Pricing Advisor)</div>
+    <span class="chip">فیلتر پویا + KPI</span>
+  </div>
+
+  <div class="card-soft mb-3">
+    <div class="card-headerx">پارامترهای محاسبه</div>
+    <form id="frm">
+      <div class="filter-wrap">
+        <div class="equal-grid-4">
+          <div>
+            <label class="form-label">نوع سفارش</label>
+            <select id="product_code" class="form-select ctrl" required>
+              <option value="">— انتخاب کنید —</option>
+              {% for p in products %}
+                <option value="{{ p.code }}">{{ p.name }} ({{ p.code }})</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div>
+            <label class="form-label">از تاریخ (شمسی)</label>
+            <input id="d_from" type="text" class="form-control ctrl pdate" placeholder="YYYY/MM/DD" autocomplete="off">
+          </div>
+
+          <div>
+            <label class="form-label">تا تاریخ (شمسی)</label>
+            <input id="d_to" type="text" class="form-control ctrl pdate" placeholder="YYYY/MM/DD" autocomplete="off">
+          </div>
+
+          <div>
+            <label class="form-label d-block">&nbsp;</label>
+            <label class="d-flex align-items-center gap-2 m-0" for="include_open">
+              <input class="form-check-input" type="checkbox" id="include_open" checked>
+              <span class="form-check-label">شامل سفارش‌های در حال انجام</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="equal-grid-4" style="margin-top:.4rem">
+          <div>
+            <label class="form-label">هدف مارجین (مثال 0.6 = 60%)</label>
+            <input id="target_margin" class="form-control ctrl" placeholder="0.6" inputmode="decimal" autocomplete="off">
+          </div>
+          <div>
+            <label class="form-label">Markup × (مثال 2.2)</label>
+            <input id="markup" class="form-control ctrl" placeholder="2.2" inputmode="decimal" autocomplete="off">
+          </div>
+          <div>
+            <label class="form-label">پلهٔ رُند (تومان)</label>
+            <input id="rounding_step" class="form-control ctrl" value="10000" inputmode="numeric" autocomplete="off">
+          </div>
+            <div>
+              <label class="form-label">روش محاسبه</label>
+              <select id="method" class="form-select ctrl">
+                <option value="history" selected>میانگین سفارش‌های واقعی</option>
+                <option value="bom">بر اساس BOM استاندارد</option>
+                <option value="hybrid">ترکیبی (BOM + لاب دیجیتال واقعی)</option>
+              </select>
+            </div>
+        </div>
+
+        <div class="filter-actions">
+          <div></div>
+          <div class="d-flex gap-2">
+            <button class="btn btn-primary btn-lgx" type="submit">محاسبه</button>
+            <button class="btn btn-outline-secondary btn-lgx" type="button" id="btn-clear">پاک‌سازی</button>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <div id="loading" class="text-center my-3" style="display:none;">
+    <div class="spinner-border text-primary" role="status"></div>
+    <div class="muted mt-2">در حال محاسبه…</div>
+  </div>
+
+  <div id="out" style="display:none">
+    <div class="kpi-grid">
+      <div class="kpi"><div class="ico ico-g">🔢</div><div class="meta"><div class="lbl">تعداد سفارش نمونه</div><div id="n_orders" class="val"></div></div></div>
+      <div class="kpi"><div class="ico ico-g">💰</div><div class="meta"><div class="lbl">میانگین درآمد</div><div id="avg_rev" class="val"></div></div></div>
+      <div class="kpi"><div class="ico ico-y">🛠️</div><div class="meta"><div class="lbl">میانگین هزینه مواد</div><div id="avg_mat" class="val"></div></div></div>
+      <div class="kpi"><div class="ico ico-b">🧪</div><div class="meta"><div class="lbl">میانگین لاب دیجیتال</div><div id="avg_dlab" class="val"></div></div></div>
+      <div class="kpi"><div class="ico ico-y">🧮</div><div class="meta"><div class="lbl">میانگین هزینه کل</div><div id="avg_cost" class="val"></div></div></div>
+      <div class="kpi"><div class="ico ico-g">📈</div><div class="meta"><div class="lbl">میانگین سود ناخالص</div><div id="avg_gross" class="val ok"></div></div></div>
+      <div class="kpi"><div class="ico ico-g">📊</div><div class="meta"><div class="lbl">میانگین سود نهایی</div><div id="avg_net" class="val ok"></div></div></div>
+      <div class="kpi"><div class="ico ico-g">💵</div><div class="meta"><div class="lbl">قیمت پیشنهادی (مارجین)</div><div id="price_margin" class="val"></div></div></div>
+      <div class="kpi"><div class="ico ico-g">💵</div><div class="meta"><div class="lbl">قیمت پیشنهادی (Markup)</div><div id="price_markup" class="val"></div></div></div>
+    </div>
+
+    <div class="table-wrap">
+      <div class="p-2 muted" style="border-bottom:1px solid var(--ring)">نمونه ردیف‌ها (حداکثر ۲۵)</div>
+      <div class="table-responsive">
+        <table class="table table-sm table-striped text-center m-0">
+          <thead>
+            <tr>
+              <th style="width:40px">#</th>
+              <th>Order ID</th>
+              <th>Revenue</th>
+              <th>Material</th>
+              <th>Digital Lab</th>
+              <th>Gross</th>
+              <th>Net</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+
+  // همان لودر جلالی پنل مرجع تو (fallback دوستانه)
+  function loadScript(src){return new Promise((res,rej)=>{var s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s);});}
+  function loadCSS(href){var l=document.createElement('link');l.rel='stylesheet';l.href=href;document.head.appendChild(l);}
+
+  (async function ensureJalaliPicker(){
+    try{
+      if (window.jQuery && jQuery.fn && jQuery.fn.persianDatepicker) {
+        jQuery('.pdate').persianDatepicker({format:'YYYY/MM/DD',autoClose:true,initialValue:false});
+        return;
+      }
+      if (typeof window.persianDate === 'undefined') {
+        await loadScript('https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js');
+      }
+      if (!(window.jQuery && jQuery.fn)) { await loadScript('https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js'); }
+      if (!jQuery.fn.persianDatepicker) {
+        loadCSS('https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css');
+        await loadScript('https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js');
+      }
+      jQuery('.pdate').persianDatepicker({format:'YYYY/MM/DD',autoClose:true,initialValue:false});
+    }catch(e){ console.warn('[JalaliPicker] fallback failed', e); }
+  })();
+
+  // ——— ارقام و تاریخ ———
+  const fa={'۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9'};
+  const ar={'٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9'};
+  const toAscii=s=>String(s||'').replace(/[۰-۹]/g,d=>fa[d]).replace(/[٠-٩]/g,d=>ar[d]).trim();
+  function normalizeJalali(s){
+    s = toAscii(s).replace(/-/g,'/');
+    const m = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+    if(!m) return '';
+    const y = m[1], mm = ('0'+m[2]).slice(-2), dd = ('0'+m[3]).slice(-2);
+    return `${y}/${mm}/${dd}`;
+  }
+  const fm=x=>{try{return Number(x||0).toLocaleString('fa-IR')}catch(_){return x||'0'}};
+
+  // ——— API & فرم ———
+  const api_url = "{{ api_url|default:'/billing/api/pricing/quote/' }}";
+  const $form=document.getElementById('frm'), $loading=document.getElementById('loading'), $out=document.getElementById('out');
+
+  document.getElementById('btn-clear').onclick = ()=>{
+    $form.reset(); document.getElementById('rows').innerHTML=''; $out.style.display='none';
+  };
+
+  $form.addEventListener('submit', function(e){
+    e.preventDefault();
+    const pc = document.getElementById('product_code').value;
+    if(!pc){ alert('نوع سفارش را انتخاب کنید'); return; }
+
+    const dFrom = normalizeJalali(document.getElementById('d_from').value);
+    const dTo   = normalizeJalali(document.getElementById('d_to').value);
+    const include_open = document.getElementById('include_open').checked ? '1' : '0';
+    const target_margin = toAscii(document.getElementById('target_margin').value);
+    const markup        = toAscii(document.getElementById('markup').value);
+    const rounding_step = toAscii(document.getElementById('rounding_step').value || '10000');
+
+    const params = new URLSearchParams({
+      product_code: pc,
+      d_from: dFrom || '',
+      d_to: dTo || '',
+      include_open: include_open,
+      min_orders: '3',
+      target_margin: target_margin || '',
+      markup: markup || '',
+      rounding_step: rounding_step,
+      method: document.getElementById('method').value || 'history'
+    });
+
+    $loading.style.display='block'; $out.style.display='none';
+
+    fetch(api_url + '?' + params.toString(), {headers:{'Accept':'application/json'}})
+      .then(r=>r.json())
+      .then(resp=>{
+        $loading.style.display='none';
+        if(!resp?.ok){ alert('❌ خطا: ' + (resp?.error||'نامشخص')); return; }
+        const d = resp.data || {};
+
+        document.getElementById('n_orders').textContent = fm(d.n_orders);
+        document.getElementById('avg_rev').textContent  = fm(d.avg_revenue);
+        document.getElementById('avg_mat').textContent  = fm(d.avg_material);
+        document.getElementById('avg_dlab').textContent = fm(d.avg_dlab);
+        document.getElementById('avg_cost').textContent = fm(d.avg_total_cost);
+        document.getElementById('avg_gross').textContent= fm(d.avg_gross_profit);
+        document.getElementById('avg_net').textContent  = fm(d.avg_net_profit);
+        document.getElementById('price_margin').textContent = fm(d.suggested_price_margin);
+        document.getElementById('price_markup').textContent = fm(d.suggested_price_markup);
+
+        const body = document.getElementById('rows');
+        body.innerHTML = '';
+        (d.rows||[]).slice(0,25).forEach((r,i)=>{
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${i+1}</td>
+            <td>${r.order_id ?? '—'}</td>
+            <td class="money">${fm(r.revenue)}</td>
+            <td class="money">${fm(r.material_cogs)}</td>
+            <td class="money">${fm(r.digital_lab_cost)}</td>
+            <td class="money">${fm(r.gross_profit)}</td>
+            <td class="money">${fm(r.net_profit)}</td>
+          `;
+          body.appendChild(tr);
+        });
+
+        $out.style.display='block';
+      })
+      .catch(err=>{
+        console.error(err);
+        $loading.style.display='none';
+        alert('❌ خطا در ارتباط با سرور');
+      });
+  });
+});
+</script>
+{% endblock %}
+
+
+

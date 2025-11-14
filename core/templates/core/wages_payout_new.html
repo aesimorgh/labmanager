@@ -1,0 +1,127 @@
+{# templates/core/wages_payout_new.html #}
+{% load static %}
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <title>ایجاد تسویه دستمزد تکنسین</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  {# Bootstrap شبیه wages_report #}
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    body{
+      background:#f8f9fa;
+      font-family:tahoma, sans-serif;
+    }
+    .card{
+      border-radius:12px;
+    }
+    .card-header{
+      border-radius:12px 12px 0 0 !important;
+    }
+    label{
+      font-weight:500;
+    }
+  </style>
+
+  {# اسکریپت‌ها و استایل‌های مربوط به JalaliDateWidget از خود فرم #}
+  {{ form.media }}
+</head>
+<body class="container py-3">
+
+  <div class="row justify-content-center">
+    <div class="col-lg-6">
+
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="m-0">ایجاد تسویهٔ دستمزد تکنسین</h4>
+        <a href="{% url 'core:wages_report' %}" class="btn btn-outline-secondary btn-sm">
+          بازگشت به گزارش دستمزد
+        </a>
+      </div>
+
+      <div class="card shadow-sm">
+        <div class="card-header bg-light">
+          انتخاب تکنسین و بازهٔ جلالی
+        </div>
+        <div class="card-body">
+
+          {% if messages %}
+            <div class="mb-3">
+              {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} mb-2" role="alert">
+                  {{ message }}
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          <p class="text-muted small mb-3">
+            در این مرحله، تکنسین و بازهٔ زمانی را انتخاب کنید. در گام بعد، ریز لاگ‌های
+            تسویه‌نشدهٔ این تکنسین در بازهٔ انتخاب‌شده به‌صورت پیش‌نمایش نمایش داده می‌شود
+            و سپس می‌توانید تسویهٔ نهایی را ثبت کنید.
+          </p>
+
+          <form method="post" novalidate>
+            {% csrf_token %}
+
+            <div class="mb-3">
+              <label for="{{ form.technician.id_for_label }}" class="form-label">
+                تکنسین
+              </label>
+              {{ form.technician }}
+              {% if form.technician.errors %}
+                <div class="text-danger small mt-1">
+                  {{ form.technician.errors|striptags }}
+                </div>
+              {% endif %}
+            </div>
+
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label for="{{ form.period_start_j.id_for_label }}" class="form-label">
+                  تاریخ شروع بازه
+                </label>
+                {{ form.period_start_j }}
+                {% if form.period_start_j.errors %}
+                  <div class="text-danger small mt-1">
+                    {{ form.period_start_j.errors|striptags }}
+                  </div>
+                {% endif %}
+              </div>
+              <div class="col-md-6 mb-3">
+                <label for="{{ form.period_end_j.id_for_label }}" class="form-label">
+                  تاریخ پایان بازه
+                </label>
+                {{ form.period_end_j }}
+                {% if form.period_end_j.errors %}
+                  <div class="text-danger small mt-1">
+                    {{ form.period_end_j.errors|striptags }}
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+
+            {% if form.non_field_errors %}
+              <div class="alert alert-danger small">
+                {{ form.non_field_errors }}
+              </div>
+            {% endif %}
+
+            <div class="d-flex justify-content-end gap-2 mt-3">
+              <button type="submit" class="btn btn-primary">
+                ادامه و نمایش پیش‌نمایش تسویه
+              </button>
+            </div>
+          </form>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  {# اگر لازم شد بعداً مثل wages_report اسکریپت‌های اضافی اضافه می‌کنیم؛ فعلاً به form.media اکتفا می‌کنیم #}
+</body>
+</html>

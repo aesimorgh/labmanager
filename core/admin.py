@@ -3,6 +3,16 @@
 from decimal import Decimal
 from django.contrib import admin
 from django import forms
+from django.apps import apps as _apps
+# تلاش برای یافتن مدل از billing یا core (هرکدام که موجود بود)
+DigitalLabTransfer = None
+for _app_label in ('billing', 'core'):
+    try:
+        DigitalLabTransfer = _apps.get_model(_app_label, 'DigitalLabTransfer')
+        if DigitalLabTransfer:
+            break
+    except Exception:
+        pass
 from django.http import HttpResponseRedirect
 from django.urls import path, reverse
 from django.utils.html import format_html
@@ -22,8 +32,6 @@ from jalali_date.fields import JalaliDateField
 from jalali_date.widgets import AdminJalaliDateWidget
 from core.utils.normalizers import normalize_jalali_date_str
 from django.utils.dateparse import parse_date
-from django.template.response import TemplateResponse
-from core.utils.normalizers import normalize_jalali_date_str
 from .models import Patient, Order, Material, Accounting
 from .models import StageInstance
 from .forms import PatientForm, OrderForm, MaterialForm, AccountingForm
@@ -395,18 +403,19 @@ class OrderAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
 
     @admin.display(description='وضعیت', ordering='status')
     def status_badge(self, obj):
-        val = getattr(obj, 'status', '') or ''
+        val = (getattr(obj, 'status', '') or '').lower()
+        # برچسب انسانی بر اساس choices خود مدل
         try:
-            label = dict(getattr(Order, 'STATUS_CHOICES', [])) .get(val, val) or '—'
+            label = dict(getattr(Order, 'STATUS_CHOICES', [])).get(val, val) or '—'
         except Exception:
             label = val or '—'
+        # رنگ‌ها مطابق کلیدهای واقعی مدل Order
         color_map = {
-            'NEW': '#0ea5e9',
-            'IN_PROGRESS': '#f59e0b',
-            'READY': '#22c55e',
-            'DELIVERED': '#16a34a',
-            'REMAKE': '#f43f5e',
-            'CANCELLED': '#9ca3af',
+            'pending':      '#0ea5e9',  # آبی
+            'in_progress':  '#f59e0b',  # نارنجی
+            'completed':    '#22c55e',  # سبز روشن
+            'delivered':    '#16a34a',  # سبز
+            'cancelled':    '#9ca3af',  # خاکستری
         }
         bg = color_map.get(val, '#64748b')
         return format_html('<span class="lab-badge" style="background:{}">{}</span>', bg, label)
@@ -890,7 +899,7 @@ if LabSettings:
         # ستون‌های لیست را کوتاه و کاربردی نگه می‌داریم
         def get_list_display(self, request):
             fields = self.get_fields(request)
-            preferred = [f for f in ('facility_name', 'owner_name', 'phone', 'email', 'default_currency') if f in fields]
+            preferred = [f for f in ('lab_name', 'phone', 'whatsapp', 'currency') if f in fields]
             return tuple(preferred) or tuple(fields[:4])
 
         # فقط یک رکورد مجاز است
@@ -910,7 +919,7 @@ class StageTemplateInline(admin.TabularInline):
     model = StageTemplate
     fk_name = 'product'  # صراحتاً می‌گوییم FK کدام است
     extra = 1
-    fields = ('order_index', 'key', 'stage_key', 'label', 'default_duration_days', 'is_active', 'notes')
+    fields = ('order_index', 'key', 'stage_key', 'label', 'default_duration_days', 'base_wage', 'is_active', 'notes')
     ordering = ('order_index',)
     show_change_link = True
 
@@ -930,14 +939,334 @@ class ProductAdmin(admin.ModelAdmin):
 
 @admin.register(StageTemplate)
 class StageTemplateAdmin(admin.ModelAdmin):
-    list_display = ('product', 'order_index', 'label', 'key', 'stage_key', 'default_duration_days', 'is_active')
+    list_display = ('product', 'order_index', 'label', 'key', 'stage_key', 'default_duration_days', 'base_wage', 'is_active')
     list_filter = ('product', 'is_active')
     search_fields = ('label', 'key', 'stage_key', 'product__name', 'product__code')
     ordering = ('product', 'order_index')
 
+# =====================[ Digital Lab Transfer Admin ]=====================
+# --- دیجیتال لاب: فرم ادمین با مرحلهٔ انتخابی وابسته به سفارش ---
+from django import forms
+from django.core.exceptions import ObjectDoesNotExist
+
+# اگر StageInstance / StageTemplate را داری، وارد کن (وجود یکی کافی است)
+
+try:
+    from core.models import StageTemplate
+except Exception:
+    StageTemplate = None
+
+# ==== Digital Lab: ثابتِ گزینه‌های رنگ (Shade) ====
+SHADE_CHOICES = [
+    ("", "— بدون رنگ —"),
+    ("A1", "A1"), ("A2", "A2"), ("A3", "A3"), ("A3.5", "A3.5"), ("A4", "A4"),
+    ("B1", "B1"), ("B2", "B2"), ("B3", "B3"), ("B4", "B4"),
+    ("C1", "C1"), ("C2", "C2"), ("C3", "C3"), ("C4", "C4"),
+    ("D2", "D2"), ("D3", "D3"), ("D4", "D4"),
+    ("BL1", "BL1"), ("BL2", "BL2"), ("BL3", "BL3"), ("BL4", "BL4"),
+]
 
 
+def _stage_choices_for_order(order):
+    """
+    لیست گزینه‌های مرحله برای یک سفارش.
+    اول از StageInstance سفارش می‌خوانیم؛ اگر نبود، از StageTemplate محصول.
+    مقدار هر گزینه همان متنی است که قبلاً در stage_name ذخیره می‌کردیم.
+    """
+    choices = []
+    if not order:
+        return choices
 
+    # 1) از StageInstance سفارش (اگر داریم)
+    if StageInstance is not None:
+        try:
+            qs = StageInstance.objects.filter(order=order).order_by('planned_date', 'started_date', 'done_date', 'id')
+            for si in qs:
+                # تلاش برای یافتن بهترین برچسب
+                label = getattr(si, 'label', None) or getattr(si, 'snapshot_label', None) or getattr(si, 'key', None) or 'مرحله'
+                # مقدار ذخیره‌ای همان متنِ مرحله است تا با فیلد CharField سازگار بماند
+                choices.append((str(label), str(label)))
+        except Exception:
+            pass
+
+    # 2) اگر چیزی نبود، از StageTemplate محصول استفاده می‌کنیم (fallback)
+    if not choices and StageTemplate is not None:
+        try:
+            # فرض: Order یک اشاره به نوع محصول دارد (مثل order_type/code)
+            product_field = getattr(order, 'order_type', None) or getattr(order, 'product', None) or None
+            if product_field:
+                qs = StageTemplate.objects.filter(product=product_field).order_by('order_index', 'id')
+                for st in qs:
+                    label = getattr(st, 'label', None) or getattr(st, 'key', None) or 'مرحله'
+                    choices.append((str(label), str(label)))
+        except Exception:
+            pass
+
+    # اگر باز هم خالی بود، حداقل یک گزینه‌ی خنثی نشان بدهیم تا فرم بشکند
+    if not choices:
+        choices = [('', '— مرحله‌ای موجود نیست —')]
+
+    return choices
+
+
+@admin.register(DigitalLabTransfer)
+class DigitalLabTransferAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
+    class Media:
+        js = ('admin/digital_lab_stage_loader.js',)
+
+    list_display = (
+        'id',
+        'order_link',
+        'lab_name',
+        'stage_name',
+        'shade_code',
+        'status_badge',
+        'sent_date_fa',
+        'received_date_fa',
+        'cost_toman_fa',
+        'net_amount_fa',
+        'note',
+    )
+    list_filter = ('status', 'lab_name', 'shade_code')
+    search_fields = ('order__id', 'lab_name', 'stage_name')
+    ordering = ('-sent_date',)
+    date_hierarchy = 'sent_date'
+
+    # =====================[ فیلد مرحله انتخابی بر اساس محصول سفارش ]=====================
+    def get_form(self, request, obj=None, **kwargs):
+        Form = super().get_form(request, obj, **kwargs)
+
+        from django import forms as dj_forms
+        from core.models import Order, StageTemplate
+
+        # ۱) پیدا کردن سفارش انتخاب‌شده
+        order_id = (
+            request.POST.get('order')
+            or request.GET.get('order')
+            or (getattr(obj, 'order_id', None) if obj else None)
+        )
+        order = Order.objects.filter(pk=order_id).first() if order_id else None
+
+        # ۲) ساخت لیست مراحل برای محصول آن سفارش
+        choices = [('', '— ابتدا سفارش را انتخاب کنید —')]
+        if order and order.order_type:
+            qs = StageTemplate.objects.filter(product__code=order.order_type).order_by('order_index', 'id')
+            rows = [(st.label, st.label) for st in qs]
+            if rows:
+                choices = rows
+            else:
+                choices = [('', '— مرحله‌ای برای این محصول ثبت نشده —')]
+
+        # ۳) تبدیل فیلد به ChoiceField
+        Form.base_fields['stage_name'] = dj_forms.ChoiceField(
+            label='مرحله مربوطه (مثلاً فریم، میلینگ، طراحی)',
+            choices=choices,
+            required=True,
+        )       
+
+        # ۴) در حالت ویرایش: اگر مقدار قبلی خارج از choices بود، اضافه‌اش کن
+        if obj:
+            curr = getattr(obj, 'stage_name', None)
+            if curr and all(val != curr for val, _ in Form.base_fields['stage_name'].choices):
+                Form.base_fields['stage_name'].choices = (
+                    [(curr, f'{curr} (قبلاً ذخیره‌شده)')] + list(Form.base_fields['stage_name'].choices)
+                )
+
+                # ۳.۱) فیلد رنگ: ChoiceField اختیاری
+        Form.base_fields['shade_code'] = dj_forms.ChoiceField(
+            label='رنگ (اختیاری)',
+            choices=SHADE_CHOICES,
+            required=False,
+        )
+
+        # اگر در حالت ویرایش، shade قبلی در choices نبود، به ابتدای لیست اضافه‌اش کن
+        if obj:
+            curr_shade = getattr(obj, 'shade_code', '') or ''
+            if curr_shade and all(val != curr_shade for val, _ in Form.base_fields['shade_code'].choices):
+                Form.base_fields['shade_code'].choices = (
+                    [(curr_shade, f'{curr_shade} (قبلاً ذخیره‌شده)')] + list(Form.base_fields['shade_code'].choices)
+                )
+
+        return Form
+    
+    # وقتی در حالت افزودن رکورد جدید هستیم و سفارش از طریق پارامتر ?order= مشخص شده،
+    # مراحل همان محصول را به صورت انتخابی نشان می‌دهیم.
+    def get_changeform_initial_data(self, request):
+        initial = super().get_changeform_initial_data(request)
+        order_id = request.GET.get('order')
+        if order_id:
+            initial['order'] = order_id
+        return initial
+
+    # ================================================================================
+
+    @admin.display(description='سفارش')
+    def order_link(self, obj):
+        if not obj.order_id:
+            return '—'
+        try:
+            url = reverse('admin:core_order_change', args=[obj.order_id])
+            return format_html('<a href="{}">#{}</a>', url, obj.order_id)
+        except Exception:
+            return f'#{obj.order_id}'
+
+    @admin.display(description='وضعیت')
+    def status_badge(self, obj):
+        color_map = {
+            'sent': '#0ea5e9',
+            'received': '#16a34a',
+            'cancelled': '#9ca3af',
+        }
+        label = dict(DigitalLabTransfer.Status.choices).get(obj.status, '—')
+        bg = color_map.get(obj.status, '#64748b')
+        return format_html('<span class="lab-badge" style="background:{}">{}</span>', bg, label)
+
+    @admin.display(description='ارسال')
+    def sent_date_fa(self, obj):
+        if not obj.sent_date:
+            return '—'
+        from jalali_date import date2jalali
+        s = date2jalali(obj.sent_date).strftime('%Y/%m/%d')
+        return s.translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
+
+    @admin.display(description='دریافت')
+    def received_date_fa(self, obj):
+        if not obj.received_date:
+            return '—'
+        from jalali_date import date2jalali
+        s = date2jalali(obj.received_date).strftime('%Y/%m/%d')
+        return s.translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
+
+    @admin.display(description='هزینه (تومان)')
+    def cost_toman_fa(self, obj):
+        if obj.cost is None:
+            return '—'
+        
+        return money_fa_py(obj.cost)
+
+        # =====================[ endpoint ساده برای دریافت مراحل محصول انتخابی ]=====================
+    def get_urls(self):
+        from django.urls import path
+        urls = super().get_urls()
+        custom = [
+            path(
+                'stages/',
+                self.admin_site.admin_view(self.fetch_stages),
+                name='digital_lab_stages',
+            ),
+        ]
+        return custom + urls
+
+    def fetch_stages(self, request):
+        from django.http import JsonResponse
+        from core.models import Order, StageTemplate
+
+        order_id = request.GET.get('order_id')
+        if not order_id:
+            return JsonResponse([], safe=False)
+
+        order = Order.objects.filter(pk=order_id).first()
+        if not order or not order.order_type:
+            return JsonResponse([], safe=False)
+
+        stages = list(
+            StageTemplate.objects.filter(product__code=order.order_type, is_active=True)
+            .order_by('order_index', 'id')
+            .values_list('label', flat=True)
+        )
+        return JsonResponse(stages, safe=False)
+
+    @admin.display(description='خالص نوبت (تومان)')
+    def net_amount_fa(self, obj):
+        
+        net = (obj.charge_amount or 0) - (obj.credit_amount or 0)
+        # اگر دوست داری صفر را «—» نشان دهی، خط زیر را فعال کن:
+        # if not net: return '—'
+        return money_fa_py(net)
+
+    def save_model(self, request, obj, form, change):
+        """
+        اگر StageTemplate قابل دسترسی باشد، موقع ذخیره stage_key را بر اساس label پیدا و ست می‌کنیم.
+        """
+        try:
+            from core.models import Order, StageTemplate
+            order = getattr(obj, 'order', None)
+            label = getattr(obj, 'stage_name', '') or ''
+            if order and getattr(order, 'order_type', None) and label:
+                st = StageTemplate.objects.filter(product__code=order.order_type, label=label).values('key').first()
+                if st and st.get('key'):
+                    obj.stage_key = st['key']
+        except Exception:
+            pass
+
+        super().save_model(request, obj, form, change)
+
+# =====================[ Wages Admin ]=====================
+from jalali_date.fields import JalaliDateField
+from jalali_date.widgets import AdminJalaliDateWidget
+from .models import Technician, StageRate, StageWorkLog, StageTemplate, WagePayout
+
+@admin.register(Technician)
+class TechnicianAdmin(admin.ModelAdmin):
+    list_display = ("name", "role", "is_active", "created_at")
+    list_filter = ("is_active", "role")
+    search_fields = ("name", "role")
+    ordering = ("name",)
+
+class StageRateForm(forms.ModelForm):
+    effective_from = JalaliDateField(label='تاریخ شروع اعتبار', widget=AdminJalaliDateWidget, required=True)
+    class Meta:
+        model = StageRate
+        fields = ("stage", "technician", "rate", "effective_from", "note")
+
+@admin.register(StageRate)
+class StageRateAdmin(admin.ModelAdmin):
+    form = StageRateForm
+    list_display = ("stage", "technician", "rate", "effective_from", "created_at")
+    list_filter = ("stage", "technician")
+    search_fields = ("stage__label", "stage__product__name", "technician__name")
+    ordering = ("stage", "technician", "-effective_from")
+
+@admin.register(WagePayout)
+class WagePayoutAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
+    """
+    مدیریت تسویه‌های دستمزد در پنل ادمین.
+    از اینجا می‌تونی تسویه‌های تستی را ببینی، ویرایش یا حذف کنی.
+    """
+    list_display = (
+        "technician",
+        "period_start_j",
+        "period_end_j",
+        "status",
+        "gross_total",
+        "deductions_total",
+        "bonus_total",
+        "net_payable",
+        "created_at",
+    )
+    list_filter = ("technician", "status")
+    search_fields = ("technician__name", "payment_ref", "note")
+    ordering = ("-created_at",)
+    readonly_fields = ("created_at", "updated_at")
+
+class StageWorkLogForm(forms.ModelForm):
+    started_at  = JalaliDateField(label='تاریخ شروع',  widget=AdminJalaliDateWidget, required=False)
+    finished_at = JalaliDateField(label='تاریخ پایان', widget=AdminJalaliDateWidget, required=False)
+    class Meta:
+        model = StageWorkLog
+        fields = ("order", "stage_inst", "stage_tpl", "technician",
+                  "started_at", "finished_at",
+                  "quantity", "unit_wage", "total_wage",
+                  "status", "note")
+
+@admin.register(StageWorkLog)
+class StageWorkLogAdmin(admin.ModelAdmin):
+    form = StageWorkLogForm
+    list_display = ("order", "stage_tpl", "technician", "quantity", "unit_wage", "total_wage", "status", "created_at")
+    list_filter = ("status", "stage_tpl", "technician")
+    search_fields = ("order__id", "stage_tpl__label", "technician__name")
+    ordering = ("-created_at",)
+    readonly_fields = ("total_wage",)
 
 
 

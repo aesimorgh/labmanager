@@ -28,6 +28,8 @@ from django.db import transaction
 import datetime
 from .models import Product, StageTemplate, StageInstance
 from django.db.models import Q, Sum
+from django.views.decorators.clickjacking import xframe_options_exempt
+from .models import StageWorkLog
 
 # --- Helpers for seeding stages ---------------------------------------------
 def _jalali_add_days(jdate, days: int):
@@ -355,6 +357,7 @@ def accounting_report(request):
 # ============================
 def order_detail(request, order_id):
     from decimal import Decimal  # برای محاسبهٔ مبلغ مصرف خودکار
+    from billing.services.order_pnl import get_order_pnl  # محاسبهٔ درآمد/COGS/سود سفارش
 
     order = get_object_or_404(Order, pk=order_id)
     events = order.events.all().order_by('happened_at', 'id')
@@ -381,12 +384,57 @@ def order_detail(request, order_id):
 
     issue_costs_total = issue_costs_total.quantize(Decimal('0.01'))
 
+    # --- محاسبهٔ درآمد/هزینه/سود سفارش (سرویس گام ۱) ---
+    pnl = get_order_pnl(order.id)
+
+    # --- دستمزد مراحل همین سفارش ---
+    wage_logs = (
+        StageWorkLog.objects
+        .filter(order=order)
+        .select_related("stage_tpl", "technician")
+        .order_by("-created_at", "-id")
+    )
+    wage_total = wage_logs.aggregate(s=Sum("total_wage"))["s"] or 0
+
+    wages_by_stage = (
+        wage_logs.values("stage_tpl__label")
+        .annotate(total=Sum("total_wage"))
+        .order_by()
+    )
+    wages_by_tech = (
+        wage_logs.values("technician__name")
+        .annotate(total=Sum("total_wage"))
+        .order_by()
+    )
+
+    from django.urls import reverse
+    try:
+        workbench_url = reverse("core:core_workbench_order", args=[order.id])
+    except Exception:
+        # اگر namespacing متفاوت بود، حداقل خالی نشه
+        workbench_url = ""
+
+
     context = {
         'order': order,
         'events': events,
         'event_form': form,
         'stock_issues': stock_issues_qs,
         'issue_costs_total': issue_costs_total,
+        'digital_lab_cost': order.digital_lab_cost,
+        'digital_lab_transfers': order.digital_lab_transfers.order_by('-sent_date', '-id'),
+        'order_pnl': pnl,
+        'order_revenue': pnl['revenue'],
+        'order_material_cogs': pnl['material_cogs'],
+        'order_digital_lab_cost_calc': pnl['digital_lab_cost'],
+        'order_allocation_share': pnl['allocation_share'],
+        'order_gross_profit': pnl['gross_profit'],
+        'order_net_profit': pnl['net_profit'],
+        'wage_logs': wage_logs,
+        'wage_total': wage_total,
+        'wages_by_stage': wages_by_stage,
+        'wages_by_tech': wages_by_tech,
+        'workbench_url': workbench_url,
     }
     return render(request, 'core/order_detail.html', context)
 
@@ -934,6 +982,8 @@ def api_orders_by_doctor(request):
             'patient_name': (o.patient.name if o.patient_id else ''),
             'serial_number': o.serial_number or '',
             'due_date': (str(o.due_date).replace('-', '/') if o.due_date else ''),
+            "doctor": o.doctor,
+            "product_code": getattr(o, "order_type", None),  # ← کلید اصلی: کُد محصول (مثلاً implant_pfm, implant_zirconia, ...)
         })
     return JsonResponse({'results': results})
 
@@ -1489,6 +1539,164 @@ def stage_bulk_plan_date(request):
     return redirect(next_url)
 
 
+from django.views.decorators.http import require_POST
+from .models import StageWorkLog, Technician
+import jdatetime
+from decimal import Decimal
+from django.contrib import messages
+from django.shortcuts import redirect
+from django.urls import reverse
+from .models import StageInstance, OrderEvent, StageWorkLog, Technician
+
+
+@require_POST
+def stage_bulk_claim(request):
+    """
+    ثبت دستمزد گروهی برای StageInstanceهای انتخاب‌شده.
+    ورودی‌ها (POST):
+      - stage_id / stage_ids  : یک یا چند ID از StageInstance (لیست/CSV)
+      - technician_name       : نام تکنسین (رشته؛ باید با Technician.name تطابق داشته باشد)
+      - unit_wage             : مبلغ توافقی واحد (اختیاری؛ اعداد فارسی/عربی هم اوکی)
+      - finished_at           : تاریخ جلالی YYYY/MM/DD (اختیاری؛ خالی = امروز جلالی)
+    منطق:
+      - اگر unit_wage خالی باشد، مدل StageWorkLog خودش از StageRate/base_wage نرخ را resolve می‌کند.
+      - ضدتکرار: برای همان (مرحله، تکنسین، تاریخ پایان، DONE) دوباره ثبت نمی‌کنیم.
+      - پس از ساخت WorkLog، اگر مرحله هنوز done نشده باشد، done_date و status را به‌روز می‌کنیم.
+    """
+
+    # --- helper: نرمال‌سازی ارقام ---
+    def _norm_num(s: str | None) -> str:
+        if not s:
+            return ""
+        trans = str.maketrans({
+            '۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9',
+            '٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9',
+            '٬':'', ',':'', ' ':''})
+        return s.translate(trans).strip()
+
+    # --- stage_ids: لیست + CSV ---
+    raw_ids = []
+    raw_ids += request.POST.getlist("stage_id")
+    raw_ids += request.POST.getlist("stage_ids")
+    csv_blob = (request.POST.get("stage_ids") or "").strip()
+    if csv_blob:
+        raw_ids += [p.strip() for p in csv_blob.split(",") if p.strip()]
+
+    ids = []
+    for r in raw_ids:
+        s = _norm_num(str(r))
+        if s.isdigit():
+            ids.append(int(s))
+    ids = list(dict.fromkeys(ids))  # یونیک
+
+    if not ids:
+        messages.error(request, "هیچ مرحله‌ای انتخاب نشده است.")
+        next_url = request.GET.get("next") or request.META.get("HTTP_REFERER") or reverse("core:station_panel")
+        return redirect(next_url)
+
+    # --- تکنسین (اجباری) ---
+    tech_name = (request.POST.get("technician_name") or "").strip()
+    if not tech_name:
+        messages.error(request, "نام تکنسین را وارد کنید.")
+        next_url = request.GET.get("next") or request.META.get("HTTP_REFERER") or reverse("core:station_panel")
+        return redirect(next_url)
+
+    tech = Technician.objects.filter(name=tech_name).first()
+    if not tech:
+        messages.error(request, f"تکنسین «{tech_name}» پیدا نشد.")
+        next_url = request.GET.get("next") or request.META.get("HTTP_REFERER") or reverse("core:station_panel")
+        return redirect(next_url)
+
+    # --- مبلغ واحد (اختیاری) ---
+    unit_wage_raw = _norm_num(request.POST.get("unit_wage") or "")
+    try:
+        unit_wage = Decimal(unit_wage_raw) if unit_wage_raw else None
+    except Exception:
+        unit_wage = None  # مدل خودش resolve می‌کند
+
+    # --- تاریخ پایان: ورودی جلالی یا امروز جلالی ---
+    raw_finished = (request.POST.get("finished_at") or "").strip()
+    if raw_finished:
+        try:
+            y, m, d = [int(p) for p in raw_finished.replace("-", "/").split("/")[:3]]
+            finished_at = jdatetime.date(y, m, d)
+        except Exception:
+            finished_at = jdatetime.date.today()
+    else:
+        finished_at = jdatetime.date.today()
+
+    # --- اجرای Claim ---
+    qs = StageInstance.objects.select_related('order', 'template').filter(pk__in=ids)
+    created, skipped, errors = 0, 0, 0
+
+    for si in qs:
+        try:
+            # ضدتکرار: همان مرحله/تکنسین/تاریخ/وضعیت DONE
+            duplicate = StageWorkLog.objects.filter(
+                stage_inst=si,
+                technician=tech,
+                finished_at=finished_at,
+                status=StageWorkLog.Status.DONE
+            ).exists()
+            if duplicate:
+                skipped += 1
+                continue
+
+            log = StageWorkLog(
+                order=si.order,
+                stage_inst=si,
+                stage_tpl=si.template if si.template_id else None,
+                technician=tech,
+                quantity=Decimal(si.order.unit_count or 1),
+                finished_at=finished_at,
+                status=StageWorkLog.Status.DONE,
+            )
+            if unit_wage is not None:
+                # اگر کاربر نرخ توافقی داد، همین را ثبت کن؛ وگرنه مدل خودش از StageRate/base_wage پر می‌کند
+                log.unit_wage = unit_wage
+
+            log.save()  # unit_wage (در صورت None) و total_wage در مدل محاسبه می‌شود
+
+            # همگام‌سازی مرحله
+            changed_fields = []
+            if not si.done_date:
+                si.done_date = finished_at
+                changed_fields.append('done_date')
+            if si.status != StageInstance.Status.DONE:
+                si.status = StageInstance.Status.DONE
+                changed_fields.append('status')
+            if changed_fields:
+                si.save(update_fields=changed_fields)
+
+            created += 1
+
+        except Exception as e:
+            # برای از دست نرفتن دیتا، یک NOTE ثبت کنیم
+            try:
+                OrderEvent.objects.create(
+                    order=si.order,
+                    event_type=OrderEvent.EventType.NOTE,
+                    happened_at=finished_at,
+                    direction=OrderEvent.Direction.INTERNAL,
+                    stage=si.label,
+                    stage_instance=si,
+                    notes=f"CLAIM FAILED — تکنسین: {tech_name} | دستمزد واحد: {unit_wage_raw or '—'} | خطا: {e}"
+                )
+            except Exception:
+                pass
+            errors += 1
+
+    # پیام نهایی
+    if created and not errors:
+        messages.success(request, f"ثبت دستمزد برای {created} مرحله انجام شد." + (f" ({skipped} مورد تکراری رد شد)" if skipped else ""))
+    elif created or skipped:
+        messages.warning(request, f"ثبت دستمزد: موفق {created}، تکراری {skipped}، خطا {errors}.")
+    else:
+        messages.error(request, "هیچ موردی ثبت نشد. ورودی‌ها را بررسی کنید.")
+
+    next_url = request.GET.get("next") or request.META.get("HTTP_REFERER") or reverse("core:station_panel")
+    return redirect(next_url)
+
 from .models import StageInstance, StageTemplate, Doctor, Product
 
 
@@ -1503,7 +1711,7 @@ def station_panel(request):
         - product: کُد محصول (Order.order_type = Product.code)
         - page, ps: صفحه‌بندی
     """
-    from .models import StageInstance, StageTemplate, Doctor, Product
+    from .models import StageInstance, StageTemplate, Doctor, Product, Technician
     from django.db.models import Q
     from django.core.paginator import Paginator
 
@@ -1525,6 +1733,8 @@ def station_panel(request):
     # 2.2) دکترها و محصولات
     doctors  = list(Doctor.objects.order_by('name').values_list('name', flat=True))
     products = list(Product.objects.filter(is_active=True).order_by('name').values('code', 'name'))
+    technicians = list(Technician.objects.filter(is_active=True)
+                   .order_by('name').values_list('name', flat=True))
 
     # 3) جدول مراحل
     stages_qs = StageInstance.objects.none()
@@ -1613,11 +1823,419 @@ def station_panel(request):
         'products': products,
         'doctor': doctor_name,
         'product': product_code,
+        'technicians': technicians,
     }
     return render(request, 'core/station.html', context)
 
+# ===[ Digital Lab: Create Transfer in User Panel ]=========================
+from decimal import Decimal
+from django import forms
+from django.contrib import messages
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+from core.models import DigitalLabTransfer, Order
+import jdatetime
 
 
+def _to_decimal_safe(s):
+    try:
+        if s is None:
+            return Decimal('0')
+        return Decimal(str(s))
+    except Exception:
+        return Decimal('0')
+
+
+def _parse_jalali_to_gregorian(s):
+    """تبدیل تاریخ شمسی (در قالب 1404/08/10) به میلادی (datetime.date)"""
+    if not s:
+        return None
+    try:
+        s = s.strip().replace("-", "/")
+        parts = [int(x) for x in s.split("/") if x.strip()]
+        if len(parts) != 3:
+            return None
+        j = jdatetime.date(parts[0], parts[1], parts[2])
+        return j.togregorian()  # خروجی datetime.date میلادی
+    except Exception:
+        return None
+
+
+class DigitalLabTransferForm(forms.ModelForm):
+    class Meta:
+        model = DigitalLabTransfer
+        fields = ['lab_name', 'status', 'note']
+        widgets = {
+            'lab_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'نام لاب دیجیتال…'}),
+            'status': forms.Select(attrs={'class': 'form-select'}),
+            'note': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': 'توضیح (اختیاری)…'}),
+        }
+
+@xframe_options_exempt
+def digital_lab_transfer_create(request, order_id=None):
+    """
+    فرم ثبت/ویرایش ارسال/دریافت لاب دیجیتال.
+    - هم از مسیر عمومی /digital-lab/new/ و هم از /orders/<id>/digital-lab/new/ کار می‌کند.
+    - فقط بر اساس order_ids[] ارسالی از فرم ذخیره می‌کند (نه پارامتر URL).
+    """
+    ctx_order = None
+    if order_id:
+        ctx_order = get_object_or_404(Order, pk=order_id)
+
+    if request.method == 'POST':
+        order_ids = request.POST.getlist('order_ids[]') or request.POST.getlist('order_ids')
+        if not order_ids:
+            messages.error(request, 'حداقل یک سفارش را انتخاب کنید.')
+            return redirect('core:digital_lab_new_global' if not order_id else 'core:digital_lab_new', order_id=order_id)
+
+        # --- فیلدهای مشترک ---
+        lab_name = (request.POST.get('lab_name') or '').strip()
+        stage_name = (request.POST.get('stage_name') or '').strip()
+        shade_code = (request.POST.get('shade_code') or '').strip()
+        status = (request.POST.get('status') or DigitalLabTransfer.Status.SENT).strip()
+
+        # اضافه شود (برای شرط‌گذاری بعدی):
+        is_received = (status == DigitalLabTransfer.Status.RECEIVED)
+        
+        # --- تاریخ‌ها ---
+        sent_date = request.POST.get('sent_date') or None
+        received_date = request.POST.get('received_date') or None
+
+        # تبدیل تاریخ‌ها از شمسی به میلادی
+        sent_date = _parse_jalali_to_gregorian(sent_date)
+        received_date = _parse_jalali_to_gregorian(received_date)
+
+        if status != DigitalLabTransfer.Status.RECEIVED:
+            received_date = None
+
+        # --- مبالغ ---
+        unit_price = _to_decimal_safe(request.POST.get('charge_unit'))
+        credit_amount = _to_decimal_safe(request.POST.get('credit_amount'))
+        note = (request.POST.get('note') or '').strip()
+
+        # --- دریافت تعداد اباتمنت (در صورت وجود) ---
+        units_override_raw = request.POST.get('units_override') or ''
+        units_override = None
+        if units_override_raw.strip():
+            try:
+                units_override = Decimal(str(units_override_raw.strip()))
+            except Exception:
+                units_override = None
+
+        # --- ذخیره ---
+        first_oid = None
+        created = 0
+
+        for oid in order_ids:
+            try:
+                o = Order.objects.get(pk=int(oid))
+            except (ValueError, Order.DoesNotExist):
+                continue
+
+            if first_oid is None:
+                first_oid = o.id
+
+            # --- محاسبه تعداد برای ضرب ---
+            # اگر units_override ارسال شده و سفارش ایمپلنت + مرحله abutment.select باشه
+            is_implant = (
+                hasattr(o, 'product_code') and 
+                str(o.product_code).lower() in ['implant_pfm', 'implant_zirconia']
+            ) or (
+                hasattr(o, 'order_type') and 
+                str(o.order_type).lower() in ['implant_pfm', 'implant_zirconia']
+            ) or (
+                hasattr(o, 'product_kind') and 
+                str(o.product_kind).lower() in ['implant_pfm', 'implant_zirconia']
+            )
+            
+            # جدید (هر مرحله‌ای که شامل «abutment» یا «اباتمنت» باشد):
+            stage_norm = stage_name.lower().replace(' ', '').replace('.', '').replace('-', '').replace('_', '')
+            is_abutment_stage = ('abutment' in stage_norm) or ('اباتمنت' in stage_norm)
+
+
+
+            if is_implant and is_abutment_stage and units_override is not None:
+                # حالت استثنا: تعداد اباتمنت
+                qty = units_override
+            else:
+                # حالت عادی: تعداد واحد سفارش
+                units = getattr(o, 'unit_count', None) or getattr(o, 'units', None) or 1
+                try:
+                    qty = Decimal(str(units))
+                except Exception:
+                    qty = Decimal('1')
+
+            charge_amount = unit_price * qty
+
+            DigitalLabTransfer.objects.create(
+                order=o,
+                lab_name=lab_name,
+                stage_name=stage_name,
+                shade_code=shade_code,
+                status=status,
+                sent_date=sent_date,
+                received_date=received_date,
+                charge_amount=charge_amount,
+                credit_amount=credit_amount,
+                note=note,
+            )
+            created += 1
+
+        if created:
+            messages.success(request, f'ثبت لاب دیجیتال برای {created} سفارش انجام شد.')
+            return redirect('core:order_detail', order_id=first_oid)
+        else:
+            messages.error(request, 'عملیات انجام نشد.')
+            return redirect('core:digital_lab_new_global' if not order_id else 'core:digital_lab_new', order_id=order_id)
+
+    # --- GET ---
+    form = DigitalLabTransferForm(initial={'status': DigitalLabTransfer.Status.SENT})
+    return render(request, 'core/digital_lab_form.html', {
+        'order': ctx_order,
+        'form': form,
+    })
+
+# ===[ /Digital Lab ]======================================================
+
+# ===[ Digital Lab: List & Filters ]========================================
+from django.db.models import Sum, F, Value as V
+from django.db.models.functions import Coalesce
+
+def _parse_jalali_to_date_or_none(s):
+    """ورودی شمسی 'YYYY/MM/DD' → date میلادی یا None (از همان منطق قبلی استفاده می‌کند)"""
+    if not s:
+        return None
+    try:
+        s = s.strip().replace("-", "/")
+        y, m, d = [int(x) for x in s.split("/") if x.strip()]
+        return jdatetime.date(y, m, d).togregorian()
+    except Exception:
+        return None
+@xframe_options_exempt
+def digital_lab_transfer_list(request):
+    """
+    لیست کامل ارسال/دریافت‌های لاب دیجیتال + فیلترها + جمع مبالغ
+    فیلترها (GET):
+      q               : متن آزاد (بیمار/یادداشت/نام لاب/مرحله)
+      doctor          : نام دکتر (رشته کامل)
+      lab             : نام لاب دیجیتال (exact/icontains)
+      order_id        : شناسه سفارش
+      status          : SENT / RECEIVED / CANCELED
+      date_from/date_to: بازه تاریخ (شمسی 'YYYY/MM/DD')
+    """
+    qs = (DigitalLabTransfer.objects
+          .select_related('order', 'order__patient')
+          .order_by('-sent_date', '-id'))
+
+    q = (request.GET.get('q') or '').strip()
+    if q:
+        from django.db.models import Q
+        qs = qs.filter(
+            Q(order__patient__name__icontains=q) |
+            Q(lab_name__icontains=q) |
+            Q(stage_name__icontains=q) |
+            Q(note__icontains=q)
+        )
+
+    doctor = (request.GET.get('doctor') or '').strip()
+    if doctor:
+        qs = qs.filter(order__doctor=doctor)
+
+    lab = (request.GET.get('lab') or '').strip()
+    if lab:
+        qs = qs.filter(lab_name__icontains=lab)
+
+    order_id = (request.GET.get('order_id') or '').strip()
+    if order_id.isdigit():
+        qs = qs.filter(order_id=int(order_id))
+
+    status = (request.GET.get('status') or '').strip()
+    # وضعیت‌های مجاز را از خود TextChoices مدل بخوان
+    try:
+        allowed_status = {c.value for c in DigitalLabTransfer.Status}
+    except Exception:
+        # اگر به هر دلیل Status از نوع TextChoices نبود، به مقدارهای رایج برگردیم
+        allowed_status = {'SENT', 'RECEIVED'}
+
+    if status in allowed_status:
+        qs = qs.filter(status=status)
+
+
+    df = _parse_jalali_to_date_or_none(request.GET.get('date_from'))
+    dt = _parse_jalali_to_date_or_none(request.GET.get('date_to'))
+    if df:
+        qs = qs.filter(sent_date__gte=df)
+    if dt:
+        qs = qs.filter(sent_date__lte=dt)
+
+    # تجمع مبالغ
+    agg = qs.aggregate(
+        total_charge=Coalesce(
+            Sum('charge_amount'),
+            V(0, output_field=DecimalField(max_digits=18, decimal_places=2)),
+            output_field=DecimalField(max_digits=18, decimal_places=2),
+        ),
+        total_credit=Coalesce(
+            Sum('credit_amount'),
+            V(0, output_field=DecimalField(max_digits=18, decimal_places=2)),
+            output_field=DecimalField(max_digits=18, decimal_places=2),
+        ),
+    )
+
+    sum_charge = agg['total_charge'] or Decimal('0.00')
+    sum_credit = agg['total_credit'] or Decimal('0.00')
+    net_amount = sum_charge - sum_credit
+
+    context = {
+        'filters': {
+            'q': q, 'doctor': doctor, 'lab': lab,
+            'order_id': order_id, 'status': status,
+            'date_from': request.GET.get('date_from') or '',
+            'date_to': request.GET.get('date_to') or '',
+        },
+        'rows': qs[:500],           # محدودیت موقت برای نمایش
+        'count': qs.count(),
+        'sum_charge': sum_charge,
+        'sum_credit': sum_credit,
+        'sum_net': net_amount,
+    }
+    return render(request, 'core/digital_lab_list.html', context)
+# ===[ /Digital Lab List ]==================================================
+
+# core/views.py
+from decimal import Decimal
+from django.db.models import Sum, Count, Value as V, DecimalField, CharField
+from django.db.models.functions import Coalesce, TruncMonth
+from django.shortcuts import render
+# فرض بر این است که DigitalLabTransfer و Order از قبل import شده‌اند
+# و تابع _parse_jalali_to_date_or_none قبلاً در فایل هست.
+
+def digital_lab_report(request):
+    """
+    گزارش تحلیلی لاب دیجیتال (مالی‌محور + چند شاخص عملکردی)
+    فیلترها (GET):
+      q, doctor, lab, status (SENT/RECEIVED), date_from, date_to
+    """
+    qs = (DigitalLabTransfer.objects
+          .select_related('order')
+          .order_by('-sent_date', '-id'))
+
+    # ----- فیلترها -----
+    q = (request.GET.get('q') or '').strip()
+    if q:
+        from django.db.models import Q
+        qs = qs.filter(
+            Q(order__patient_name__icontains=q) |  # اگر این فیلد در Order هست
+            Q(lab_name__icontains=q) |
+            Q(stage_name__icontains=q) |
+            Q(note__icontains=q) |
+            Q(order__serial_number__icontains=q)
+        )
+
+    doctor = (request.GET.get('doctor') or '').strip()
+    if doctor:
+        qs = qs.filter(order__doctor=doctor)
+
+    lab = (request.GET.get('lab') or '').strip()
+    if lab:
+        qs = qs.filter(lab_name__icontains=lab)
+
+    status = (request.GET.get('status') or '').strip()
+    try:
+        allowed_status = {c.value for c in DigitalLabTransfer.Status}
+    except Exception:
+        allowed_status = {'SENT','RECEIVED'}
+    if status in allowed_status:
+        qs = qs.filter(status=status)
+
+    date_from = _parse_jalali_to_date_or_none(request.GET.get('date_from'))
+    date_to   = _parse_jalali_to_date_or_none(request.GET.get('date_to'))
+    if date_from:
+        qs = qs.filter(sent_date__gte=date_from)
+    if date_to:
+        qs = qs.filter(sent_date__lte=date_to)
+
+    # ----- KPI های اصلی -----
+    agg = qs.aggregate(
+        total_charge = Coalesce(Sum('charge_amount'), V(0, output_field=DecimalField(max_digits=18, decimal_places=2))),
+        total_credit = Coalesce(Sum('credit_amount'), V(0, output_field=DecimalField(max_digits=18, decimal_places=2))),
+        rows_count   = Coalesce(Count('id'), V(0)),
+    )
+    sum_charge = agg['total_charge'] or Decimal('0.00')
+    sum_credit = agg['total_credit'] or Decimal('0.00')
+    sum_net    = (sum_charge - sum_credit)
+
+    # تعداد سفارش‌های یکتایی که در گزارش دیده می‌شوند
+    try:
+        # اگر DB اجازه distinct('field') نده، fallback به set در template می‌تونیم بدهیم.
+        unique_orders_count = qs.values('order_id').distinct().count()
+    except Exception:
+        unique_orders_count = 0
+
+    # ----- ریزِ لاب‌ها (Top labs) -----
+    per_lab = (
+        qs.values('lab_name')
+          .annotate(
+              lab_charge=Coalesce(Sum('charge_amount'), V(0, output_field=DecimalField(max_digits=18, decimal_places=2))),
+              lab_credit=Coalesce(Sum('credit_amount'), V(0, output_field=DecimalField(max_digits=18, decimal_places=2))),
+              rows=Count('id'),
+          )
+          .annotate(lab_net=(Coalesce(Sum('charge_amount'), V(0, output_field=DecimalField(max_digits=18, decimal_places=2)))
+                             - Coalesce(Sum('credit_amount'), V(0, output_field=DecimalField(max_digits=18, decimal_places=2)))))
+          .order_by('-lab_net', '-lab_charge')[:20]
+    )
+
+    # ----- ریزِ مرحله‌ها (Top stages) -----
+    per_stage = (
+        qs.values('stage_name')
+          .annotate(
+              st_charge=Coalesce(Sum('charge_amount'), V(0, output_field=DecimalField(max_digits=18, decimal_places=2))),
+              st_credit=Coalesce(Sum('credit_amount'), V(0, output_field=DecimalField(max_digits=18, decimal_places=2))),
+              rows=Count('id'),
+          )
+          .annotate(st_net=(Coalesce(Sum('charge_amount'), V(0, output_field=DecimalField(max_digits=18, decimal_places=2)))
+                            - Coalesce(Sum('credit_amount'), V(0, output_field=DecimalField(max_digits=18, decimal_places=2)))))
+          .order_by('-st_net', '-st_charge')[:20]
+    )
+
+    # ----- سری ماهانه ۶ ماه اخیر (بر اساس sent_date) -----
+    monthly = (
+        qs.annotate(m=TruncMonth('sent_date'))
+          .values('m')
+          .annotate(
+              m_charge=Coalesce(Sum('charge_amount'), V(0, output_field=DecimalField(max_digits=18, decimal_places=2))),
+              m_credit=Coalesce(Sum('credit_amount'), V(0, output_field=DecimalField(max_digits=18, decimal_places=2))),
+          )
+          .annotate(m_net=(Coalesce(Sum('charge_amount'), V(0, output_field=DecimalField(max_digits=18, decimal_places=2)))
+                           - Coalesce(Sum('credit_amount'), V(0, output_field=DecimalField(max_digits=18, decimal_places=2)))))
+          .order_by('m')
+    )
+
+    # داده‌های جدول (نمونه محدود برای مشاهده سریع)
+    rows = qs.select_related('order').only(
+        'id','lab_name','stage_name','shade_code','status','sent_date','received_date',
+        'charge_amount','credit_amount','order_id'
+    )[:500]
+
+    context = {
+        'filters': {
+            'q': q, 'doctor': doctor, 'lab': lab, 'status': status,
+            'date_from': request.GET.get('date_from') or '',
+            'date_to':   request.GET.get('date_to') or '',
+        },
+        'kpi': {
+            'sum_charge': sum_charge,
+            'sum_credit': sum_credit,
+            'sum_net':    sum_net,
+            'rows_count': agg['rows_count'] or 0,
+            'unique_orders': unique_orders_count,
+        },
+        'per_lab': list(per_lab),
+        'per_stage': list(per_stage),
+        'monthly': list(monthly),
+        'rows': rows,
+    }
+    return render(request, 'core/digital_lab_report.html', context)
 
 
 

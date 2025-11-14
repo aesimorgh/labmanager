@@ -1,368 +1,401 @@
 {% extends "base_user_panel.html" %}
 {% load num_extras %}
-{% block title %}مالی{% endblock %}
 {% load jalali_tags %}
+{% block title %}مالی{% endblock %}
+
 {% block head_extra %}
-  <style>
-    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem}
-    .cardx{border:1px solid #e5e7eb;border-radius:.75rem;background:#fff;padding:1rem}
-    .cardx h3{margin:.25rem 0 .5rem;font-size:1.1rem}
-    .muted{color:#6b7280;font-size:.9rem}
-    .actions{margin-top:.75rem;display:flex;gap:.5rem;flex-wrap:wrap}
-    .btn{display:inline-block;padding:.5rem .75rem;border:1px solid #e5e7eb;border-radius:.5rem;text-decoration:none;color:#111827}
-    .btn:hover{background:#f8fafc}
+<style>
+  .muted{color:#6b7280;font-size:.9rem}
+  .btn{display:inline-block;padding:.5rem .75rem;border:1px solid #e5e7eb;border-radius:.5rem;text-decoration:none;color:#111827}
+  .btn:hover{background:#f8fafc}
+  .table{width:100%;border-collapse:collapse}
+  .table th,.table td{padding:.45rem .55rem;border-top:1px solid #eef2f7;text-align:start}
+  .table thead th{background:#f8fafc;white-space:nowrap}
+  .num{text-align:end;font-variant-numeric:tabular-nums}
 
-    /* KPI */
-    .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;margin-bottom:1rem}
-    .kpi{border:1px solid #e5e7eb;background:#fff;border-radius:.75rem;padding:.8rem}
-    .kpi .t{font-size:.9rem;color:#6b7280;margin-bottom:.25rem}
-    .kpi .v{font-weight:800;font-size:1.1rem;font-variant-numeric:tabular-nums}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;margin-bottom:1rem}
+  .kpi{border:1px solid #e5e7eb;background:#fff;border-radius:.75rem;padding:.8rem}
+  .kpi .t{font-size:.9rem;color:#6b7280;margin-bottom:.25rem}
+  .kpi .v{font-weight:800;font-size:1.1rem;font-variant-numeric:tabular-nums}
 
-    /* جدول کوچک */
-    .table{width:100%;border-collapse:collapse}
-    .table th,.table td{padding:.45rem .55rem;border-top:1px solid #eef2f7;text-align:start}
-    .table thead th{background:#f8fafc;white-space:nowrap}
-    .num{text-align:end;font-variant-numeric:tabular-nums}
+  .cards-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1mm;margin-top:1rem}
+  .cardx{border:1px solid #e5e7eb;border-radius:.75rem;background:#fff;padding:1rem;display:flex;flex-direction:column;height:100%;box-sizing:border-box;overflow:hidden}
+  .cardx h3{margin:.25rem 0 .5rem;font-size:1.1rem}
+  .actions{margin-top:auto;display:flex;gap:.5rem;flex-wrap:wrap}
 
-    /* کارت‌های پایین */
-    .grid-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1rem;margin-top:1rem}
+  .card--reports .toggle-area{cursor:pointer}
+  .subcards{display:none;margin-top:.5rem;grid-template-columns:repeat(2,minmax(0,1fr));gap:1mm}
+  .subcards .subcard{border:1px dashed #e5e7eb;border-radius:.6rem;padding:.75rem;display:flex;flex-direction:column;gap:.35rem}
+  .subcards .title{font-weight:600}
+  .card--reports.open .subcards{display:grid}
 
-    /* جدول تاپ بدهکارها (خطوط ظریف‌تر) */
-    .mini th,.mini td{padding:.4rem .5rem}
-  </style>
+  .grid-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1rem;margin-top:1rem}
+  .mini th,.mini td{padding:.4rem .5rem}
+</style>
 {% endblock %}
 
 {% block subtabs %}
-  <ul class="nav nav-pills mb-3">
-    <li class="nav-item"><span class="nav-link active">مالی</span></li>
-  </ul>
+<ul class="nav nav-pills mb-3">
+  <li class="nav-item"><span class="nav-link active">مالی</span></li>
+</ul>
 {% endblock %}
 
 {% block content %}
 
-  <!-- KPI ها -->
-  <div class="kpis">
-    <div class="kpi">
-      <div class="t">مطالبات باز</div>
-      <div class="v">{{ kpis.open_total|default:0|money_fa }}</div>
-      <div class="muted" style="margin-top:.25rem"><a href="{% url 'billing:report_open_invoices' %}" class="muted">مشاهدهٔ مطالبات باز</a></div>
-    </div>
-    <div class="kpi">
-      <div class="t">۹۰+ روز</div>
-      <div class="v">{{ kpis.over_90|default:0|money_fa }}</div>
-      <div class="muted" style="margin-top:.25rem"><a href="{% url 'billing:report_aging' %}" class="muted">گزارش Aging</a></div>
-    </div>
-    <div class="kpi">
-      <div class="t">پرداخت‌های ماه جاری</div>
-      <div class="v">{{ kpis.this_month_payments|default:0|money_fa }}</div>
-    </div>
-    <div class="kpi">
-      <div class="t">فاکتورهای ماه جاری (تعداد)</div>
-      <div class="v">{{ kpis.this_month_invoices|default:0|int_fa }}</div>
-    </div>
-    <!-- ✅ جدید: تعداد فاکتورهای باز -->
-    <div class="kpi">
-      <div class="t">فاکتورهای باز (تعداد)</div>
-      <div class="v">{{ kpis.open_count|default:0|int_fa }}</div>
+<!-- KPI ها -->
+<div class="kpis">
+  <div class="kpi">
+    <div class="t">مطالبات باز</div>
+    <div class="v">{{ kpis.open_total|default:0|money_fa }}</div>
+    <div class="muted" style="margin-top:.25rem"><a href="{% url 'billing:report_open_invoices' %}" class="muted">مشاهدهٔ مطالبات باز</a></div>
+  </div>
+  <div class="kpi">
+    <div class="t">۹۰+ روز</div>
+    <div class="v">{{ kpis.over_90|default:0|money_fa }}</div>
+    <div class="muted" style="margin-top:.25rem"><a href="{% url 'billing:report_aging' %}" class="muted">گزارش Aging</a></div>
+  </div>
+  <div class="kpi">
+    <div class="t">پرداخت‌های ماه جاری</div>
+    <div class="v">{{ kpis.this_month_payments|default:0|money_fa }}</div>
+  </div>
+  <div class="kpi">
+    <div class="t">فاکتورهای ماه جاری (تعداد)</div>
+    <div class="v">{{ kpis.this_month_invoices|default:0|int_fa }}</div>
+  </div>
+  <div class="kpi">
+    <div class="t">فاکتورهای باز (تعداد)</div>
+    <div class="v">{{ kpis.open_count|default:0|int_fa }}</div>
+  </div>
+  <div class="kpi">
+    <div class="t">ارزش کل موجودی انبار</div>
+    <div class="v">{{ inventory_value|money_fa }}</div>
+    <div class="muted" style="margin-top:.25rem"><a href="/inventory/reports/stock/" class="muted">مشاهدهٔ جزئیات</a></div>
+  </div>
+  <div class="kpi">
+    <div class="t">هزینهٔ مواد مصرفی در ماه جاری</div>
+    <div class="v">{{ month_consumption|money_fa }}</div>
+    <div class="muted" style="margin-top:.25rem"><a href="/inventory/reports/movements-summary/" class="muted">گزارش حرکات</a></div>
+  </div>
+</div>
+
+<!-- کارت‌ها -->
+<div class="cards-grid">
+
+  <div class="cardx">
+    <h3>حساب دکتر</h3>
+    <p class="muted">مشاهدهٔ مانده، پرداخت‌ها و فاکتورهای مرتبط با هر پزشک.</p>
+    <div class="actions">
+      <a class="btn" href="{% url 'billing:doctor_list' %}">باز کردن حساب دکتر</a>
     </div>
   </div>
 
-      <div class="kpi">
-      <div class="t">ارزش کل موجودی انبار</div>
-      <div class="v">{{ inventory_value|money_fa }}</div>
-      <div class="muted" style="margin-top:.25rem">
-        <a href="/inventory/reports/stock/" class="muted">مشاهدهٔ جزئیات</a>
-      </div>
+  <div class="cardx">
+    <h3>فاکتورها</h3>
+    <p class="muted">صدور فاکتور، مشاهدهٔ پیش‌نویس‌ها و جزئیات فاکتورهای صادرشده.</p>
+    <div class="actions">
+      <a class="btn" href="{% url 'billing:invoice_list' %}">لیست فاکتورها</a>
+      <a class="btn" href="{% url 'billing:invoice_create_draft' %}">صدور فاکتور جدید</a>
     </div>
+  </div>
 
-    <div class="kpi">
-      <div class="t">هزینهٔ مواد مصرفی در ماه جاری</div>
-      <div class="v">{{ month_consumption|money_fa }}</div>
-      <div class="muted" style="margin-top:.25rem">
-        <a href="/inventory/reports/movements-summary/" class="muted">گزارش حرکات</a>
-      </div>
-    </div>
-
-  <!-- شورتکات‌های اصلی -->
-  <div class="grid">
-    <div class="cardx">
-      <h3>حساب دکتر</h3>
-      <p class="muted">مشاهدهٔ مانده، پرداخت‌ها و فاکتورهای مرتبط با هر پزشک.</p>
-      <div class="actions">
-        <a class="btn" href="{% url 'billing:doctor_list' %}">باز کردن حساب دکتر</a>
-      </div>
-    </div>
-
-    <div class="cardx">
-      <h3>فاکتورها</h3>
-      <p class="muted">صدور فاکتور، مشاهدهٔ پیش‌نویس‌ها و جزئیات فاکتورهای صادرشده.</p>
-      <div class="actions">
-        <a class="btn" href="{% url 'billing:invoice_list' %}">لیست فاکتورها</a>
-        <a class="btn" href="{% url 'billing:invoice_create_draft' %}">صدور فاکتور جدید</a>
-      </div>
-    </div>
-
-    <div class="cardx">
+  <div class="cardx card--reports" id="reportsCard">
+    <div class="toggle-area">
       <h3>گزارش‌های مالی</h3>
       <p class="muted">فروش ماهانه، مجموع تخفیف‌ها، مطالبات باز و Aging بدهی‌ها.</p>
-      <div class="actions">
-        <a class="btn" href="{% url 'billing:report_open_invoices' %}">نمایش گزارش‌ها</a>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn" id="reportsToggleBtn">نمایش گزارش‌ها</button>
+    </div>
+    <div class="subcards" aria-hidden="true">
+      <div class="subcard">
+        <div class="title">مطالبات باز</div>
+        <div class="muted">آخرین بدهی‌های تسویه‌نشده.</div>
+        <a class="btn" href="{% url 'billing:report_open_invoices' %}">مشاهده</a>
+      </div>
+      <div class="subcard">
+        <div class="title">گزارش Aging</div>
+        <div class="muted">تفکیک ۳۰/۶۰/۹۰+ روز.</div>
+        <a class="btn" href="{% url 'billing:report_aging' %}">مشاهده</a>
+      </div>
+      <div class="subcard">
+        <div class="title">فروش ماهانه</div>
+        <div class="muted">روند فروش در ماه‌ها.</div>
+        <a class="btn" href="{% url 'billing:report_monthly_sales' %}">مشاهده</a>
+      </div>
+      <div class="subcard">
+        <div class="title">تخفیف‌ها</div>
+        <div class="muted">مجموع و جزئیات تخفیف‌ها.</div>
+        <a class="btn" href="{% url 'billing:report_discounts' %}">مشاهده</a>
       </div>
     </div>
   </div>
 
-    <div class="grid" style="margin-top:1rem"></div> 
-     <div class="cardx">
-      <h3>هزینه‌ها</h3>
-      <p class="muted">ثبت و مدیریت: هزینه‌های جاری، خرید متریال/ابزار، تجهیزات و تعمیرات.</p>
-      <div class="actions">
-        <a class="btn" href="{% url 'billing:costs_home' %}">هاب هزینه‌ها</a>
-      </div>
+  <div class="cardx">
+    <h3>گزارش سود و زیان بازه‌ای</h3>
+    <p class="muted">فیلتر تاریخ شمسی، دکتر و نوع سفارش + KPI و جدول سفارش‌ها.</p>
+    <div class="actions">
+      <a class="btn" href="{% url 'billing:report_profit_summary_page' %}">باز کردن گزارش سود و زیان</a>
     </div>
   </div>
 
-      <div class="cardx">
-      <h3>انبارداری</h3>
-      <p class="muted">دسترسی سریع به فهرست‌ها و گزارش‌های انبار.</p>
-      <div class="actions">
-        <a class="btn" href="/inventory/">خانهٔ انبار</a>
-        <a class="btn" href="/inventory/items/materials/">فهرست متریال</a>
-        <a class="btn" href="/inventory/items/consumables/">ابزار مصرفی</a>
-        <a class="btn" href="/inventory/items/equipment/">تجهیزات</a>
-        <a class="btn" href="/inventory/movements/">کارتکس</a>
-        <a class="btn" href="/inventory/reports/movements-summary/">خلاصهٔ حرکات</a>
-        <a class="btn" href="/inventory/reports/stock/">وضعیت موجودی</a>
-        <a class="btn" href="/billing/materials/issue/new/">مصرف دستی متریال</a>
-      </div>
-    </div>
-
-  <!-- نمودار + آخرین‌ها + ۵ بدهکار برتر -->
-  <div class="grid-2">
-    <div class="cardx">
-      <h3>روند ماهانه (۱۲ ماه اخیر)</h3>
-      <p class="muted">در صورت عدم ارسال داده از سرور، مقادیر صفر نمایش داده می‌شود.</p>
-      <canvas id="fmChart" height="120"></canvas>
-      <!-- JSON دادهٔ ماهانه از سرور؛ انتظار: [{m:'1403-01', sales:12345, payments:10000}, ...] -->
-      <script id="monthlyData" type="application/json">{{ monthly_json|default:"[]"|safe }}</script>
-      <div class="actions">
-        <a class="btn" href="{% url 'billing:report_monthly_sales' %}">گزارش فروش ماهانه</a>
-      </div>
-    </div>
-
-    <div class="cardx">
-      <h3>آخرین فاکتورهای باز</h3>
-      {% if latest_open_invoices %}
-        <div style="overflow:auto">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>کد</th>
-                <th>پزشک</th>
-                <th>تاریخ صدور</th>
-                <th class="num">بدهی باز</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for inv in latest_open_invoices %}
-                <tr>
-                  <td>{{ inv.code }}</td>
-                  <td>{{ inv.doctor_name }}</td>
-                   <td class="muted" data-gdate="{{ inv.issued_at|date:'Y-m-d' }}">
-                     <span class="jalali-date">{{ inv.issued_at|to_jalali:"%Y/%m/%d"|digits_fa }}</span>
-                   </td>
-                 <td class="num">{{ inv.amount_due|money_fa }}</td>
-                  <td><a class="btn" href="{{ inv.url|default:'#' }}">جزئیات</a></td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      {% else %}
-        <p class="muted">داده‌ای برای نمایش نیست. می‌توانید از
-          <a href="{% url 'billing:report_open_invoices' %}">گزارش مطالبات باز</a> استفاده کنید.</p>
-      {% endif %}
-      <div class="actions">
-        <a class="btn" href="{% url 'billing:report_open_invoices' %}">همهٔ مطالبات باز</a>
-        <a class="btn" href="{% url 'billing:report_aging' %}">Aging بدهی‌ها</a>
-      </div>
-    </div>
-
-    <!-- ✅ جدید: ۵ پزشکِ بدهکار -->
-    <div class="cardx">
-      <h3>۵ پزشک بدهکار</h3>
-      {% if top_debtors %}
-        <div style="overflow:auto">
-          <table class="table mini">
-            <thead>
-              <tr>
-                <th style="width:40px">#</th>
-                <th>پزشک</th>
-                <th class="num" style="width:160px">بدهی باز</th>
-                <th style="width:120px"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for d in top_debtors %}
-                <tr>
-                  <td>{{ forloop.counter|int_fa }}</td>
-                  <td>{{ d.doctor_name }}</td>
-                  <td class="num">{{ d.amount_due|money_fa }}</td>
-                  <td>
-                    {% if d.doctor_id %}
-                      <a class="btn" href="{% url 'billing:doctor_account' d.doctor_id %}">حساب دکتر</a>
-                    {% else %}
-                      <span class="muted">—</span>
-                    {% endif %}
-                  </td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      {% else %}
-        <p class="muted">اطلاعاتی برای نمایش «پزشک‌های بدهکار» ارسال نشده است.</p>
-      {% endif %}
+  <div class="cardx">
+    <h3>هزینه‌ها</h3>
+    <p class="muted">ثبت و مدیریت: هزینه‌های جاری، خرید متریال/ابزار، تجهیزات و تعمیرات.</p>
+    <div class="actions">
+      <a class="btn" href="{% url 'billing:costs_home' %}">هاب هزینه‌ها</a>
     </div>
   </div>
 
+  <div class="cardx">
+    <h3>💰 مشاور قیمت</h3>
+    <p class="muted">پیشنهاد قیمت بر اساس BOM، لاب دیجیتال و هزینه‌های واقعی.</p>
+    <div class="actions">
+      <a class="btn" href="{% url 'billing:pricing_advisor_page' %}">ورود به مشاور قیمت</a>
+    </div>
+  </div>
+
+  <div class="cardx">
+    <h3>انبارداری</h3>
+    <p class="muted">دسترسی سریع به فهرست‌ها و گزارش‌های انبار.</p>
+    <div class="actions">
+      <a class="btn" href="/inventory/">خانهٔ انبار</a>
+      <a class="btn" href="/inventory/items/materials/">فهرست متریال</a>
+      <a class="btn" href="/inventory/items/consumables/">ابزار مصرفی</a>
+      <a class="btn" href="/inventory/items/equipment/">تجهیزات</a>
+      <a class="btn" href="/inventory/movements/">کارتکس</a>
+      <a class="btn" href="/inventory/reports/movements-summary/">خلاصهٔ حرکات</a>
+      <a class="btn" href="/inventory/reports/stock/">وضعیت موجودی</a>
+      <a class="btn" href="/billing/materials/issue/new/">مصرف دستی متریال</a>
+    </div>
+  </div>
+
+  <div class="cardx">
+    <h3>گزارش لاب دیجیتال</h3>
+    <p class="muted">لیست سفارش‌های ارسال‌شده (فیلتر تاریخ + خروجی CSV).</p>
+    <div class="actions">
+      <a class="btn" href="{% url 'core:digital_lab_list' %}?status=SENT">لیست ارسال‌شده‌ها</a>
+      <a class="btn" href="{% url 'core:digital_lab_list' %}">کل لیست</a>
+      <a class="btn" href="{% url 'core:digital_lab_report' %}">تحلیل مالی</a>
+    </div>
+  </div>
+
+  <div class="cardx">
+    <h3>💰 گزارش دستمزد پرسنل</h3>
+    <p class="muted">گزارش کامل دستمزدها + شروع فرآیند تسویهٔ دوره‌ای برای هر تکنسین.</p>  
+    <div class="actions">
+      <a class="btn" href="{% url 'core:wages_report' %}">مشاهدهٔ گزارش دستمزدها</a>
+      <a class="btn" href="{% url 'core:wages_payout_new' %}">ایجاد تسویهٔ دستمزد</a>
+    </div>
+  </div>
+
+</div> <!-- /cards-grid -->
+
+<!-- نمودار + آخرین‌ها + ۵ بدهکار برتر -->
+<div class="grid-2">
+  <div class="cardx">
+    <h3>روند ماهانه (۱۲ ماه اخیر)</h3>
+    <p class="muted">در صورت عدم ارسال داده از سرور، مقادیر صفر نمایش داده می‌شود.</p>
+    <canvas id="fmChart" height="120"></canvas>
+    <script id="monthlyData" type="application/json">{{ monthly_json|default:"[]"|safe }}</script>
+    <div class="actions">
+      <a class="btn" href="{% url 'billing:report_monthly_sales' %}">گزارش فروش ماهانه</a>
+    </div>
+  </div>
+
+  <div class="cardx">
+    <h3>آخرین فاکتورهای باز</h3>
+    {% if latest_open_invoices %}
+      <div style="overflow:auto">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>کد</th>
+              <th>پزشک</th>
+              <th>تاریخ صدور</th>
+              <th class="num">بدهی باز</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for inv in latest_open_invoices %}
+            <tr>
+              <td>{{ inv.code }}</td>
+              <td>{{ inv.doctor_name }}</td>
+              <!-- ✅ اصلاح فرمت روز/ماه/سال جلالی -->
+              <td class="muted pdate" data-gdate="{{ inv.issued_at|date:'Y-m-d' }}">
+                <span class="jalali-date">{{ inv.issued_at|to_jalali:"%Y/%m/%d"|digits_fa }}</span>
+              </td>
+              <td class="num">{{ inv.amount_due|money_fa }}</td>
+              <td><a class="btn" href="{{ inv.url|default:'#' }}">جزئیات</a></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="muted">داده‌ای برای نمایش نیست. می‌توانید از
+        <a href="{% url 'billing:report_open_invoices' %}">گزارش مطالبات باز</a> استفاده کنید.</p>
+    {% endif %}
+    <div class="actions">
+      <a class="btn" href="{% url 'billing:report_open_invoices' %}">همهٔ مطالبات باز</a>
+      <a class="btn" href="{% url 'billing:report_aging' %}">Aging بدهی‌ها</a>
+    </div>
+  </div>
+
+  <div class="cardx">
+    <h3>۵ پزشک بدهکار</h3>
+    {% if top_debtors %}
+      <div style="overflow:auto">
+        <table class="table mini">
+          <thead>
+            <tr>
+              <th style="width:40px">#</th>
+              <th>پزشک</th>
+              <th class="num" style="width:160px">بدهی باز</th>
+              <th style="width:120px"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for d in top_debtors %}
+            <tr>
+              <td>{{ forloop.counter|int_fa }}</td>
+              <td>{{ d.doctor_name }}</td>
+              <td class="num">{{ d.amount_due|money_fa }}</td>
+              <td>
+                {% if d.doctor_id %}
+                  <a class="btn" href="{% url 'billing:doctor_account' d.doctor_id %}">حساب دکتر</a>
+                {% else %}
+                  <span class="muted">—</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="muted">اطلاعاتی برای نمایش «پزشک‌های بدهکار» ارسال نشده است.</p>
+    {% endif %}
+  </div>
+</div>
 {% endblock %}
 
 {% block body_extra %}
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
+
+<!-- نمودار: برچسب محور به جلالی -->
 <script>
-(function formatLatestOpenInvoicesDates(){
-  function faDigits(s){
-    if (window.DateUtils && typeof DateUtils.faDigits === 'function') return DateUtils.faDigits(s+'');
-    return (s+'').replace(/\d/g, d=>"۰۱۲۳۴۵۶۷۸۹"[d]);
-  }
-  function toJalaliFromISO(iso){
-    if (!iso) return '';
-    // اولویت با DateUtils مرکزی
-    if (window.DateUtils){
-      if (typeof DateUtils.toJalaliStrFromISO === 'function') return DateUtils.toJalaliStrFromISO(iso);
-      if (typeof DateUtils.toJalaliString    === 'function')    return DateUtils.toJalaliString(iso);
-      if (typeof DateUtils.gregorianToJalali === 'function'){
-        try{
-          var p = iso.split('-').map(Number);
-          var j = DateUtils.gregorianToJalali(p[0], p[1], p[2]); // [jy,jm,jd]
-          var pad = n => (n<10?'0':'')+n;
-          return j ? (j[0]+'/'+pad(j[1])+'/'+pad(j[2])) : '';
-        }catch(e){}
+(function(){
+  function faDigits(s){return (s+'').replace(/\d/g,d=>"۰۱۲۳۴۵۶۷۸۹"[d]);}
+  function ymToJalaliLabel(ym){
+    // ورودی مثل 2025-02 یا 1403-01
+    if(!ym) return '';
+    var s=(ym+'').replace('/','-');
+    var p=s.split('-'); if(p.length!==2) return faDigits(s);
+    var y=+p[0], m=+p[1]; if(!y||!m) return faDigits(s);
+
+    // اگر میلادی است → تبدیل به جلالی
+    if(y>=1900){
+      if(window.DateUtils && typeof DateUtils.gregorianToJalali==='function'){
+        try{ var j=DateUtils.gregorianToJalali(y,m,1); var mm=(j[1]<10?'0':'')+j[1]; return faDigits(j[0]+'/'+mm); }catch(e){}
+      }
+      if(window.persianDate){
+        try{ var g=new Date(y,m-1,1); return faDigits(new persianDate(g).calendar('persian').format('YYYY/MM')); }catch(e){}
       }
     }
-    // fallback با persian-date
-    try{
-      var g = new Date(iso + 'T00:00:00');
-      if (isNaN(g.getTime())) return '';
-      return new persianDate(g).calendar('persian').format('YYYY/MM/DD');
-    }catch(e){ return ''; }
+    // اگر خودش جلالی است
+    if(y>=1300 && y<=1600){ return faDigits(y+'/'+(m<10?'0':'')+m); }
+    return faDigits(s);
   }
 
-  document.querySelectorAll('td.pdate[data-gdate]').forEach(function(td){
-    var iso = (td.getAttribute('data-gdate')||'').trim(); // مثل "2025-10-02"
-    if(!iso){ td.textContent = '—'; return; }
-    var j = toJalaliFromISO(iso);
-    td.textContent = j ? faDigits(j) : faDigits(iso.replace(/-/g,'/'));
+  var raw=document.getElementById('monthlyData');
+  var data=[]; try{ data=JSON.parse(raw ? (raw.textContent.trim()||'[]') : '[]'); }catch(e){ data=[]; }
+
+  var labels=[], sales=[], pays=[];
+  if(Array.isArray(data) && data.length){
+    data.forEach(function(r){
+      labels.push( ymToJalaliLabel(r.m||'') );
+      sales.push(Number(r.sales||0));
+      pays.push(Number(r.payments||0));
+    });
+  }else{
+    for(var i=1;i<=12;i++){ labels.push(faDigits('1403/'+(i<10?'0':'')+i)); sales.push(0); pays.push(0); }
+  }
+
+  var el=document.getElementById('fmChart'); if(!el) return;
+  new Chart(el,{
+    type:'bar',
+    data:{ labels:labels, datasets:[ {label:'فروش',data:sales},{label:'پرداخت',data:pays} ] },
+    options:{
+      responsive:true,
+      plugins:{
+        legend:{position:'top'},
+        tooltip:{callbacks:{label:function(c){ try{return ' '+Number(c.parsed.y||0).toLocaleString('fa-IR')}catch(e){return c.parsed.y} }}}
+      },
+      scales:{ y:{ ticks:{ callback:function(v){ try{return Number(v).toLocaleString('fa-IR')}catch(e){return v} } } } }
+    }
   });
 })();
 </script>
-  <script>
-    (function(){
-      var raw = document.getElementById('monthlyData');
-      var data = [];
-      try { data = JSON.parse(raw ? (raw.textContent.trim() || '[]') : '[]'); } catch(e){ data = []; }
 
-      var labels = [], sales=[], pays=[];
-      if (Array.isArray(data) && data.length){
-        data.forEach(function(r){
-          labels.push(r.m || '');
-          sales.push(Number(r.sales||0));
-          pays.push(Number(r.payments||0));
-        });
-      } else {
-        for (var i=1;i<=12;i++){ labels.push('ماه ' + i.toString()); sales.push(0); pays.push(0); }
-      }
-
-      var el = document.getElementById('fmChart');
-      if (!el) return;
-      new Chart(el, {
-        type: 'bar',
-        data: {
-          labels: labels,
-          datasets: [
-            { label: 'فروش', data: sales },
-            { label: 'پرداخت', data: pays }
-          ]
-        },
-        options:{
-          responsive:true,
-          plugins:{
-            legend:{ position:'top' },
-            tooltip:{ callbacks:{ label:function(c){ try{ return ' '+Number(c.parsed.y||0).toLocaleString('fa-IR'); }catch(e){ return c.parsed.y; } } } }
-          },
-          scales:{
-            y:{ ticks:{ callback:function(v){ try{ return Number(v).toLocaleString('fa-IR'); }catch(e){ return v; } } } }
-          }
-        }
-      });
-    })();
-  </script>
-  <script>
-document.addEventListener('DOMContentLoaded', function(){
-  (function formatDashboardDatesFix(){
-    function faDigits(s){
-      return (s+'').replace(/\d/g, d=>"۰۱۲۳۴۵۶۷۸۹"[d]);
-    }
-    function toJalaliFromISO(iso){
-      if (!iso) return '';
-      var out = '';
-      try {
-        if (window.DateUtils){
-          if (typeof DateUtils.toJalaliStrFromISO === 'function')
-            out = DateUtils.toJalaliStrFromISO(iso);
-          else if (typeof DateUtils.toJalaliString === 'function')
-            out = DateUtils.toJalaliString(iso);
-          else if (typeof DateUtils.gregorianToJalali === 'function'){
-            var p = iso.split('-').map(Number);
-            var j = DateUtils.gregorianToJalali(p[0], p[1], p[2]);
-            var pad = n => (n<10?'0':'')+n;
-            out = j ? (j[0]+'/'+pad(j[1])+'/'+pad(j[2])) : '';
-          }
-        }
-      }catch(e){ /* ساکت باش؛ پیام دیباگ نده */ }
-
-      // اگر هنوز خروجی خالیه، fallback با persian-date
-      if (!out && window.persianDate){
-        try {
-          var g = new Date(iso + 'T00:00:00');
-          if (!isNaN(g.getTime()))
-            out = new persianDate(g).calendar('persian').format('YYYY/MM/DD');
-        } catch(e){}
-      }
-      return out;
-    }
-
-    // فقط تاریخ‌های جدول «آخرین فاکتورهای باز»
-    document.querySelectorAll('td.pdate[data-gdate]').forEach(function(td){
-      var iso = (td.getAttribute('data-gdate')||'').trim();
-      if(!iso){ td.textContent = '—'; return; }
-      var j = toJalaliFromISO(iso);
-      td.textContent = j ? faDigits(j) : faDigits(iso.replace(/-/g,'/'));
-    });
-  })();
-});
-</script>
+<!-- تثبیت تاریخ‌های جلالی جدول -->
 <script>
-document.addEventListener('DOMContentLoaded', function(){
-  // هر سلول تاریخ شمسی رو دوباره با مقدار داخلیش بازنویسی می‌کنیم تا میلادی جایگزین نشه
-  document.querySelectorAll('td[data-gdate] .jalali-date').forEach(function(span){
-    if(span && span.textContent) span.parentNode.textContent = span.textContent;
+document.addEventListener('DOMContentLoaded',function(){
+  function faDigits(s){return (s+'').replace(/\d/g,d=>"۰۱۲۳۴۵۶۷۸۹"[d]);}
+  function toJalaliFromISO(iso){
+    if(!iso) return '';
+    if(window.DateUtils){
+      if(typeof DateUtils.toJalaliStrFromISO==='function') return DateUtils.toJalaliStrFromISO(iso);
+      if(typeof DateUtils.toJalaliString==='function') return DateUtils.toJalaliString(iso);
+      if(typeof DateUtils.gregorianToJalali==='function'){
+        try{
+          var p=iso.split('-').map(Number), j=DateUtils.gregorianToJalali(p[0],p[1],p[2]);
+          var pad=n=>(n<10?'0':'')+n; return j?(j[0]+'/'+pad(j[1])+'/'+pad(j[2])):'';
+        }catch(e){}
+      }
+    }
+    try{
+      var g=new Date(iso+'T00:00:00'); if(isNaN(g.getTime())) return '';
+      return new persianDate(g).calendar('persian').format('YYYY/MM/DD');
+    }catch(e){return '';}
+  }
+
+  document.querySelectorAll('td.pdate').forEach(function(td){
+    var span=td.querySelector('.jalali-date');
+    if(span && span.textContent.trim()){ td.textContent = span.textContent.trim(); return; }
+    var iso=(td.getAttribute('data-gdate')||'').trim();
+    var j=toJalaliFromISO(iso);
+    td.textContent = j ? faDigits(j) : '';
   });
 });
 </script>
+
+<!-- باز/بسته شدن ۴ زیرکارت «گزارش‌های مالی» -->
+<script>
+document.addEventListener('DOMContentLoaded',function(){
+  var card=document.getElementById('reportsCard');
+  var btn=document.getElementById('reportsToggleBtn');
+  function toggleReports(){
+    if(!card) return;
+    var isOpen=card.classList.toggle('open');
+    var sc=card.querySelector('.subcards');
+    if(sc) sc.setAttribute('aria-hidden',isOpen?'false':'true');
+    if(btn) btn.textContent=isOpen?'بستن':'نمایش گزارش‌ها';
+  }
+  if(btn) btn.addEventListener('click',function(e){e.preventDefault();toggleReports();});
+  var ta=card && card.querySelector('.toggle-area');
+  if(ta) ta.addEventListener('click',toggleReports);
+});
+</script>
 {% endblock %}
+
+
+
+
+
+
+
 
 
 

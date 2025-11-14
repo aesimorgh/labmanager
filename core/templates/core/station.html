@@ -6,6 +6,7 @@
   <title>پنل مسئول مرحله</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
   <style>
     body{font-family:Tahoma,sans-serif;background:#f8f9fa}
     .card{margin-top:1rem}
@@ -25,14 +26,14 @@
   <h4 class="mt-3">پنل مسئول مرحله</h4>
 
   {% if messages %}
-  <div class="mt-3">
-    {% for message in messages %}
-      <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
-        {{ message }}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-      </div>
-    {% endfor %}
-  </div>
+    <div class="mt-3">
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+          {{ message }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+      {% endfor %}
+    </div>
   {% endif %}
 
   <!-- فیلترها / انتخاب مرحله -->
@@ -59,34 +60,29 @@
           </select>
         </div>
 
-          <!-- فیلتر دکتر -->
-  <div class="col-md-3">
-    <label class="form-label">دکتر</label>
-    <select name="doctor" class="form-select">
-      <option value="">— همه دکترها —</option>
-      {% for dn in doctors %}
-        <option value="{{ dn }}" {% if doctor == dn %}selected{% endif %}>{{ dn }}</option>
-      {% endfor %}
-    </select>
-  </div>
+        <div class="col-md-3">
+          <label class="form-label">دکتر</label>
+          <select name="doctor" class="form-select">
+            <option value="">— همه دکترها —</option>
+            {% for dn in doctors %}
+              <option value="{{ dn }}" {% if doctor == dn %}selected{% endif %}>{{ dn }}</option>
+            {% endfor %}
+          </select>
+        </div>
 
-  <!-- فیلتر محصول -->
-  <div class="col-md-3">
-    <label class="form-label">محصول</label>
-    <select id="st-product" name="product" class="form-select">
-      <option value="">— همه محصولات —</option>
-      {% for p in products %}
-        <option value="{{ p.code }}" {% if product == p.code %}selected{% endif %}>
-          {{ p.name }} ({{ p.code }})
-        </option>
-      {% endfor %}
-    </select>
-  </div>
+        <div class="col-md-3">
+          <label class="form-label">محصول</label>
+          <select id="st-product" name="product" class="form-select">
+            <option value="">— همه محصولات —</option>
+            {% for p in products %}
+              <option value="{{ p.code }}" {% if product == p.code %}selected{% endif %}>{{ p.name }} ({{ p.code }})</option>
+            {% endfor %}
+          </select>
+        </div>
 
         <div class="col-md-3">
           <label class="form-label">جستجو</label>
-          <input type="text" class="form-control" name="q" value="{{ q|default:'' }}"
-                 placeholder="بیمار/دکتر/سریال/#سفارش">
+          <input type="text" class="form-control" name="q" value="{{ q|default:'' }}" placeholder="بیمار/دکتر/سریال/#سفارش">
         </div>
 
         <div class="col-md-2 d-flex align-items-end">
@@ -96,35 +92,65 @@
     </div>
   </div>
 
-  <!-- جدول مراحل منتخب -->
+  <!-- جدول مراحل منتخب + نوار Claim ثابت -->
   <div class="card shadow-sm">
     <div class="card-header bg-info text-white">مراحل انتخاب‌شده{% if key %} — {{ key }}{% endif %}</div>
     <div class="card-body">
-      <!-- فرم مخفی برای ارسال گروهی -->
-      <form id="st-bulk-form" method="post"
-            action="{% url 'core:stage_bulk_done_today' %}?next={{ request.get_full_path|urlencode }}">
+
+      <!-- نوار Claim (ثابت) -->
+      <form id="st-bulk-form" method="post" action="{% url 'core:stage_bulk_done_today' %}?next={{ request.get_full_path|urlencode }}">
         {% csrf_token %}
       </form>
 
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
+        <div class="small text-muted">انتخاب‌شده: <span id="st-bulk-count">0</span></div>
+
+        <div class="d-flex flex-wrap align-items-end gap-2">
+          <div>
+            <label class="form-label mb-1">تکنسین</label>
+            <select class="form-select form-select-sm" id="st-tech-name">
+              <option value="">— انتخاب تکنسین —</option>
+              {% for t in technicians %}
+                <option value="{{ t }}">{{ t }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="form-label mb-1">دستمزد واحد</label>
+            <input type="text" class="form-control form-control-sm" id="st-unit-wage" placeholder="مثلاً ۱۵۰۰۰۰">
+          </div>
+          <div>
+            <label class="form-label mb-1">تاریخ اتمام</label>
+            <input type="text" class="form-control form-control-sm jalali_date" id="st-finished-at" placeholder="YYYY/MM/DD">
+          </div>
+
+          <div class="btn-group ms-md-2">
+            <!-- انتخاب همه / لغو انتخاب -->
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="st-select-all">انتخاب همه</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="st-select-none">لغو انتخاب</button>
+            
+            <button type="button" class="btn btn-outline-primary btn-sm" id="st-bulk-start"
+                    data-url="{% url 'core:stage_bulk_start_today' %}?next={{ request.get_full_path|urlencode }}" disabled>
+              شروع امروز (گروهی)
+            </button>
+
+            <button type="button" class="btn btn-success btn-sm" id="st-bulk-done"
+                    data-url="{% url 'core:stage_bulk_done_today' %}?next={{ request.get_full_path|urlencode }}" disabled>
+              اتمام امروز (گروهی)
+            </button>
+
+            <!-- فعلاً بدون آدرس بک‌اند؛ در گام بعدی اضافه می‌کنیم -->
+            <button type="button" class="btn btn-warning btn-sm" id="st-bulk-claim"
+                    data-url="{% url 'core:stage_bulk_claim' %}?next={{ request.get_full_path|urlencode }}"
+                    disabled>
+              ثبت دستمزد (Claim)
+            </button>
+          </div>
+        </div>
+      </div>
+
       {% if key %}
         {% if stages %}
-          <div class="d-flex justify-content-between align-items-center mb-2">
-  <div class="small text-muted">انتخاب‌شده: <span id="st-bulk-count">0</span></div>
-  <div class="btn-group">
-    <button type="button" class="btn btn-outline-secondary btn-sm" id="st-select-all">انتخاب همه</button>
-    <button type="button" class="btn btn-outline-secondary btn-sm" id="st-select-none">لغو انتخاب</button>
-
-    <!-- شروع امروز (گروهی) -->
-    <button type="button" class="btn btn-outline-primary btn-sm" id="st-bulk-start"
-            data-url="{% url 'core:stage_bulk_start_today' %}?next={{ request.get_full_path|urlencode }}"
-            disabled>شروع امروز (گروهی)</button>
-
-    <!-- اتمام امروز (گروهی) -->
-    <button type="button" class="btn btn-success btn-sm" id="st-bulk-done"
-            data-url="{% url 'core:stage_bulk_done_today' %}?next={{ request.get_full_path|urlencode }}"
-            disabled>اتمام امروز (گروهی)</button>
-  </div>
-</div>
           <div class="table-responsive">
             <table class="table table-sm align-middle">
               <thead class="sticky-head">
@@ -144,12 +170,12 @@
               <tbody>
                 {% for s in stages %}
                   <tr {% if s.is_overdue %}class="row-overdue"{% endif %}>
-                    <td>
-                      <input type="checkbox" class="st-check" value="{{ s.id }}" {% if s.status == "done" %}disabled{% endif %}>
-                    </td>
+                    <td><input type="checkbox" class="st-check" value="{{ s.id }}" {% if s.status == "done" %}disabled{% endif %}></td>
                     <td>{{ forloop.counter|int_fa }}</td>
-                    <td>#{{ s.order_id|int_fa }}</td>
-                    <td>{{ s.order.patient.name|default:"—" }}</td>
+                     <td>
+                       <a href="{% url 'core:core_workbench_order' s.order_id %}">#{{ s.order_id|int_fa }}</a>
+                     </td>
+                   <td>{{ s.order.patient.name|default:"—" }}</td>
                     <td>{{ s.order.doctor|default:"—" }}</td>
                     <td>{{ s.label }}</td>
                     <td>{{ s.planned_date|default:"—"|dash_to_slash|digits_fa }}</td>
@@ -165,9 +191,7 @@
                       {% else %}
                         <span class="badge badge-status st-pending">در صف</span>
                       {% endif %}
-                      {% if s.is_overdue %}
-                        <span class="badge badge-status st-blocked ms-1">عقب‌افتاده</span>
-                      {% endif %}
+                      {% if s.is_overdue %}<span class="badge badge-status st-blocked ms-1">عقب‌افتاده</span>{% endif %}
                     </td>
                   </tr>
                 {% endfor %}
@@ -175,172 +199,232 @@
             </table>
           </div>
 
-      {% if is_paginated %}
-<div class="d-flex justify-content-between align-items-center mt-3">
-  <nav>
-    <ul class="pagination pagination-sm mb-0">
-      {% if page_obj.has_previous %}
-        <li class="page-item">
-          <a class="page-link"
-             href="?key={{ key }}&status={{ status_filter }}{% if doctor %}&doctor={{ doctor|urlencode }}{% endif %}{% if product %}&product={{ product|urlencode }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}&ps={{ ps }}&page=1">اول</a>
-        </li>
-        <li class="page-item">
-          <a class="page-link"
-             href="?key={{ key }}&status={{ status_filter }}{% if doctor %}&doctor={{ doctor|urlencode }}{% endif %}{% if product %}&product={{ product|urlencode }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}&ps={{ ps }}&page={{ page_obj.previous_page_number }}">قبلی</a>
-        </li>
-      {% else %}
-        <li class="page-item disabled"><span class="page-link">اول</span></li>
-        <li class="page-item disabled"><span class="page-link">قبلی</span></li>
-      {% endif %}
+          {% if is_paginated %}
+          <div class="d-flex justify-content-between align-items-center mt-3">
+            <nav>
+              <ul class="pagination pagination-sm mb-0">
+                {% if page_obj.has_previous %}
+                  <li class="page-item">
+                    <a class="page-link"
+                       href="?key={{ key }}&status={{ status_filter }}{% if doctor %}&doctor={{ doctor|urlencode }}{% endif %}{% if product %}&product={{ product|urlencode }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}&ps={{ ps }}&page=1">اول</a>
+                  </li>
+                  <li class="page-item">
+                    <a class="page-link"
+                       href="?key={{ key }}&status={{ status_filter }}{% if doctor %}&doctor={{ doctor|urlencode }}{% endif %}{% if product %}&product={{ product|urlencode }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}&ps={{ ps }}&page={{ page_obj.previous_page_number }}">قبلی</a>
+                  </li>
+                {% else %}
+                  <li class="page-item disabled"><span class="page-link">اول</span></li>
+                  <li class="page-item disabled"><span class="page-link">قبلی</span></li>
+                {% endif %}
 
-      <li class="page-item disabled">
-        <span class="page-link">صفحه {{ page_obj.number|int_fa }} از {{ page_obj.paginator.num_pages|int_fa }}</span>
-      </li>
+                <li class="page-item disabled">
+                  <span class="page-link">صفحه {{ page_obj.number|int_fa }} از {{ page_obj.paginator.num_pages|int_fa }}</span>
+                </li>
 
-      {% if page_obj.has_next %}
-        <li class="page-item">
-          <a class="page-link"
-             href="?key={{ key }}&status={{ status_filter }}{% if doctor %}&doctor={{ doctor|urlencode }}{% endif %}{% if product %}&product={{ product|urlencode }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}&ps={{ ps }}&page={{ page_obj.next_page_number }}">بعدی</a>
-        </li>
-        <li class="page-item">
-          <a class="page-link"
-             href="?key={{ key }}&status={{ status_filter }}{% if doctor %}&doctor={{ doctor|urlencode }}{% endif %}{% if product %}&product={{ product|urlencode }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}&ps={{ ps }}&page={{ page_obj.paginator.num_pages }}">آخر</a>
-        </li>
-      {% else %}
-        <li class="page-item disabled"><span class="page-link">بعدی</span></li>
-        <li class="page-item disabled"><span class="page-link">آخر</span></li>
-      {% endif %}
-    </ul>
-  </nav>
+                {% if page_obj.has_next %}
+                  <li class="page-item">
+                    <a class="page-link"
+                       href="?key={{ key }}&status={{ status_filter }}{% if doctor %}&doctor={{ doctor|urlencode }}{% endif %}{% if product %}&product={{ product|urlencode }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}&ps={{ ps }}&page={{ page_obj.next_page_number }}">بعدی</a>
+                  </li>
+                  <li class="page-item">
+                    <a class="page-link"
+                       href="?key={{ key }}&status={{ status_filter }}{% if doctor %}&doctor={{ doctor|urlencode }}{% endif %}{% if product %}&product={{ product|urlencode }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}&ps={{ ps }}&page={{ page_obj.paginator.num_pages }}">آخر</a>
+                  </li>
+                {% else %}
+                  <li class="page-item disabled"><span class="page-link">بعدی</span></li>
+                  <li class="page-item disabled"><span class="page-link">آخر</span></li>
+                {% endif %}
+              </ul>
+            </nav>
 
-  <form method="get" class="d-flex align-items-center">
-    <input type="hidden" name="key" value="{{ key }}">
-    <input type="hidden" name="status" value="{{ status_filter }}">
-    {% if doctor %}<input type="hidden" name="doctor" value="{{ doctor }}">{% endif %}
-    {% if product %}<input type="hidden" name="product" value="{{ product }}">{% endif %}
-    {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
-    <label class="me-2">تعداد در صفحه</label>
-    <select name="ps" class="form-select form-select-sm me-2" onchange="this.form.submit()">
-      <option value="25"  {% if ps == 25  %}selected{% endif %}>{{ 25|int_fa }}</option>
-      <option value="50"  {% if ps == 50  %}selected{% endif %}>{{ 50|int_fa }}</option>
-      <option value="100" {% if ps == 100 %}selected{% endif %}>{{ 100|int_fa }}</option>
-      <option value="150" {% if ps == 150 %}selected{% endif %}>{{ 150|int_fa }}</option>
-      <option value="200" {% if ps == 200 %}selected{% endif %}>{{ 200|int_fa }}</option>
-    </select>
-  </form>
-</div>
-{% endif %}
+            <form method="get" class="d-flex align-items-center">
+              <input type="hidden" name="key" value="{{ key }}">
+              <input type="hidden" name="status" value="{{ status_filter }}">
+              {% if doctor %}<input type="hidden" name="doctor" value="{{ doctor }}">{% endif %}
+              {% if product %}<input type="hidden" name="product" value="{{ product }}">{% endif %}
+              {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+              <label class="me-2">تعداد در صفحه</label>
+              <select name="ps" class="form-select form-select-sm me-2" onchange="this.form.submit()">
+                <option value="25"  {% if ps == 25  %}selected{% endif %}>{{ 25|int_fa }}</option>
+                <option value="50"  {% if ps == 50  %}selected{% endif %}>{{ 50|int_fa }}</option>
+                <option value="100" {% if ps == 100 %}selected{% endif %}>{{ 100|int_fa }}</option>
+                <option value="150" {% if ps == 150 %}selected{% endif %}>{{ 150|int_fa }}</option>
+                <option value="200" {% if ps == 200 %}selected{% endif %}>{{ 200|int_fa }}</option>
+              </select>
+            </form>
+          </div>
+          {% endif %}
         {% else %}
           <div class="text-muted">هیچ مرحله‌ای برای این کلید پیدا نشد.</div>
         {% endif %}
       {% else %}
-        <div class="text-muted">برای شروع، «مرحله» را از بالا انتخاب کن و دکمهٔ «نمایش» را بزن.</div>
+        <div class="text-muted">برای شروع، «مرحله» را از بالا انتخاب کن و «نمایش» را بزن.</div>
       {% endif %}
     </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
+
   <script>
-(function(){
-  const bulkForm     = document.getElementById('st-bulk-form');
-  const checkAll     = document.getElementById('st-check-all');
-  const bulkDoneBtn  = document.getElementById('st-bulk-done');
-  const bulkStartBtn = document.getElementById('st-bulk-start');
-  const selAllBtn    = document.getElementById('st-select-all');
-  const selNoneBtn   = document.getElementById('st-select-none');
-  const countEl      = document.getElementById('st-bulk-count');
+  (function(){
+    const bulkForm     = document.getElementById('st-bulk-form');
+    const checkAll     = document.getElementById('st-check-all');
+    const bulkDoneBtn  = document.getElementById('st-bulk-done');
+    const bulkStartBtn = document.getElementById('st-bulk-start');
+    const claimBtn     = document.getElementById('st-bulk-claim');
+    const selAllBtn    = document.getElementById('st-select-all');
+    const selNoneBtn   = document.getElementById('st-select-none');
+    const countEl      = document.getElementById('st-bulk-count');
 
-  function checks(){ return Array.from(document.querySelectorAll('.st-check')); }
+    function checks(){ return Array.from(document.querySelectorAll('.st-check')); }
 
-  function updateState(){
-    const enabled  = checks().filter(c => !c.disabled);
-    const selected = enabled.filter(c => c.checked);
-    const n = selected.length;
+    function updateState(){
+      const enabled  = checks().filter(c => !c.disabled);
+      const selected = enabled.filter(c => c.checked);
+      const n = selected.length;
 
-    if (countEl) countEl.textContent = n;
-    if (bulkDoneBtn)  bulkDoneBtn.disabled  = (n === 0);
-    if (bulkStartBtn) bulkStartBtn.disabled = (n === 0);
+      if (countEl) countEl.textContent = n;
+      if (bulkDoneBtn)  bulkDoneBtn.disabled  = (n === 0);
+      if (bulkStartBtn) bulkStartBtn.disabled = (n === 0);
+      if (claimBtn)     claimBtn.disabled     = (n === 0);
+    }
 
     if (checkAll){
-      const allOn = enabled.length>0 && enabled.every(c => c.checked);
-      const anyOn = enabled.some(c => c.checked);
-      checkAll.checked = allOn;
-      checkAll.indeterminate = anyOn && !allOn;
+      checkAll.addEventListener('change', function(){
+        checks().forEach(c => { if(!c.disabled) c.checked = checkAll.checked; });
+        updateState();
+      });
     }
-  }
 
-  // master
-  if (checkAll){
-    checkAll.addEventListener('change', function(){
-      checks().forEach(c => { if(!c.disabled) c.checked = checkAll.checked; });
-      updateState();
+    document.addEventListener('change', function(e){
+      if (e.target && e.target.classList && e.target.classList.contains('st-check')){
+        updateState();
+      }
     });
-  }
 
-  // row change
-  document.addEventListener('change', function(e){
-    if (e.target && e.target.classList && e.target.classList.contains('st-check')){
-      updateState();
+    function submitBulk(toUrl){
+      if (!bulkForm || !toUrl) return;
+      const ids = checks().filter(c => c.checked && !c.disabled).map(c => c.value);
+      if (!ids.length) return;
+      Array.from(bulkForm.querySelectorAll('input[data-dyn="1"]')).forEach(el => el.remove());
+      ids.forEach(id => {
+        const inp = document.createElement('input');
+        inp.type = 'hidden'; inp.name = 'stage_id'; inp.value = id; inp.setAttribute('data-dyn','1');
+        bulkForm.appendChild(inp);
+      });
+      bulkForm.action = toUrl;
+      bulkForm.submit();
+    }
+
+    if (bulkStartBtn){
+      bulkStartBtn.addEventListener('click', function(){
+        submitBulk(bulkStartBtn.getAttribute('data-url'));
+      });
+    }
+    if (bulkDoneBtn){
+      bulkDoneBtn.addEventListener('click', function(){
+        submitBulk(bulkDoneBtn.getAttribute('data-url'));
+      });
+    }
+
+    // select all / none (پس از Bind دکمه‌های start/done)
+    if (selAllBtn){
+      selAllBtn.addEventListener('click', function(){
+        const boxes = Array.from(document.querySelectorAll('.st-check'));
+        boxes.forEach(c => { if(!c.disabled) c.checked = true; });
+        if (checkAll){
+          const enabled = boxes.filter(c => !c.disabled);
+          checkAll.checked = enabled.length > 0;
+          checkAll.indeterminate = false;
+        }
+        // دکمه‌های گروهی را فعال کن
+        (function updateStateAfterSelectAll(){
+          const enabled  = boxes.filter(c => !c.disabled);
+          const selected = enabled.filter(c => c.checked);
+          const n = selected.length;
+          if (document.getElementById('st-bulk-count')) document.getElementById('st-bulk-count').textContent = n;
+          if (bulkDoneBtn)  bulkDoneBtn.disabled  = (n === 0);
+          if (bulkStartBtn) bulkStartBtn.disabled = (n === 0);
+          if (claimBtn)     claimBtn.disabled     = (n === 0);
+        })();
+      });
+    }
+
+    if (selNoneBtn){
+      selNoneBtn.addEventListener('click', function(){
+        const boxes = Array.from(document.querySelectorAll('.st-check'));
+        boxes.forEach(c => { if(!c.disabled) c.checked = false; });
+        if (checkAll){
+          checkAll.checked = false;
+          checkAll.indeterminate = false;
+        }
+        // دکمه‌های گروهی را غیرفعال کن
+        (function updateStateAfterSelectNone(){
+          if (document.getElementById('st-bulk-count')) document.getElementById('st-bulk-count').textContent = 0;
+          if (bulkDoneBtn)  bulkDoneBtn.disabled  = true;
+          if (bulkStartBtn) bulkStartBtn.disabled = true;
+          if (claimBtn)     claimBtn.disabled     = true;
+        })();
+      });
+    }
+
+    // Claim (فعلاً بدون بک‌اند؛ فقط آماده‌سازی فرم)
+    (function(){
+      const techSel     = document.getElementById('st-tech-name');
+      const wageInp     = document.getElementById('st-unit-wage');
+      const finishedInp = document.getElementById('st-finished-at');
+      if (window.jQuery && $.fn && $.fn.persianDatepicker) {
+        $('#st-finished-at').persianDatepicker({ format:'YYYY/MM/DD', autoClose:true, calendar:{ persian:{ locale:'fa' } } });
+      }
+      function submitClaim(toUrl){
+        if (!bulkForm) return;
+        const ids = checks().filter(c => c.checked && !c.disabled).map(c => c.value);
+        if (!ids.length) return;
+        Array.from(bulkForm.querySelectorAll('input[data-dyn="1"]')).forEach(el => el.remove());
+        ids.forEach(id => {
+          const h = document.createElement('input');
+          h.type='hidden'; h.name='stage_id'; h.value=id; h.setAttribute('data-dyn','1');
+          bulkForm.appendChild(h);
+        });
+        const t = document.createElement('input'); t.type='hidden'; t.name='technician_name'; t.value = (techSel && techSel.value) || ''; t.setAttribute('data-dyn','1'); bulkForm.appendChild(t);
+        const w = document.createElement('input'); w.type='hidden'; w.name='unit_wage';        w.value = (wageInp && wageInp.value) || ''; w.setAttribute('data-dyn','1'); bulkForm.appendChild(w);
+        const f = document.createElement('input'); f.type='hidden'; f.name='finished_at';      f.value = (finishedInp && finishedInp.value) || ''; f.setAttribute('data-dyn','1'); bulkForm.appendChild(f);
+
+        if (!toUrl){
+          alert('UI ثبت دستمزد آماده است؛ در گام بعدی آدرس بک‌اند را اضافه می‌کنیم.');
+          return;
+        }
+        bulkForm.action = toUrl;
+        bulkForm.submit();
+      }
+      if (claimBtn){
+        claimBtn.addEventListener('click', function(){
+          submitClaim(claimBtn.getAttribute('data-url'));
+        });
+      }
+    })();
+
+    updateState();
+  })();
+  </script>
+
+  <script>
+  // تغییر محصول ⇒ ریفرش فرم (برای فیلتر کردن کلیدها)
+  document.addEventListener('DOMContentLoaded', function(){
+    var form   = document.getElementById('st-filter-form');
+    var prod   = document.getElementById('st-product');
+    var keySel = document.getElementById('st-key');
+    if (form && prod){
+      prod.addEventListener('change', function(){
+        if (keySel) keySel.value = '';
+        form.submit();
+      });
     }
   });
-
-  // select all/none
-  if (selAllBtn)  selAllBtn.addEventListener('click', function(){ checks().forEach(c=>{ if(!c.disabled) c.checked=true; }); updateState(); });
-  if (selNoneBtn) selNoneBtn.addEventListener('click', function(){ checks().forEach(c=>{ if(!c.disabled) c.checked=false; }); updateState(); });
-
-  function submitBulk(toUrl){
-    if (!bulkForm || !toUrl) return;
-    const ids = checks().filter(c => c.checked && !c.disabled).map(c => c.value);
-    if (!ids.length) return;
-
-    // پاک‌سازی ورودی‌های داینامیک قبلی
-    Array.from(bulkForm.querySelectorAll('input[data-dyn="1"]')).forEach(el => el.remove());
-
-    // افزودن stage_id ها
-    ids.forEach(id => {
-      const inp = document.createElement('input');
-      inp.type = 'hidden';
-      inp.name = 'stage_id';
-      inp.value = id;
-      inp.setAttribute('data-dyn', '1');
-      bulkForm.appendChild(inp);
-    });
-
-    bulkForm.action = toUrl;
-    bulkForm.submit();
-  }
-
-  // Bind buttons
-  if (bulkStartBtn){
-    bulkStartBtn.addEventListener('click', function(){
-      submitBulk(bulkStartBtn.getAttribute('data-url'));
-    });
-  }
-  if (bulkDoneBtn){
-    bulkDoneBtn.addEventListener('click', function(){
-      submitBulk(bulkDoneBtn.getAttribute('data-url'));
-    });
-  }
-
-  // init
-  updateState();
-})();
-</script>
-<script>
-document.addEventListener('DOMContentLoaded', function(){
-  var form   = document.getElementById('st-filter-form');
-  var prod   = document.getElementById('st-product');
-  var keySel = document.getElementById('st-key');
-
-  if (form && prod){
-    prod.addEventListener('change', function(){
-      // وقتی محصول عوض می‌شود، مرحله را خالی کن تا گزینه‌های جدید لود شوند
-      if (keySel) keySel.value = '';
-      // submit برنامه‌ای، ولیدیشن HTML را دور می‌زند (پس required اشکال نیست)
-      form.submit();
-    });
-  }
-});
-</script>
+  </script>
 </body>
 </html>
+

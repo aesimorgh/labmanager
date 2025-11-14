@@ -1,0 +1,253 @@
+{# templates/core/wages_payout_detail.html #}
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <title>جزئیات تسویه دستمزد</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    body{
+      background:#f8f9fa;
+      font-family:tahoma, sans-serif;
+    }
+    .card{
+      border-radius:12px;
+    }
+    .card-header{
+      border-radius:12px 12px 0 0 !important;
+    }
+    th,td{
+      vertical-align:middle !important;
+      font-size:0.9rem;
+    }
+    .table-sm th,
+    .table-sm td{
+      padding:.45rem .6rem;
+    }
+    .badge-status{
+      font-size:0.75rem;
+    }
+    .summary-box{
+      background:#eff6ff;
+      border-radius:.75rem;
+      padding:.75rem 1rem;
+    }
+    .summary-box .label{
+      font-size:.85rem;
+      color:#64748b;
+    }
+    .summary-box .value{
+      font-size:1.05rem;
+      font-weight:600;
+    }
+    .table-log thead th{
+      white-space:nowrap;
+    }
+    .table-log td:nth-child(1),
+    .table-log th:nth-child(1){
+      width:6%;
+      text-align:center;
+    }
+    .table-log td:nth-child(2),
+    .table-log th:nth-child(2){
+      width:22%;
+    }
+    .table-log td:nth-child(3),
+    .table-log th:nth-child(3){
+      width:18%;
+    }
+    .table-log td:nth-child(4),
+    .table-log th:nth-child(4){
+      width:8%;
+      text-align:center;
+    }
+    .table-log td:nth-child(5),
+    .table-log th:nth-child(5),
+    .table-log td:nth-child(6),
+    .table-log th:nth-child(6){
+      width:15%;
+      text-align:right;
+      white-space:nowrap;
+    }
+    .table-log td:nth-child(7),
+    .table-log th:nth-child(7){
+      width:16%;
+      white-space:nowrap;
+    }
+  </style>
+</head>
+<body class="container py-3">
+
+  <div class="row justify-content-center">
+    <div class="col-lg-10">
+
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="m-0">جزئیات تسویهٔ دستمزد</h4>
+        <div class="text-muted small">
+          تکنسین: <strong>{{ payout.technician }}</strong>
+          {% if payout.period_start_j or payout.period_end_j %}
+            |
+            بازه:
+            {% if payout.period_start_j %}از {{ payout.period_start_j }}{% endif %}
+            {% if payout.period_end_j %} تا {{ payout.period_end_j }}{% endif %}
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-header bg-light">
+          خلاصهٔ تسویه
+        </div>
+        <div class="card-body">
+
+          {% if messages %}
+            <div class="mb-3">
+              {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} mb-2" role="alert">
+                  {{ message }}
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          <div class="row mb-3">
+            <div class="col-md-4 mb-3">
+              <div class="summary-box h-100">
+                <div class="label mb-1">وضعیت تسویه</div>
+                <div class="mb-2">
+                  {% if payout.status == 'draft' %}
+                    <span class="badge bg-secondary badge-status">پیش‌نویس</span>
+                  {% elif payout.status == 'confirmed' %}
+                    <span class="badge bg-info text-dark badge-status">تأییدشده</span>
+                  {% elif payout.status == 'paid' %}
+                    <span class="badge bg-success badge-status">پرداخت‌شده</span>
+                  {% else %}
+                    <span class="badge bg-light text-dark badge-status">{{ payout.status }}</span>
+                  {% endif %}
+                </div>
+                {% if payout.payment_ref %}
+                  <div class="small text-muted">
+                    مرجع پرداخت: {{ payout.payment_ref }}
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+
+            <div class="col-md-4 mb-3">
+              <div class="summary-box h-100">
+                <div class="label mb-1">جمع‌ها</div>
+                <div class="small text-muted">جمع ناخالص:</div>
+                <div class="value mb-1">
+                  {{ payout.gross_total }} <span class="text-muted small">تومان</span>
+                </div>
+                <div class="small text-muted">کسورات:</div>
+                <div class="value mb-1">
+                  {{ payout.deductions_total }} <span class="text-muted small">تومان</span>
+                </div>
+                <div class="small text-muted">پاداش:</div>
+                <div class="value">
+                  {{ payout.bonus_total }} <span class="text-muted small">تومان</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-4 mb-3">
+              <div class="summary-box h-100">
+                <div class="label mb-1">خالص قابل پرداخت</div>
+                <div class="fs-4 mb-2">
+                  {{ payout.net_payable }} <span class="text-muted fs-6">تومان</span>
+                </div>
+                <div class="small text-muted">
+                  تاریخ ایجاد: {{ payout.created_at|date:"Y-m-d H:i" }}<br>
+                  آخرین ویرایش: {{ payout.updated_at|date:"Y-m-d H:i" }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {% if payout.note %}
+            <div class="alert alert-info py-2 small">
+              <strong>توضیحات تسویه: </strong> {{ payout.note }}
+            </div>
+          {% endif %}
+
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <a href="{% url 'core:wages_report' %}" class="btn btn-outline-secondary btn-sm">
+              بازگشت به گزارش دستمزد
+            </a>
+            <div class="text-muted small">
+              تعداد لاگ‌های این تسویه: {{ logs|length }}
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table table-sm table-striped table-hover align-middle table-log">
+              <thead class="table-light">
+              <tr>
+                <th>#</th>
+                <th>سفارش</th>
+                <th>مرحله</th>
+                <th>تعداد</th>
+                <th>نرخ واحد</th>
+                <th>مبلغ کل</th>
+                <th>تاریخ پایان</th>
+              </tr>
+              </thead>
+              <tbody>
+              {% for log in logs %}
+                <tr>
+                  <td>{{ log.id }}</td>
+                  <td>
+                    <div class="fw-semibold">
+                      سفارش #{{ log.order_id }}
+                    </div>
+                    <div class="small text-muted">
+                      {{ log.order.patient_name|default:"" }}
+                    </div>
+                  </td>
+                  <td>
+                    {% if log.stage_tpl %}
+                      <span class="badge bg-info-subtle text-dark badge-status">
+                        {{ log.stage_tpl.label }}
+                      </span>
+                    {% elif log.stage_inst %}
+                      <span class="badge bg-secondary-subtle text-dark badge-status">
+                        {{ log.stage_inst.label }}
+                      </span>
+                    {% else %}
+                      <span class="text-muted small">بدون مرحله</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-center">{{ log.quantity }}</td>
+                  <td class="text-end">
+                    {{ log.unit_wage }}
+                    <span class="text-muted small">تومان</span>
+                  </td>
+                  <td class="text-end fw-semibold">
+                    {{ log.total_wage }}
+                    <span class="text-muted small">تومان</span>
+                  </td>
+                  <td>{{ log.finished_at }}</td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="7" class="text-center text-muted py-4">
+                    هیچ لاگی برای این تسویه ثبت نشده است.
+                  </td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</body>
+</html>

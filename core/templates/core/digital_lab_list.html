@@ -1,0 +1,226 @@
+{% load static %}
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <title>لیست ارسال/دریافت لاب دیجیتال</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
+  <style>
+    body{background:#f8fafc}
+    .container-narrow{max-width:1200px}
+    .card{border:1px solid #e5e7eb}
+    .kpi{display:flex;gap:12px;flex-wrap:wrap}
+    .kpi .pill{background:#fff;border:1px solid #e2e8f0;border-radius:999px;padding:8px 12px}
+    .table thead th{white-space:nowrap}
+    .sticky-filters{position:sticky;top:0;z-index:10;background:#f8fafc;padding-top:.5rem}
+  </style>
+</head>
+<body>
+<div class="container container-narrow py-4">
+
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h5 class="m-0">لیست ارسال/دریافت لاب دیجیتال</h5>
+    <div>
+      <a href="{% url 'core:digital_lab_new_global' %}" class="btn btn-primary btn-sm">+ ثبت ارسال/دریافت</a>
+      <a href="{% url 'core:orders_home' %}" class="btn btn-outline-secondary btn-sm">بازگشت به سفارش‌ها</a>
+    </div>
+  </div>
+
+  <!-- فیلترها -->
+  <div class="card shadow-sm mb-3 sticky-filters">
+    <div class="card-body">
+      <form id="filterForm" method="get" class="row g-2 align-items-end">
+        <!-- تاریخ‌ها (نمایش شمسی + hidden ISO) -->
+        <div class="col-md-2">
+          <label class="form-label">از تاریخ (شمسی)</label>
+          <input id="date_from_fa" class="form-control" placeholder="۱۴۰۴/۰۸/۰۱" inputmode="numeric" dir="ltr" value="">
+          <input type="hidden" name="date_from" id="date_from" value="{{ filters.date_from|default:'' }}">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">تا تاریخ (شمسی)</label>
+          <input id="date_to_fa" class="form-control" placeholder="۱۴۰۴/۰۸/۳۰" inputmode="numeric" dir="ltr" value="">
+          <input type="hidden" name="date_to" id="date_to" value="{{ filters.date_to|default:'' }}">
+        </div>
+
+        <div class="col-md-2">
+          <label class="form-label">دکتر</label>
+          <input type="text" class="form-control" name="doctor" value="{{ filters.doctor|default:'' }}" placeholder="نام کامل دکتر">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">لاب دیجیتال</label>
+          <input type="text" class="form-control" name="lab" value="{{ filters.lab|default:'' }}" placeholder="مثلاً ExoCAD Lab">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">شماره سفارش</label>
+          <input type="text" class="form-control" name="order_id" value="{{ filters.order_id|default:'' }}" inputmode="numeric" dir="ltr">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">وضعیت</label>
+          <select class="form-select" name="status">
+            <option value="">همه</option>
+            <option value="SENT" {% if filters.status == 'SENT' %}selected{% endif %}>ارسال شده</option>
+            <option value="RECEIVED" {% if filters.status == 'RECEIVED' %}selected{% endif %}>دریافت شده</option>
+            {# اگر بعداً وضعیت CANCELED را به مدل افزودی، گزینه زیر را از کامنت خارج کن #}
+            {# <option value="CANCELED" {% if filters.status == 'CANCELED' %}selected{% endif %}>لغو</option> #}
+          </select>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">جستجوی متن</label>
+          <input type="text" class="form-control" name="q" value="{{ filters.q|default:'' }}" placeholder="بیمار/یادداشت/مرحله/لاب">
+        </div>
+
+        <div class="col-md-3">
+          <button class="btn btn-success w-100" type="submit">اعمال فیلتر</button>
+        </div>
+        <div class="col-md-3">
+          <a class="btn btn-outline-secondary w-100" href="{% url 'core:digital_lab_list' %}">حذف فیلترها</a>
+        </div>
+        <div class="col-md-3 text-md-end">
+          <button id="csvBtn" class="btn btn-outline-primary w-100" type="button">خروجی CSV</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- KPI -->
+  <div class="kpi mb-3">
+    <div class="pill">تعداد رکورد: <strong id="kpiCount">{{ count|default:"0" }}</strong></div>
+    <div class="pill">جمع هزینه‌ها: <strong id="kpiCharge">{{ sum_charge|default:"0" }}</strong></div>
+    <div class="pill">جمع اعتبارات: <strong id="kpiCredit">{{ sum_credit|default:"0" }}</strong></div>
+    <div class="pill">خالص: <strong id="kpiNet">{{ sum_net|default:"0" }}</strong></div>
+  </div>
+
+  <!-- جدول -->
+  <div class="card shadow-sm">
+    <div class="table-responsive">
+      <table id="dlabTable" class="table table-sm align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>#</th>
+            <th>سفارش</th>
+            <th>بیمار</th>
+            <th>دکتر</th>
+            <th>لاب دیجیتال</th>
+            <th>مرحله</th>
+            <th>وضعیت</th>
+            <th>تاریخ ارسال</th>
+            <th>تاریخ دریافت</th>
+            <th class="text-end">هزینه</th>
+            <th class="text-end">اعتبار</th>
+            <th>یادداشت</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td><a href="{% url 'core:order_detail' r.order_id %}">#{{ r.order_id }}</a></td>
+            <td>{{ r.order.patient.name|default:"" }}</td>
+            <td>{{ r.order.doctor|default:"" }}</td>
+            <td>{{ r.lab_name|default:"" }}</td>
+            <td>{{ r.stage_name|default:"" }}</td>
+            <td>
+              {% if r.status == 'SENT' %}<span class="badge text-bg-secondary">ارسال</span>
+              {% elif r.status == 'RECEIVED' %}<span class="badge text-bg-success">دریافت</span>
+              {% else %}<span class="badge text-bg-light text-dark">{{ r.status }}</span>{% endif %}
+            </td>
+            <td>{{ r.sent_date|default:"" }}</td>
+            <td>{{ r.received_date|default:"" }}</td>
+            <td class="text-end">{{ r.charge_amount|default:"0" }}</td>
+            <td class="text-end">{{ r.credit_amount|default:"0" }}</td>
+            <td>{{ r.note|default:"" }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="12" class="text-center text-muted py-4">موردی یافت نشد.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
+<script>
+(function(){
+  // ابزار ارقام
+  const fa="۰۱۲۳۴۵۶۷۸۹", en="0123456789";
+  const mapFa2En = Object.fromEntries(fa.split('').map((d,i)=>[d,en[i]]));
+  const mapEn2Fa = Object.fromEntries(en.split('').map((d,i)=>[d,fa[i]]));
+
+  function faToEn(s){return String(s||'').replace(/[۰-۹]/g,d=>mapFa2En[d]);}
+  function enToFa(s){return String(s||'').replace(/[0-9]/g,d=>mapEn2Fa[d]);}
+
+  // تاریخ شمسی ↔ ISO
+  function jalaliFaToISO(str){
+    const v = faToEn(String(str||'').trim()).replace(/\s/g,'');
+    const m = v.match(/^(\d{4})\/(\d{2})\/(\d{2})$/);
+    if(!m) return "";
+    return `${m[1]}-${m[2]}-${m[3]}`;
+  }
+  function isoToJalaliFa(iso){
+    if(!iso) return "";
+    const v = String(iso).replace(/-/g,'/'); // نمایش پایه (اگر سرور شمسی نکرده)
+    return v;
+  }
+
+  // مقداردهی اولیه فیلدهای شمسی از hidden
+  const $df=$("#date_from"), $dt=$("#date_to");
+  const $dfFa=$("#date_from_fa"), $dtFa=$("#date_to_fa");
+  $dfFa.val(isoToJalaliFa($df.val()));
+  $dtFa.val(isoToJalaliFa($dt.val()));
+
+  try{
+    $dfFa.persianDatepicker({format:'YYYY/MM/DD', autoClose:true, calendar:{persian:{locale:'fa'}}});
+    $dtFa.persianDatepicker({format:'YYYY/MM/DD', autoClose:true, calendar:{persian:{locale:'fa'}}});
+  }catch(e){}
+
+  // قبل از ارسال فرم: شمسی → ISO در hidden
+  $("#filterForm").on("submit", function(){
+    const fromISO = jalaliFaToISO($dfFa.val());
+    const toISO   = jalaliFaToISO($dtFa.val());
+    $("#date_from").val(fromISO || '');
+    $("#date_to").val(toISO || '');
+  });
+
+  // قالب‌بندی فارسی KPI‌ها (هزارگان)
+  function formatFaNum(x){
+    const n = Number(String(x).replace(/,/g,'')) || 0;
+    return enToFa(n.toLocaleString('en-US'));
+  }
+  $("#kpiCount").text(enToFa(String($("#kpiCount").text())));
+  $("#kpiCharge").text(formatFaNum($("#kpiCharge").text()));
+  $("#kpiCredit").text(formatFaNum($("#kpiCredit").text()));
+  $("#kpiNet").text(formatFaNum($("#kpiNet").text()));
+
+  // خروجی CSV از جدول فعلی (کلاینت‌ساید)
+  $("#csvBtn").on("click", function(){
+    const rows = [];
+    const head = [];
+    $("#dlabTable thead th").each(function(){ head.push($(this).text().trim()); });
+    rows.push(head);
+
+    $("#dlabTable tbody tr").each(function(){
+      const cols = [];
+      $(this).find("td").each(function(){ cols.push($(this).text().trim().replace(/\s+/g,' ')); });
+      if(cols.length) rows.push(cols);
+    });
+
+    const csv = rows.map(r => r.map(c => `"${c.replace(/"/g,'""')}"`).join(",")).join("\r\n");
+    const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "digital_lab_transfers.csv";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+})();
+</script>
+</body>
+</html>
+

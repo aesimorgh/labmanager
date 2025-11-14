@@ -1,0 +1,518 @@
+{% load static %}
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <title>ارسال/دریافت لاب دیجیتال</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
+  <style>
+    body{background:#f8fafc}
+    .card{max-width:1200px;margin:24px auto}
+    .pick-list{max-height:260px;overflow:auto;border:1px solid #e5e7eb;border-radius:.5rem;padding:.25rem;background:#fff}
+    .pick-item{padding:.5rem .65rem;border-radius:.5rem;cursor:pointer;line-height:1.4}
+    .pick-item:hover{background:#f1f5f9}
+    .pick-item.active{background:#e0e7ff}
+    .pick-sub{font-size:.85rem;color:#6b7280;margin-top:2px}
+    .hint{font-size:.9rem;color:#6b7280}
+    .required-star::after{content:" *";color:#ef4444}
+    .card-header .crumb{opacity:.9;font-weight:500}
+    .toggle-link{font-size:.85rem; margin-inline-start:8px; cursor:pointer}
+    .d-none{display:none !important}
+    .pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:#f1f5f9;border:1px solid #e2e8f0}
+  </style>
+</head>
+<body>
+<div class="card shadow-sm">
+  <div class="card-header bg-primary text-white fw-bold d-flex justify-content-between align-items-center">
+    <span>ارسال / دریافت لاب دیجیتال</span>
+    <span class="crumb">سفارش: {{ order.id|default:"—" }}</span>
+  </div>
+
+  <div class="card-body">
+    <div class="row g-3">
+
+      <!-- انتخاب دکتر -->
+      <div class="col-lg-6">
+        <label class="form-label required-star">
+          دکتر / مطب
+          <a id="changeDoctor" class="toggle-link text-primary d-none">تغییر</a>
+        </label>
+        <input id="doctorSearch" class="form-control" placeholder="شروع به تایپ کنید…">
+        <div id="doctorList" class="pick-list mt-2"></div>
+        <div class="hint">با تایپ کردن، دکترها از سرور فیلتر می‌شوند.</div>
+      </div>
+
+      <!-- انتخاب سفارش‌ها -->
+      <div class="col-lg-6">
+        <label class="form-label required-star">
+          انتخاب سفارش‌ها
+          <a id="changeOrders" class="toggle-link text-primary d-none">تغییر</a>
+        </label>
+        <input id="orderSearch" class="form-control" type="text" placeholder="نام بیمار / شماره سریال" disabled>
+        <div id="orderList" class="pick-list mt-2"></div>
+        <div class="hint">بعد از انتخاب دکتر، سفارش‌های مربوطه نمایش داده می‌شوند.</div>
+      </div>
+
+      <!-- فرم -->
+      <div class="col-12">
+        <form id="dlabForm" method="post" enctype="multipart/form-data" novalidate>
+          {% csrf_token %}
+          <!-- Hidden های تاریخ (ISO) و فیلدهای متنی -->
+          <input type="hidden" name="sent_date" id="sent_date">
+          <input type="hidden" name="received_date" id="received_date">
+          <input type="hidden" name="stage_name" id="stage_name">
+          <input type="hidden" name="shade_code" id="shade_code">
+          <input type="hidden" name="credit_amount" id="credit_amount">
+          <!-- برای حالت ایمپلنت/دریافت اباتمنت -->
+          <input type="hidden" name="units_override" id="units_override">
+
+          <div class="row g-3 mt-1">
+
+            <div class="col-md-3">
+              <label class="form-label required-star">لاب دیجیتال</label>
+              {{ form.lab_name }}
+            </div>
+
+            <!-- مرحله: لیست زیبا مثل بقیه -->
+            <div class="col-md-3">
+              <label class="form-label required-star">
+                مرحله
+                <a id="changeStage" class="toggle-link text-primary d-none">تغییر</a>
+              </label>
+              <input id="stage_display" class="form-control" placeholder="از لیست انتخاب کن…" disabled>
+              <div id="stageList" class="pick-list mt-2 d-none"></div>
+              <div class="hint">بعد از انتخاب سفارش، مرحله‌های همان محصول بارگذاری می‌شود.</div>
+            </div>
+
+            <div class="col-md-3">
+              <label class="form-label">رنگ</label>
+              <input id="shade_display" class="form-control" list="shade_list" placeholder="A1 / BL2…" disabled>
+              <datalist id="shade_list">
+                <option value="">— بدون رنگ —</option>
+                <option>A1</option><option>A2</option><option>A3</option><option>A3.5</option><option>A4</option>
+                <option>B1</option><option>B2</option><option>B3</option><option>B4</option>
+                <option>C1</option><option>C2</option><option>C3</option><option>C4</option>
+                <option>D2</option><option>D3</option><option>D4</option>
+                <option>BL1</option><option>BL2</option><option>BL3</option><option>BL4</option>
+              </datalist>
+            </div>
+
+            <div class="col-md-3">
+              <label class="form-label required-star">نوع ثبت</label>
+              {{ form.status }}
+              <div class="hint">ارسال یا دریافت</div>
+            </div>
+
+            <div class="col-md-3">
+              <label class="form-label required-star">تاریخ ارسال (شمسی)</label>
+              <input id="sent_date_fa" class="form-control jalali_date" placeholder="۱۴۰۴/۰۸/۱۰" inputmode="numeric" dir="ltr" disabled>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">تاریخ دریافت (شمسی)</label>
+              <input id="received_date_fa" class="form-control jalali_date" placeholder="۱۴۰۴/۰۸/۱۵" inputmode="numeric" dir="ltr" disabled>
+            </div>
+
+            <div class="col-md-3">
+              <label class="form-label required-star">مبلغ واحد (تومان)</label>
+              <input id="charge_display" class="form-control" placeholder="۱٬۵۰۰٬۰۰۰" inputmode="numeric" dir="ltr" disabled>
+              <div class="hint">برای هر سفارش، با تعداد خود سفارش ضرب می‌شود.</div>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">اعتبار / برگشت</label>
+              <input id="credit_display" class="form-control" placeholder="۰" inputmode="numeric" dir="ltr" disabled>
+            </div>
+
+            <!-- فقط وقتی سفارش ایمپلنت و مرحله دریافت اباتمنت باشد -->
+            <div id="abutmentBox" class="col-md-3 d-none">
+              <label class="form-label required-star">تعداد اباتمنت</label>
+              <input id="abutment_count" class="form-control" placeholder="۲" inputmode="numeric" dir="ltr">
+              <div class="hint">فقط برای «ایمپلنت + دریافت اباتمنت»</div>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">یادداشت</label>
+              {{ form.note }}
+            </div>
+          </div>
+
+          <hr>
+
+          <!-- نوار خلاصه -->
+          <div id="summaryBar" class="d-flex flex-wrap align-items-center justify-content-between mb-2" style="gap:12px;">
+            <div class="small text-muted">
+              انتخاب شده: <span id="selCount">۰</span> سفارش
+              <span class="mx-2">|</span>
+              جمع مبلغ تخمینی: <span id="estTotal">۰</span> تومان
+            </div>
+            <div class="small text-muted">
+              (جمع = مبلغ واحد × مجموع «تعداد واحد» سفارش‌های انتخاب‌شده — نهایی در سرور)
+            </div>
+          </div>
+
+          <div class="mt-2">
+            <button class="btn btn-success" id="submitBtn" type="submit" disabled>ثبت</button>
+            <a href="{% url 'core:orders_home' %}" class="btn btn-outline-secondary">انصراف</a>
+          </div>
+        </form>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
+<script>
+(function(){
+  // --- ابزار ارقام فارسی/انگلیسی ---
+  const faDigits="۰۱۲۳۴۵۶۷۸۹", enDigits="0123456789";
+  const mapFa2En=Object.fromEntries(faDigits.split('').map((d,i)=>[d,enDigits[i]]));
+  function faToEn(s){return String(s||'').replace(/[۰-۹]/g,d=>mapFa2En[d]);}
+  function enToFa(s){return String(s||'').replace(/[0-9]/g,d=>'۰۱۲۳۴۵۶۷۸۹'[d]);}
+
+  function normalizeMoneyFaToAscii(s){
+    if(!s) return "0.00";
+    const en=faToEn(String(s)).replace(/[,\s]/g,'');
+    if(!en) return "0.00";
+    const parts=en.split('.');
+    if(parts.length===1) return `${en}.00`;
+    return `${parts[0]}.${(parts[1]+'00').slice(0,2)}`;
+  }
+
+  function jalaliFaToISO($inp){
+    const val=$inp.val().trim(); if(!val) return "";
+    const en = faToEn(val).replace(/\s/g,'');
+    const m = en.match(/^(\d{4})\/(\d{2})\/(\d{2})$/);
+    if(!m) return "";
+    return `${m[1]}-${m[2]}-${m[3]}`;
+  }
+
+  // عناصر
+  const $form=$("#dlabForm");
+  const $docInput=$("#doctorSearch"), $docList=$("#doctorList"), $docChange=$("#changeDoctor");
+  const $ordInput=$("#orderSearch"), $ordList=$("#orderList"), $ordChange=$("#changeOrders");
+  const $stageDisp=$("#stage_display"), $stageList=$("#stageList"), $stageChange=$("#changeStage");
+  const $shade=$("#shade_display"), $sent=$("#sent_date_fa"), $recv=$("#received_date_fa");
+  const $charge=$("#charge_display"), $credit=$("#credit_display"), $btn=$("#submitBtn");
+  const $abutBox=$("#abutmentBox"), $abut=$("#abutment_count");
+
+  let doctors=[], orders=[], stageLabels=[];
+  function enableForm(ok){
+    [$stageDisp,$shade,$sent,$recv,$charge,$credit,$btn].forEach($e=>$e.prop('disabled',!ok));
+  }
+  enableForm(false);
+
+  function initPickers(){
+    try{
+      $sent.persianDatepicker({format:'YYYY/MM/DD', autoClose:true, calendar:{persian:{locale:'fa'}}});
+      $recv.persianDatepicker({format:'YYYY/MM/DD', autoClose:true, calendar:{persian:{locale:'fa'}}});
+    }catch(e){}
+  }
+
+  // ========== دکتر ==========
+  async function fetchDoctors(q){
+    const url=`{% url 'core:api_doctors' %}`+(q?`?q=${encodeURIComponent(q)}`:'');
+    const res=await fetch(url,{headers:{'Accept':'application/json'}});
+    const data=await res.json(); doctors=(data.results||[]);
+    renderDoctors();
+  }
+  function renderDoctors(){
+    $docList.empty().removeClass('d-none');
+    doctors.forEach(d=>{
+      const $it=$('<div class="pick-item"></div>').text(d.name).data('id',d.id);
+      $it.on('click',()=>{
+        $docList.find('.pick-item').removeClass('active'); $it.addClass('active');
+        $docInput.val(d.name).prop('disabled',true);
+        $docList.addClass('d-none');             // بعد از انتخاب: ببند
+        $docChange.removeClass('d-none');        // دکمه تغییر را نشان بده
+        fetchOrders(d.id);
+      });
+      $docList.append($it);
+    });
+  }
+  $docChange.on('click', ()=>{
+    $docInput.prop('disabled',false).focus();
+    $docList.removeClass('d-none');
+    $docChange.addClass('d-none');
+  });
+
+  // ========== سفارش‌ها ==========
+  async function fetchOrders(docId){
+    $ordInput.prop('disabled', false).val('');
+    $ordList.empty().removeClass('d-none');
+    enableForm(false);
+    const url=`{% url 'core:api_orders_by_doctor' %}?doctor_id=${encodeURIComponent(docId)}`;
+    const res=await fetch(url,{headers:{'Accept':'application/json'}});
+    const data=await res.json(); orders=(data.results||[]);
+    renderOrders();
+  }
+
+  function renderOrders(){
+    $ordList.empty();
+    const $head=$('<div class="d-flex fw-bold border-bottom pb-1"><div style="width:40px"></div><div class="flex-grow-1">سفارش / بیمار</div></div>');
+    $ordList.append($head);
+
+    orders.forEach(o=>{
+      const name   = o.patient_name || (o.patient && o.patient.name) || '';
+      const serial = o.serial_number ? ('سریال ' + o.serial_number) : '';
+      const due    = o.due_date ? ('تحویل: ' + o.due_date) : '';
+      const top    = `#${o.id} — ${name||'بدون نام'}`;
+      const sub    = [serial, due].filter(Boolean).join(' | ');
+
+      const $row=$('<div class="d-flex align-items-start py-1 pick-item"></div>');
+      const $chk=$('<input type="checkbox" class="form-check-input me-2 mt-1">').val(o.id);
+      const $lbl=$('<div class="flex-grow-1"></div>');
+      $lbl.append($('<div class="fw-semibold"></div>').text(top));
+      if(sub){ $lbl.append($('<div class="pick-sub"></div>').text(sub)); }
+
+      $chk.on('change', ()=>{
+        $row.toggleClass('active',$chk.is(':checked'));
+        const checked=$ordList.find('input[type="checkbox"]:checked');
+        if(checked.length>0){
+          enableForm(true);
+          loadStages(checked.first().val());
+          initPickers();
+          // بعد از انتخاب حداقل یک سفارش: لیست را ببند و امکان "تغییر" بده
+          $ordList.addClass('d-none');
+          $ordInput.prop('disabled',true);
+          $ordChange.removeClass('d-none');
+        }else{
+          enableForm(false);
+        }
+        updateSummary();
+        updateAbutmentVisibility();
+      });
+
+      $row.append($('<div style="width:40px"></div>').append($chk), $lbl);
+      $ordList.append($row);
+    });
+  }
+  $ordChange.on('click', ()=>{
+    $ordInput.prop('disabled',false).focus();
+    $ordList.removeClass('d-none');
+    $ordChange.addClass('d-none');
+  });
+
+  // فیلتر کلاینتی سفارش‌ها
+  $ordInput.on('input', function(){
+    const q=$(this).val().trim().toLowerCase();
+    $ordList.children().each(function(){
+      $(this).toggle($(this).text().toLowerCase().includes(q) || $(this).hasClass('d-flex'));
+    });
+  });
+
+  // ========== مرحله‌ها ==========
+  async function loadStages(orderId){
+    try{
+      const res=await fetch(`{% url 'core:api_order_stages' %}?order_id=${encodeURIComponent(orderId)}`, {headers:{'Accept':'application/json'}});
+      const js=await res.json();
+      stageLabels=(Array.isArray(js)?js:(js.results||[])).map(x=> (typeof x==='string'?x:(x.label||x.name||x.key||x.value||'')) ).filter(Boolean);
+      renderStageList();
+      $stageDisp.prop('disabled', false).val('');
+      $stageList.removeClass('d-none');
+      $stageChange.addClass('d-none');
+    }catch(e){
+      alert('بارگذاری مرحله‌ها ناموفق بود.');
+    }
+  }
+  function renderStageList(){
+    $stageList.empty();
+    stageLabels.forEach(lbl=>{
+      const $it=$('<div class="pick-item"></div>').text(lbl);
+      $it.on('click', ()=>{
+        $stageDisp.val(lbl);
+        $stageList.addClass('d-none');      // بعد از انتخاب: ببند
+        $stageChange.removeClass('d-none'); // دکمه تغییر
+        updateAbutmentVisibility();
+      });
+      $stageList.append($it);
+    });
+  }
+  $stageChange.on('click', ()=>{
+    $stageList.removeClass('d-none');
+    $stageChange.addClass('d-none');
+    $stageDisp.focus();
+  });
+
+  // ========== نوار خلاصه ==========
+  function getUnitCountFromOrder(o){
+    return Number(o.unit_count ?? o.units ?? 1) || 1;
+  }
+  function calcEstimatedTotal(){
+    const unitRaw=$charge.val();
+    const unitAscii=faToEn(unitRaw).replace(/[,\s]/g,'');
+    const unit=Number(unitAscii || '0');
+
+    let sumUnits=0;
+    const checkedIds=[];
+    $ordList.find('input[type="checkbox"]:checked').each(function(){
+      checkedIds.push($(this).val());
+    });
+    checkedIds.forEach(id=>{
+      const o=orders.find(x=> String(x.id)===String(id));
+      if(o){ sumUnits += getUnitCountFromOrder(o); }
+    });
+
+    // اگر حالت ایمپلنت/دریافت اباتمنت باشد و تعداد وارد شد، به‌جای واحدهای سفارش، از مقدار واردشده استفاده کن (برای تخمین UI)
+    const abutVal = Number(faToEn($abut.val()||'').replace(/[,\s]/g,'')) || 0;
+    if(shouldShowAbutment() && abutVal>0){
+      sumUnits = abutVal;
+    }
+
+    return {count: checkedIds.length, total: unit * sumUnits};
+  }
+  function updateSummary(){
+    const {count,total}=calcEstimatedTotal();
+    $('#selCount').text(enToFa(String(count)));
+    const totalStr = total.toLocaleString('en-US').replace(/[0-9]/g,(d)=>'۰۱۲۳۴۵۶۷۸۹'[d]);
+    $('#estTotal').text(totalStr);
+  }
+  $charge.on('input', updateSummary);
+  $abut.on('input', updateSummary);
+
+ // ========== منطق نمایش «تعداد اباتمنت» (نسخه دقیق بر اساس implant_pfm / implant_zirconia + abutment.select) ==========
+function anySelectedImplantOrder(){
+  // جمع آوری شناسهٔ سفارش‌های تیک‌خورده
+  const selectedIds = $ordList
+    .find('input[type="checkbox"]:checked')
+    .map((_, el) => String(el.value))
+    .get();
+
+  if (!selectedIds.length) return false;
+
+  for (const id of selectedIds){
+    const o = orders.find(x => String(x.id) === id);
+    if (!o) continue;
+
+    // همهٔ فیلدهای احتمالی کُد/نوع محصول را نرمال می‌کنیم
+    const fields = [
+      o.product_code,
+      o.order_type,
+      o.product_kind,
+      o.product_name,
+      o.product,
+      o.type,
+      o.kind
+    ]
+    .filter(v => v != null && v !== '')
+    .map(v => String(v).toLowerCase().trim());
+
+    // معیار ایمپلنت: کلمهٔ implant یا کدهای صریح
+    const isImplant =
+      fields.some(f =>
+        f === 'implant_pfm' ||
+        f === 'implant_zirconia' ||
+        f.includes('implant')
+      );
+
+    if (isImplant){
+      console.log('✅ implant order:', o.id, fields);
+      return true;
+    }
+  }
+
+  console.log('❌ No implant order among selected.');
+  return false;
+}
+
+function isAbutmentSelectStage(){
+  const raw  = ($stageDisp.val() || '').toString().trim().toLowerCase();
+  const norm = raw.replace(/[\s\.\-_\u200c]+/g, ''); // حذف فاصله، علائم، نیم‌فاصله
+
+  // انگلیسی
+  const enOk =
+    norm.includes('abutment') || norm.includes('aboutment');
+
+  // فارسی (کافی‌ست «اباتمنت» در متن باشد؛ چه «انتخاب» چه «دریافت»)
+  const faOk = norm.includes('اباتمنت');
+
+  const ok = enOk || faOk;
+  console.log('🔍 Stage check:', raw, '→ normalized:', norm, '→ result:', ok);
+  return ok;
+}
+
+function isReceivedStatus(){
+  return String($('select[name="status"]').val() || '').toLowerCase() === 'received';
+}
+
+function shouldShowAbutment(){
+  // فقط کافی است سفارش ایمپلنت باشد و مرحله «اباتمنت» تشخیص داده شود
+  return anySelectedImplantOrder() && isAbutmentSelectStage();
+}
+
+function updateAbutmentVisibility(){
+  if (shouldShowAbutment()){
+    $abutBox.removeClass('d-none');
+  } else {
+    $abutBox.addClass('d-none');
+    $abut.val('');
+  }
+  updateSummary(); // تخمین جمع را با تعداد اباتمنت (در صورت نمایش) به‌روز کن
+}
+  // ========== وضعیت دریافت → فعال‌سازی تاریخ دریافت ==========
+  const $statusSel=$('select[name="status"]');
+$statusSel.on('change',()=>{
+  $recv.prop('disabled', $statusSel.val()!=='received');
+  updateAbutmentVisibility();   // ← اضافه شد
+});
+
+  // ========== سابمیت ==========
+  $form.on('submit', function(e){
+    const ids=[];
+    $ordList.find('input[type="checkbox"]').each(function(){
+      if($(this).is(':checked')) ids.push($(this).val());
+    });
+    if(!ids.length){
+      e.preventDefault(); alert('حداقل یک سفارش انتخاب کنید.'); return;
+    }
+
+    // پاکسازی hiddenهای قبلی
+    $(this).find('input[name="order_ids[]"],input[name="charge_unit"],input[name="sent_date"],input[name="received_date"]').remove();
+
+    // آرایه order_ids[]
+    ids.forEach(id=>{
+      $('<input type="hidden" name="order_ids[]">').val(id).appendTo(this);
+    });
+
+    // مبلغ واحد (ASCII)
+    $('<input type="hidden" name="charge_unit">')
+      .val(normalizeMoneyFaToAscii($charge.val()))
+      .appendTo(this);
+
+    // فیلدهای متنی
+    $('#stage_name').val($stageDisp.val().trim());
+    $('#shade_code').val($shade.val().trim());
+    $('#credit_amount').val(normalizeMoneyFaToAscii($credit.val()));
+
+    // تاریخ‌ها شمسی → ISO
+    const sentISO = jalaliFaToISO($sent);
+    if(!sentISO){
+      e.preventDefault(); alert('تاریخ ارسال را به‌صورت شمسی وارد کنید.'); return;
+    }
+    $('<input type="hidden" name="sent_date">').val(sentISO).appendTo(this);
+
+    const recvISO = jalaliFaToISO($recv);
+    if(recvISO){
+      $('<input type="hidden" name="received_date">').val(recvISO).appendTo(this);
+    }
+
+    // اگر حالت ایمپلنت/دریافت اباتمنت است و مقدار وارد شده، بفرست
+    if(shouldShowAbutment()){
+      const ab = faToEn($abut.val()||'').replace(/[,\s]/g,'');
+      if(ab){ $('#units_override').val(ab); }
+    }
+  });
+
+  // آغاز
+  fetchDoctors('');
+})();
+</script>
+</body>
+</html>
+
+
+

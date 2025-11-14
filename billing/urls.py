@@ -1,6 +1,7 @@
 from django.urls import path
 from django.views.generic import TemplateView  # برای برخی صفحات ساده مثل هاب گزارش‌ها
-
+from .views_reports import report_profit_summary_api, report_profit_summary_page
+from .views_pricing import pricing_advisor_page, api_pricing_summary, api_pricing_compute
 from .views import (
     # فاکتورها
     InvoiceCreateDraftView,
@@ -84,6 +85,9 @@ urlpatterns = [
     # ✅ گزارش Aging بدهی‌ها (اتصال به ویوی واقعی)
     path("reports/aging/", AgingReportView.as_view(), name="report_aging"),
 
+    path("api/profit-summary/", report_profit_summary_api, name="report_profit_summary_api"),
+    path("reports/profit-summary/", report_profit_summary_page, name="report_profit_summary_page"),
+
     # حساب دکتر
     path("doctor/<int:doctor_id>/account/", DoctorAccountView.as_view(), name="doctor_account"),  # مسیر اصلی
     path("doctor/<int:doctor_id>/", DoctorAccountView.as_view(), name="doctor_account_short"),    # میانبر سازگار با لینک‌های قدیمی
@@ -104,6 +108,10 @@ urlpatterns = [
     path("assets/repairs/", RepairsListView.as_view(), name="repairs_list"),
     path("assets/repairs/create/", RepairCreateView.as_view(), name="repair_create"),
     path("costs/", CostsHomeView.as_view(), name="costs_home"),
+    
+    path("pricing/advisor/", pricing_advisor_page, name="pricing_advisor_page"),
+    path("api/pricing/summary/", api_pricing_summary, name="api_pricing_summary"),
+    path("api/pricing/compute/", api_pricing_compute, name="api_pricing_compute"),  # اصلی
 ]
 
 

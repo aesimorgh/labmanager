@@ -4,6 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <title>جزئیات سفارش {{ order.id|digits_fa }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
   <style>
@@ -14,11 +15,11 @@
     .timeline .meta { color:#6c757d; font-size:.9rem; }
     .badge-status{font-size:.85rem}
     .pwt-datepicker-container{z-index:2050!important}
-    /* وضعیت مرحله‌ها */
     .stage-badge{border-radius:9999px; padding:.15rem .5rem; font-size:.8rem}
     .stage-pending{background:#fff;border:1px solid #e5e7eb;color:#374151}
     .stage-running{background:#fff3cd;border:1px solid #f59e0b;color:#7c5a00}
     .stage-done{background:#dcfce7;border:1px solid #22c55e;color:#14532d}
+    .table th,.table td{vertical-align:middle}
   </style>
 </head>
 <body class="container">
@@ -45,111 +46,13 @@
       </div>
     </div>
   </div>
-      <!-- مصرف متریال (COGS) -->
-    <div class="col-md-7">
-      <div class="card shadow-sm">
-        <div class="card-header bg-warning">مصرف متریال (COGS)</div>
-        <div class="card-body">
-          <div class="d-flex justify-content-between align-items-center mb-2">
-            <div class="text-muted">بهای متریال این سفارش:</div>
-            <div class="fs-5 fw-bold">{{ order.material_cogs|money_fa }}</div>
-          </div>
 
-          {% with moves=order.stock_movements.all %}
-            {% if moves %}
-              {% if moves|length > 0 %}
-                <div class="table-responsive">
-                  <table class="table table-sm align-middle">
-                    <thead>
-                      <tr>
-                        <th style="width:48px;">#</th>
-                        <th>آیتم</th>
-                        <th>مقدار مصرف</th>
-                        <th>قیمت واحد متریال</th>
-                        <th>تاریخ</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {% for mv in moves %}
-                        {% if mv.movement_type == 'issue' %}
-                          <tr>
-                            <td>{{ forloop.counter|int_fa }}</td>
-                            <td>{{ mv.item.name }}</td>
-                            <td>
-                              {# qty در issue منفی است؛ با cut «-» را حذف می‌کنیم تا مقدار مثبت نمایش داده شود #}
-                              {{ mv.qty|floatformat:"-3"|cut:"-"|digits_fa }} {{ mv.item.uom }}
-                            </td>
-                            <td>{{ mv.unit_cost_effective|money_fa }}</td> / {{ mv.item.uom }}</td>
-                            <td>{{ mv.happened_at|jalali_date|digits_fa }}</td>
-                          </tr>
-                        {% endif %}
-                      {% endfor %}
-                    </tbody>
-                    <tfoot>
-                      <tr>
-                        <th colspan="3" class="text-end">جمع کل متریال:</th>
-                        <th colspan="2">{{ order.material_cogs|money_fa }}</th>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              {% else %}
-                <div class="text-muted">مصرفی ثبت نشده است.</div>
-              {% endif %}
-            {% else %}
-              <div class="text-muted">مصرفی ثبت نشده است.</div>
-            {% endif %}
-          {% endwith %}
-        </div>
-      </div>
-    </div>
-     <!-- مصرف خودکار از لات‌ها (Stock Issues) -->
-<div class="col-md-7">
-  <div class="card shadow-sm mt-3">
-    <div class="card-header bg-light text-primary fw-bold">مصرف خودکار از لات‌ها</div>
-    <div class="card-body">
-      {% if stock_issues and stock_issues|length > 0 %}
-        <div class="table-responsive">
-          <table class="table table-sm align-middle">
-            <thead class="table-light">
-              <tr>
-                <th style="width:48px;">#</th>
-                <th>آیتم</th>
-                <th>مقدار مصرف</th>
-                <th>هزینهٔ این ردیف</th>
-                <th>تاریخ</th>
-                <th>توضیح</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for si in stock_issues %}
-                <tr>
-                  <td>{{ forloop.counter|int_fa }}</td>
-                  <td>{{ si.item.name }}</td>
-                  <td>{{ si.qty_issued|floatformat:"-3"|digits_fa }} {{ si.item.uom }}</td>
-                  <td>{{ si.row_cost|money_fa }}</td>
-                  <td>{{ si.happened_at|jalali_date|digits_fa }}</td>
-                  <td>{{ si.comment|default:"—" }}</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-            <tfoot>
-              <tr class="fw-bold text-end">
-                <td colspan="3">جمع هزینهٔ مصرف خودکار:</td>
-                <td colspan="3">{{ issue_costs_total|money_fa }}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      {% else %}
-        <div class="text-muted">مصرف خودکار ثبت نشده است.</div>
-      {% endif %}
-    </div>
-  </div>
-</div>
   <div class="row g-3">
-    <!-- مراحل تولید (StageInstance) -->
+
+    <!-- ستون چپ: مراحل + دستمزد + تایم‌لاین -->
     <div class="col-md-7">
+
+      <!-- مراحل تولید (StageInstance) -->
       <div class="card shadow-sm">
         <div class="card-header bg-info text-white">مراحل تولید</div>
         <div class="card-body">
@@ -196,6 +99,88 @@
         </div>
       </div>
 
+      <!-- دستمزد مراحل (StageWorkLog) -->
+      <div class="card shadow-sm">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+          <span class="fw-bold">دستمزد مراحل</span>
+          <div>
+            <span class="badge bg-success">جمع: {{ wage_total|money_fa }}</span>
+            {% if workbench_url %}
+              <a class="btn btn-outline-primary btn-sm ms-2" href="{{ workbench_url }}" target="_blank">ورک‌بنچ دستمزد</a>
+            {% endif %}
+          </div>
+        </div>
+        <div class="card-body">
+          {% if wage_logs and wage_logs|length > 0 %}
+            <div class="table-responsive">
+              <table class="table table-sm align-middle mb-3">
+                <thead class="table-light">
+                  <tr>
+                    <th>#</th>
+                    <th>مرحله</th>
+                    <th>تکنسین</th>
+                    <th class="text-center">تعداد</th>
+                    <th class="text-center">نرخ واحد</th>
+                    <th class="text-center">مبلغ کل</th>
+                    <th class="text-center">شروع</th>
+                    <th class="text-center">پایان</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for l in wage_logs %}
+                    <tr>
+                      <td>{{ l.id|int_fa }}</td>
+                      <td>
+                        {% if l.stage_tpl %}{{ l.stage_tpl.label }}{% elif l.stage_inst %}{{ l.stage_inst.label }}{% else %}—{% endif %}
+                      </td>
+                      <td>{{ l.technician.name|default:"—" }}</td>
+                      <td class="text-center">{{ l.quantity|digits_fa }}</td>
+                      <td class="text-center">{{ l.unit_wage|floatformat:0|digits_fa }}</td>
+                      <td class="text-center fw-bold">{{ l.total_wage|floatformat:0|digits_fa }}</td>
+                      <td class="text-center">{% if l.started_at %}{{ l.started_at|date:"Y/m/d"|digits_fa }}{% else %}—{% endif %}</td>
+                      <td class="text-center">{% if l.finished_at %}{{ l.finished_at|date:"Y/m/d"|digits_fa }}{% else %}—{% endif %}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            <div class="row g-3">
+              <div class="col-md-6">
+                <div class="border rounded p-2">
+                  <div class="fw-bold mb-2">جمع به تفکیک مرحله</div>
+                  {% if wages_by_stage and wages_by_stage|length > 0 %}
+                    <ul class="mb-0">
+                      {% for row in wages_by_stage %}
+                        <li>{{ row.stage_tpl__label|default:"—" }}: <strong>{{ row.total|money_fa }}</strong></li>
+                      {% endfor %}
+                    </ul>
+                  {% else %}
+                    <div class="text-muted">—</div>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="border rounded p-2">
+                  <div class="fw-bold mb-2">جمع به تفکیک تکنسین</div>
+                  {% if wages_by_tech and wages_by_tech|length > 0 %}
+                    <ul class="mb-0">
+                      {% for row in wages_by_tech %}
+                        <li>{{ row.technician__name|default:"—" }}: <strong>{{ row.total|money_fa }}</strong></li>
+                      {% endfor %}
+                    </ul>
+                  {% else %}
+                    <div class="text-muted">—</div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          {% else %}
+            <div class="text-muted">هنوز لاگ دستمزد برای این سفارش ثبت نشده است.</div>
+          {% endif %}
+        </div>
+      </div>
+
       <!-- تایم‌لاین رویدادها -->
       <div class="card shadow-sm">
         <div class="card-header bg-secondary text-white">تایم‌لاین رویدادها</div>
@@ -210,12 +195,8 @@
                     {% if ev.direction %} | جهت: {{ ev.get_direction_display }}{% endif %}
                     {% if ev.stage %} | مرحله: {{ ev.stage }}{% endif %}
                   </div>
-                  {% if ev.notes %}
-                    <div class="mt-1">{{ ev.notes }}</div>
-                  {% endif %}
-                  {% if ev.attachment %}
-                    <div class="mt-1"><a href="{{ ev.attachment.url }}" target="_blank">پیوست</a></div>
-                  {% endif %}
+                  {% if ev.notes %}<div class="mt-1">{{ ev.notes }}</div>{% endif %}
+                  {% if ev.attachment %}<div class="mt-1"><a href="{{ ev.attachment.url }}" target="_blank">پیوست</a></div>{% endif %}
                 </li>
               {% endfor %}
             </ul>
@@ -224,33 +205,223 @@
           {% endif %}
         </div>
       </div>
+
     </div>
 
-    <!-- فرم افزودن رویداد -->
+    <!-- ستون راست: COGS + مصرف خودکار + P&L + رویداد جدید + دیجیتال -->
     <div class="col-md-5">
+
+      <!-- مصرف متریال (COGS) -->
+      <div class="card shadow-sm">
+        <div class="card-header bg-warning">مصرف متریال (COGS)</div>
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="text-muted">بهای متریال این سفارش:</div>
+            <div class="fs-5 fw-bold">{{ order.material_cogs|money_fa }}</div>
+          </div>
+
+          {% with moves=order.stock_movements.all %}
+            {% if moves and moves|length > 0 %}
+              <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                  <thead>
+                    <tr>
+                      <th style="width:48px;">#</th>
+                      <th>آیتم</th>
+                      <th>مقدار مصرف</th>
+                      <th>قیمت واحد متریال</th>
+                      <th>تاریخ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for mv in moves %}
+                      {% if mv.movement_type == 'issue' %}
+                        <tr>
+                          <td>{{ forloop.counter|int_fa }}</td>
+                          <td>{{ mv.item.name }}</td>
+                          <td>{{ mv.qty|floatformat:"-3"|cut:"-"|digits_fa }} {{ mv.item.uom }}</td>
+                          <td>{{ mv.unit_cost_effective|money_fa }} / {{ mv.item.uom }}</td>
+                          <td>{{ mv.happened_at|jalali_date|digits_fa }}</td>
+                        </tr>
+                      {% endif %}
+                    {% endfor %}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <th colspan="3" class="text-end">جمع کل متریال:</th>
+                      <th colspan="2">{{ order.material_cogs|money_fa }}</th>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            {% else %}
+              <div class="text-muted">مصرفی ثبت نشده است.</div>
+            {% endif %}
+          {% endwith %}
+        </div>
+      </div>
+
+      <!-- مصرف خودکار از لات‌ها -->
+      <div class="card shadow-sm">
+        <div class="card-header bg-light text-primary fw-bold">مصرف خودکار از لات‌ها</div>
+        <div class="card-body">
+          {% if stock_issues and stock_issues|length > 0 %}
+            <div class="table-responsive">
+              <table class="table table-sm align-middle">
+                <thead class="table-light">
+                  <tr>
+                    <th style="width:48px;">#</th>
+                    <th>آیتم</th>
+                    <th>مقدار مصرف</th>
+                    <th>هزینهٔ این ردیف</th>
+                    <th>تاریخ</th>
+                    <th>توضیح</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for si in stock_issues %}
+                    <tr>
+                      <td>{{ forloop.counter|int_fa }}</td>
+                      <td>{{ si.item.name }}</td>
+                      <td>{{ si.qty_issued|floatformat:"-3"|digits_fa }} {{ si.item.uom }}</td>
+                      <td>{{ si.row_cost|money_fa }}</td>
+                      <td>{{ si.happened_at|jalali_date|digits_fa }}</td>
+                      <td>{{ si.comment|default:"—" }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+                <tfoot>
+                  <tr class="fw-bold text-end">
+                    <td colspan="3">جمع هزینهٔ مصرف خودکار:</td>
+                    <td colspan="3">{{ issue_costs_total|money_fa }}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          {% else %}
+            <div class="text-muted">مصرف خودکار ثبت نشده است.</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Order P&L -->
+      <div class="card mb-3 shadow-sm" id="order-pnl-card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="fw-bold">خلاصهٔ مالی سفارش</span>
+          {% if order.id %}<span class="text-muted small">#{{ order.id|digits_fa }}</span>{% endif %}
+        </div>
+        <div class="card-body p-3">
+          {% if order_pnl %}
+            <div class="row">
+              <div class="col-12 col-md-6">
+                <table class="table table-sm align-middle mb-0">
+                  <tbody>
+                    <tr><td class="text-muted">درآمد سفارش</td><td class="text-end fw-semibold">{{ order_revenue|money_fa }}</td></tr>
+                    <tr><td class="text-muted">هزینهٔ مواد مصرفی</td><td class="text-end">{{ order_material_cogs|money_fa }}</td></tr>
+                    <tr>
+                      <td class="text-muted">هزینهٔ لاب دیجیتال</td>
+                      <td class="text-end">
+                        {{ order_digital_lab_cost_calc|default:"0"|money_fa }}
+                        {% if digital_lab_cost and order_digital_lab_cost_calc and digital_lab_cost != order_digital_lab_cost_calc %}
+                          <span class="badge bg-warning-subtle text-warning-emphasis ms-1">ⓘ تفاوت با مقدار قدیمی</span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                    {% if order_allocation_share and order_allocation_share != 0 %}
+                      <tr><td class="text-muted">سهم هزینه‌های غیرمستقیم</td><td class="text-end">{{ order_allocation_share|money_fa }}</td></tr>
+                    {% endif %}
+                  </tbody>
+                </table>
+              </div>
+              <div class="col-12 col-md-6 mt-3 mt-md-0">
+                <table class="table table-sm align-middle mb-0">
+                  <tbody>
+                    <tr>
+                      <td class="text-muted">سود ناخالص (درآمد − مواد)</td>
+                      <td class="text-end">
+                        {% if order_gross_profit >= 0 %}
+                          <span class="badge bg-success-subtle text-success-emphasis">{{ order_gross_profit|money_fa }}</span>
+                        {% else %}
+                          <span class="badge bg-danger-subtle text-danger-emphasis">{{ order_gross_profit|money_fa }}</span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">سود نهایی</td>
+                      <td class="text-end">
+                        {% if order_net_profit >= 0 %}
+                          <span class="badge bg-success fs-6">{{ order_net_profit|money_fa }}</span>
+                        {% else %}
+                          <span class="badge bg-danger fs-6">{{ order_net_profit|money_fa }}</span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="mt-2 text-muted small">
+              <span class="me-2">• اعداد با قالب پولی فارسی نمایش داده می‌شوند.</span>
+              {% if not order_allocation_share or order_allocation_share == 0 %}
+                <span class="badge bg-secondary-subtle text-secondary-emphasis">بدون تخصیص غیرمستقیم</span>
+              {% endif %}
+            </div>
+          {% else %}
+            <div class="text-muted">اطلاعات مالی برای این سفارش موجود نیست.</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- لاب دیجیتال -->
+      <div class="card my-3">
+        <div class="card-body">
+          <h6 class="text-primary mb-2">لاب دیجیتال</h6>
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <div class="text-muted">هزینهٔ لاب دیجیتال (خالص):</div>
+            <div class="fw-bold">{{ digital_lab_cost|money_fa }}</div>
+          </div>
+          {% if digital_lab_transfers %}
+            <table class="table table-sm mb-0">
+              <thead>
+                <tr>
+                  <th>#</th><th>لاب</th><th>مرحله</th><th>رنگ</th><th>تاریخ ارسال</th>
+                  <th>تاریخ دریافت</th><th>مبلغ</th><th>اعتبار</th><th>وضعیت</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for t in digital_lab_transfers %}
+                  <tr>
+                    <td>{{ forloop.counter|int_fa }}</td>
+                    <td>{{ t.lab_name }}</td>
+                    <td>{{ t.stage_name }}</td>
+                    <td>{{ t.shade_code|default:"—" }}</td>
+                    <td>{{ t.sent_date|jalali_date|digits_fa }}</td>
+                    <td>{{ t.received_date|default_if_none:"—"|jalali_date|digits_fa }}</td>
+                    <td>{{ t.charge_amount|money_fa }}</td>
+                    <td>{{ t.credit_amount|money_fa }}</td>
+                    <td>{% if t.status == 'sent' %}ارسال‌شده{% elif t.status == 'received' %}تحویل‌گرفته{% else %}لغو{% endif %}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <div class="text-muted">هنوز ارسال لاب دیجیتال برای این سفارش ثبت نشده.</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- فرم افزودن رویداد -->
       <div class="card shadow-sm">
         <div class="card-header bg-primary text-white">افزودن رویداد</div>
         <div class="card-body">
           <form method="post" action="{% url 'core:add_order_event' order.id %}?next={{ request.get_full_path|urlencode }}" enctype="multipart/form-data" class="row g-3">
             {% csrf_token %}
-
-            <div class="col-12">
-              <label class="form-label">نوع رویداد</label>
-              {{ event_form.event_type }}
-            </div>
-
-            <div class="col-12">
-              <label class="form-label">تاریخ وقوع</label>
-              {{ event_form.happened_at }}
-            </div>
-
-            <!-- علت (Select) -->
+            <div class="col-12"><label class="form-label">نوع رویداد</label>{{ event_form.event_type }}</div>
+            <div class="col-12"><label class="form-label">تاریخ وقوع</label>{{ event_form.happened_at }}</div>
             <div class="col-12">
               <label class="form-label">علت</label>
               <select name="cause_choice" id="cause_choice" class="form-select">
                 <option value="">— انتخاب کنید —</option>
-
-                {# مراحل مربوط به همین سفارش (ترجیحاً مراحل در صف یا در حال انجام) #}
                 {% with stqs=order.stages.all %}
                   {% if stqs %}
                     <optgroup label="مراحل سفارش">
@@ -262,7 +433,6 @@
                     </optgroup>
                   {% endif %}
                 {% endwith %}
-
                 <optgroup label="علت‌های عمومی">
                   <option value="components_announce">اعلام قطعات</option>
                   <option value="components_received">دریافت قطعات</option>
@@ -274,41 +444,23 @@
                   <option value="custom_abutment">کاستومایز اباتمنت</option>
                   <option value="qc_check">بررسی کیفی</option>
                 </optgroup>
-
                 <option value="other">سایر (قابل تایپ)</option>
               </select>
             </div>
-
-            <!-- متنِ علت وقتی «سایر» انتخاب شود -->
             <div class="col-12" id="cause_text_wrap" style="display:none;">
               <label class="form-label">علت (متن آزاد)</label>
               <input type="text" name="cause_text" id="cause_text" class="form-control" placeholder="مثلاً: توضیح اختصاصی شما">
               <div class="form-text">اگر «سایر» را انتخاب کردی، این بخش را پر کن.</div>
             </div>
-            <!-- مرحله مرتبط (اختیاری) -->
-            <div class="col-12">
-              <label class="form-label">مرحله مرتبط (اختیاری)</label>
-              {{ event_form.stage_instance }}
-            </div>
-            
-            <div class="col-12">
-              <label class="form-label">توضیحات</label>
-              {{ event_form.notes }}
-            </div>
-
-            <div class="col-12">
-              <label class="form-label">پیوست (اختیاری)</label>
-              {{ event_form.attachment }}
-            </div>
-
-            <div class="col-12">
-              <button class="btn btn-success w-100">ثبت رویداد</button>
-            </div>
+            <div class="col-12"><label class="form-label">مرحله مرتبط (اختیاری)</label>{{ event_form.stage_instance }}</div>
+            <div class="col-12"><label class="form-label">توضیحات</label>{{ event_form.notes }}</div>
+            <div class="col-12"><label class="form-label">پیوست (اختیاری)</label>{{ event_form.attachment }}</div>
+            <div class="col-12"><button class="btn btn-success w-100">ثبت رویداد</button></div>
           </form>
         </div>
       </div>
-    </div>
 
+    </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
@@ -317,7 +469,6 @@
   <script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
   <script>
     (function(){
-      // اگر فیلد کلاس نداشت، شناسهٔ پیش‌فرض را هم بگیر
       const $inputs = $("input.jalali_date, #id_happened_at");
       $inputs.each(function(){
         try{ if(this.type!=='text') this.type='text'; }catch(e){}
@@ -328,15 +479,15 @@
     })();
   </script>
   <script>
-  (function(){
-    function toggleCause() {
-      var val = $('#cause_choice').val();
-      $('#cause_text_wrap').toggle(val === 'other');
-    }
-    $(document).on('change', '#cause_choice', toggleCause);
-    toggleCause(); // init on load
-  })();
-</script>
+    (function(){
+      function toggleCause() {
+        var val = $('#cause_choice').val();
+        $('#cause_text_wrap').toggle(val === 'other');
+      }
+      $(document).on('change', '#cause_choice', toggleCause);
+      toggleCause();
+    })();
+  </script>
 </body>
 </html>
 

@@ -1,0 +1,218 @@
+{# templates/core/wages_report.html #}
+{% load num_extras %}
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <title>گزارش دستمزد تکنسین‌ها</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
+  <style>
+    body{background:#f8f9fa; font-family:tahoma, sans-serif}
+    .card{border-radius:12px}
+    th,td{vertical-align:middle}
+    .sum-badge{background:#eef2ff;border:1px solid #93c5fd;border-radius:9999px;padding:.2rem .6rem;color:#1d4ed8}
+    .pwt-datepicker-container{z-index:2050!important}
+    .table-sm td,.table-sm th{padding:.5rem .6rem}
+  </style>
+</head>
+<body class="container py-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="m-0">گزارش دستمزد تکنسین‌ها</h4>
+    <div class="sum-badge">جمع کل: {{ total_wage|money_fa }}</div>
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-header bg-light">فیلترها</div>
+    <div class="card-body">
+      <form method="get" class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">تکنسین</label>
+          <select name="technician" class="form-select">
+            <option value="">— همه —</option>
+            {% for t in tech_names %}
+              <option value="{{ t }}" {% if tech_name == t %}selected{% endif %}>{{ t }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">محصول</label>
+          <select name="product" id="filter-product" class="form-select">
+            <option value="">— همه —</option>
+            {% for p in products_qs %}
+              <option value="{{ p.code }}" {% if product == p.code %}selected{% endif %}>
+                {{ p.name }} ({{ p.code }})
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">مرحله</label>
+          <select name="stage" id="filter-stage" class="form-select">
+            <option value="">— همه —</option>
+            {% for st in stages_qs %}
+              <option value="{{ st.label }}" {% if stage_q == st.label %}selected{% endif %}>
+                {{ st.product.name }} — {{ st.label }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">از تاریخ (جلالی)</label>
+          <input type="text" name="start" id="id_start" value="{{ start }}" class="form-control" placeholder="YYYY/MM/DD">
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">تا تاریخ (جلالی)</label>
+          <input type="text" name="end" id="id_end" value="{{ end }}" class="form-control" placeholder="YYYY/MM/DD">
+        </div>
+
+        <div class="col-12 d-flex gap-2">
+          <button class="btn btn-primary">اعمال فیلتر</button>
+          <button type="button"
+                  class="btn btn-outline-secondary"
+                  onclick="window.location.href='{% url 'core:wages_report' %}'">
+            پاک‌کردن فیلترها
+           </button>
+          {% if not is_export %}
+            <a class="btn btn-outline-success"
+               href="?{% if tech_name %}technician={{ tech_name|urlencode }}&{% endif %}{% if product %}product={{ product|urlencode }}&{% endif %}{% if stage_q %}stage={{ stage_q|urlencode }}&{% endif %}{% if start %}start={{ start|urlencode }}&{% endif %}{% if end %}end={{ end|urlencode }}&{% endif %}export_excel=1">
+              💾 خروجی Excel
+            </a>
+            <a class="btn btn-outline-danger"
+               href="?{% if tech_name %}technician={{ tech_name|urlencode }}&{% endif %}{% if product %}product={{ product|urlencode }}&{% endif %}{% if stage_q %}stage={{ stage_q|urlencode }}&{% endif %}{% if start %}start={{ start|urlencode }}&{% endif %}{% if end %}end={{ end|urlencode }}&{% endif %}export_pdf=1">
+              📄 خروجی PDF
+            </a>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-8">
+      <div class="card shadow-sm">
+        <div class="card-header bg-info text-white">ریز لاگ‌ها</div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>تکنسین</th>
+                  <th>مرحله</th>
+                  <th>محصول</th>
+                  <th>تعداد</th>
+                  <th>نرخ واحد</th>
+                  <th>مبلغ کل</th>
+                  <th>تاریخ پایان</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% if logs %}
+                  {% for l in logs %}
+                    <tr>
+                      <td>{{ l.id }}</td>
+                      <td>{{ l.technician.name|default:"—" }}</td>
+                      <td>
+                        {% if l.stage_tpl %}{{ l.stage_tpl.label }}
+                        {% elif l.stage_inst %}{{ l.stage_inst.label }}
+                        {% else %}—{% endif %}
+                      </td>
+                      <td>
+                        {% if l.stage_tpl and l.stage_tpl.product %}
+                          {{ l.stage_tpl.product.name }}
+                        {% elif l.order %}
+                          {{ l.order.order_type|default:"—" }}
+                        {% else %}—{% endif %}
+                      </td>
+                      <td>{{ l.quantity|default:0 }}</td>
+                      <td class="text-end">{{ l.unit_wage|default:0|money_fa }}</td>
+                      <td class="text-end">{{ l.total_wage|default:0|money_fa }}</td>
+                      <td>{{ l.finished_at|default:"" }}</td>
+                    </tr>
+                  {% endfor %}
+                {% else %}
+                  <tr><td colspan="8" class="text-muted">لاگی پیدا نشد.</td></tr>
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="card shadow-sm">
+        <div class="card-header bg-light">تجمیع‌ها</div>
+        <div class="card-body">
+          <h6 class="text-muted mb-2">به تفکیک تکنسین</h6>
+          <table class="table table-sm">
+            <thead><tr><th>تکنسین</th><th class="text-end">جمع</th></tr></thead>
+            <tbody>
+              {% if by_tech %}
+                {% for r in by_tech %}
+                  <tr>
+                    <td>{{ r.technician__name|default:"—" }}</td>
+                    <td class="text-end">{{ r.total|default:0|money_fa }}</td>
+                  </tr>
+                {% endfor %}
+              {% else %}
+                <tr><td colspan="2" class="text-muted">—</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+
+          <h6 class="text-muted mt-3 mb-2">به تفکیک مرحله</h6>
+          <table class="table table-sm">
+            <thead><tr><th>مرحله</th><th class="text-end">جمع</th></tr></thead>
+            <tbody>
+              {% if by_stage %}
+                {% for r in by_stage %}
+                  <tr>
+                    <td>{{ r.stage_tpl__label|default:"—" }}</td>
+                    <td class="text-end">{{ r.total|default:0|money_fa }}</td>
+                  </tr>
+                {% endfor %}
+              {% else %}
+                <tr><td colspan="2" class="text-muted">—</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if not is_export %}
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/persian-date@1.1.0/dist/persian-date.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
+    <script>
+      (function(){
+        function makePicker(sel){
+          if (window.jQuery && $.fn && $.fn.persianDatepicker){
+            $(sel).persianDatepicker({ format:'YYYY/MM/DD', autoClose:true, calendar:{ persian:{ locale:'fa' } } });
+          }
+        }
+        makePicker('#id_start'); makePicker('#id_end');
+
+        // تغییر محصول ⇒ ریست مرحله و سابمیت خودکار برای دریافت فهرست مرحله‌های همان محصول
+        const prod = document.getElementById('filter-product');
+        const stage = document.getElementById('filter-stage');
+        if (prod) {
+          prod.addEventListener('change', function(){
+            if (stage) stage.selectedIndex = 0;
+            this.form.submit();
+          });
+        }
+      })();
+    </script>
+  {% endif %}
+</body>
+</html>

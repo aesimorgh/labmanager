@@ -13,6 +13,9 @@ from .models import Invoice, InvoiceLine, DoctorPayment, PaymentAllocation, Expe
 from django.contrib.admin.widgets import FilteredSelectMultiple
 from billing.services.lot_allocation import simulate_lot_allocation
 from .models import ManualStockIssue
+from django.utils.html import format_html
+from django.urls import reverse
+
 
 # LabProfile اختیاری: اگر مدل وجود دارد، در ادمین ثبت می‌کنیم
 try:
@@ -608,3 +611,4 @@ class ManualStockIssueAdmin(admin.ModelAdmin):
         # هر رکوردی اینجاست «مصرف» است؛ نوع حرکت را تثبیت کن
         obj.movement_type = 'issue'
         super().save_model(request, obj, form, change)
+
