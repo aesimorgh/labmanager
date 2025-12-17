@@ -6,7 +6,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 from jalali_date.fields import JalaliDateField
 from jalali_date.widgets import AdminJalaliDateWidget
-from .models import OrderEvent
+from .models import OrderEvent, ProductionEvent
 from .models import Patient, Order, Material, Accounting
 from .models import Doctor, Product
 
@@ -294,6 +294,46 @@ class OrderEventForm(forms.ModelForm):
         self.fields['direction'].widget.attrs.update({'class': 'form-select'})
         self.fields['stage'].widget.attrs.update({'class': 'form-control', 'placeholder': 'علت (متنی؛ در صورت نیاز)'})
         self.fields['attachment'].widget.attrs.update({'class': 'form-control'})
+
+
+class ProductionEventForm(forms.ModelForm):
+    started_at = JalaliDateField(
+        label='تاریخ شروع/وقوع', required=True,
+        widget=AdminJalaliDateWidget(attrs={'class': 'form-control jalali_date'})
+    )
+    finished_at = JalaliDateField(
+        label='تاریخ پایان', required=False,
+        widget=AdminJalaliDateWidget(attrs={'class': 'form-control jalali_date'})
+    )
+
+    class Meta:
+        model = ProductionEvent
+        fields = [
+            'order',
+            'event_type',
+            'stage_key',
+            'stage_label',
+            'responsible',
+            'started_at',
+            'finished_at',
+            'notes',
+        ]
+        widgets = {
+            'order': forms.Select(attrs={'class': 'form-select'}),
+            'event_type': forms.Select(attrs={'class': 'form-select'}),
+            'stage_key': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'مثال: design'}),
+            'stage_label': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'مثال: طراحی'}),
+            'responsible': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'نام تکنسین/مسئول'}),
+            'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['order'].queryset = Order.objects.order_by('-id')[:200]
+        self.fields['event_type'].choices = [
+            ('', '— نوع رویداد —'),
+            *ProductionEvent.EventType.choices,
+        ]
 
 
 
