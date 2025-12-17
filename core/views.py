@@ -2,6 +2,7 @@ from datetime import date
 import io
 
 from django.shortcuts import render, redirect, get_object_or_404
+from django.conf import settings
 from django.http import HttpResponse
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -12,6 +13,7 @@ from django.db.models import Q, F, Value, DecimalField, ExpressionWrapper
 from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 import xlsxwriter
 from weasyprint import HTML
 
@@ -20,8 +22,8 @@ try:
 except ImportError:
     jdatetime = None
 
-from .forms import OrderForm, OrderEventForm
-from .models import Order, OrderEvent, Doctor
+from .forms import OrderForm, OrderEventForm, ProductionEventForm
+from .models import Order, OrderEvent, Doctor, ProductionEvent
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET
 from django.db import transaction
@@ -2236,6 +2238,42 @@ def digital_lab_report(request):
         'rows': rows,
     }
     return render(request, 'core/digital_lab_report.html', context)
+
+
+def _has_production_beta_access(user):
+    if not getattr(settings, 'PRODUCTION_PANEL_BETA', False):
+        return False
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser or user.is_staff:
+        return True
+    return user.groups.filter(name='Production Beta').exists()
+
+
+@login_required
+def production_panel_beta(request):
+    if not _has_production_beta_access(request.user):
+        messages.error(request, 'دسترسی به نسخهٔ بتا فعال نیست.')
+        return redirect('core:home')
+
+    form = ProductionEventForm(request.POST or None)
+    if request.method == 'POST':
+        if form.is_valid():
+            event = form.save()
+            messages.success(request, 'رویداد مرحله‌ای ثبت شد.')
+            return redirect(f"{reverse('core:production_panel_beta')}#event-{event.id}")
+        messages.error(request, 'لطفاً خطاهای فرم را برطرف کنید.')
+
+    recent_orders = Order.objects.order_by('-id')[:20]
+    recent_events = ProductionEvent.objects.select_related('order').order_by('-created_at')[:20]
+
+    context = {
+        'form': form,
+        'recent_orders': recent_orders,
+        'recent_events': recent_events,
+        'beta_flag': True,
+    }
+    return render(request, 'core/production_panel_beta.html', context)
 
 
 

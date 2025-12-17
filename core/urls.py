@@ -12,6 +12,9 @@ urlpatterns = [
     # درگاه انتقال (فقط از ویو؛ نسخه‌ی TemplateView حذف شد تا تداخل نداشته باشد)
     path('transfer/', views.transfer_gate, name='transfer_gate'),
 
+    # پنل بتا مراحل تولید
+    path('orders/production-beta/', views.production_panel_beta, name='production_panel_beta'),
+
     # گزارش مالی/حسابداری
     path('accounting/', views.accounting_report, name='accounting_report'),
 

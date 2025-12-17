@@ -35,7 +35,7 @@ from django.utils.dateparse import parse_date
 from .models import Patient, Order, Material, Accounting
 from .models import StageInstance
 from .forms import PatientForm, OrderForm, MaterialForm, AccountingForm
-from .models import OrderEvent
+from .models import OrderEvent, ProductionEvent
 from .models import Product, StageTemplate
 
 # کمکی: تبدیل رقم‌های فارسی/عربی به انگلیسی + فرمت «فارسی با جداکننده»
@@ -487,6 +487,7 @@ class OrderAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
         'font-size:12px;line-height:1.2" href="{}">برگردان</a>',
         url
     )
+
 
     @admin.display(description='دندان‌ها')
     def teeth_fdi_display(self, obj):
@@ -1267,6 +1268,16 @@ class StageWorkLogAdmin(admin.ModelAdmin):
     search_fields = ("order__id", "stage_tpl__label", "technician__name")
     ordering = ("-created_at",)
     readonly_fields = ("total_wage",)
+
+
+@admin.register(ProductionEvent)
+class ProductionEventAdmin(ModelAdminJalaliMixin, admin.ModelAdmin):
+    list_display = [
+        'id', 'order', 'event_type', 'stage_label', 'responsible', 'started_at', 'finished_at', 'created_at'
+    ]
+    list_filter = ['event_type', 'started_at']
+    search_fields = ['order__patient__name', 'order__serial_number', 'stage_label', 'responsible', 'notes']
+    autocomplete_fields = ['order']
 
 
 

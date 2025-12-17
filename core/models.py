@@ -206,6 +206,38 @@ class OrderEvent(models.Model):
 
     def __str__(self):
         return f"{self.order_id} - {self.event_type} - {self.happened_at}"
+
+
+class ProductionEvent(models.Model):
+    class EventType(models.TextChoices):
+        STAGE_CHANGE = 'stage_change', 'تغییر مرحله'
+        CLINIC_SEND = 'clinic_send', 'ارسال به مطب'
+        CLINIC_RECEIVE = 'clinic_receive', 'دریافت از مطب'
+        DIGITAL_SEND = 'digital_send', 'ارسال به لاب دیجیتال'
+        DIGITAL_RECEIVE = 'digital_receive', 'دریافت از لاب دیجیتال'
+        NOTE = 'note', 'یادداشت'
+
+    order = models.ForeignKey(
+        'Order', on_delete=models.CASCADE, related_name='production_events', verbose_name='سفارش'
+    )
+    stage_key = models.CharField(max_length=100, blank=True, verbose_name='کلید مرحله')
+    stage_label = models.CharField(max_length=150, blank=True, verbose_name='عنوان مرحله')
+    event_type = models.CharField(max_length=30, choices=EventType.choices, verbose_name='نوع رویداد')
+    responsible = models.CharField(max_length=120, blank=True, verbose_name='مسئول/اپراتور')
+    started_at = jmodels.jDateField(null=True, blank=True, verbose_name='تاریخ شروع/وقوع')
+    finished_at = jmodels.jDateField(null=True, blank=True, verbose_name='تاریخ پایان')
+    payload = models.JSONField(default=dict, blank=True, verbose_name='جزئیات تکمیلی')
+    notes = models.TextField(blank=True, verbose_name='یادداشت')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-started_at', '-id']
+        verbose_name = 'رویداد تولید'
+        verbose_name_plural = 'رویدادهای تولید'
+
+    def __str__(self):
+        return f"#{self.order_id} · {self.get_event_type_display()}"
     
 
 # --- Doctor master data ---

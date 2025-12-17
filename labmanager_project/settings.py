@@ -138,6 +138,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 X_FRAME_OPTIONS = 'SAMEORIGIN'
 LOGIN_URL = '/admin/login/'
 
+# --- Feature flags ---
+PRODUCTION_PANEL_BETA = os.environ.get('PRODUCTION_PANEL_BETA', '').lower() in ['1', 'true', 'yes', 'on']
+
 
 
 
